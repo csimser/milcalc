@@ -1,0 +1,2581 @@
+import { useState } from "react";
+
+// ── DFAS 2026 BASIC PAY TABLES (Effective January 1, 2026) ─────────────
+// Source: DFAS.mil — Page updated Jan/Feb 2026 (3.8% raise per FY2026 NDAA)
+// Columns = cumulative YOS breakpoints: ≤2, >2, >3, >4, >6, >8, >10, >12, >14, >16, >18, >20, >22, >24, >26, >28, >30, >32, >34, >36, >38, >40
+const YOS_BREAKS = [0,2,3,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40];
+
+const PAY2026 = {
+  // ENLISTED
+  "E-1": [2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20],
+  "E-2": [2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90],
+  "E-3": [2836.80,3015.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00],
+  "E-4": [3142.20,3303.00,3482.40,3658.50,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40],
+  "E-5": [3342.90,3598.20,3775.80,3946.80,4110.00,4299.90,4395.30,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70],
+  "E-6": [3401.10,3743.10,3908.10,4068.90,4235.70,4612.80,4759.50,5043.30,5130.30,5193.60,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70],
+  "E-7": [3932.10,4291.50,4456.20,4673.10,4843.80,5135.70,5300.40,5591.70,5835.00,6000.90,6177.30,6245.70,6475.20,6598.20,7067.40,7067.40,7067.40,7067.40,7067.40,7067.40,7067.40,7067.40],
+  "E-8": [null,null,null,null,null,5656.50,5907.00,6061.80,6247.20,6448.20,6811.20,6995.40,7308.30,7481.70,7908.90,7908.90,8067.30,8067.30,8067.30,8067.30,8067.30,8067.30],
+  "E-9": [null,null,null,null,null,null,6910.20,7066.50,7263.60,7496.10,7730.70,8105.10,8423.10,8756.70,9267.90,9267.90,9730.20,9730.20,10217.40,10217.40,10729.20,10729.20],
+  // WARRANT OFFICERS
+  "W-1": [4056.60,4493.70,4611.00,4859.10,5152.20,5584.20,5786.10,6069.30,6346.50,6564.90,6766.20,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10],
+  "W-2": [4621.80,5058.90,5193.30,5286.00,5585.40,6051.00,6282.60,6509.40,6787.50,7005.00,7201.50,7437.00,7591.50,7714.20,7714.20,7714.20,7714.20,7714.20,7714.20,7714.20,7714.20,7714.20],
+  "W-3": [5223.30,5440.50,5664.30,5736.90,5970.90,6431.10,6910.50,7136.40,7397.70,7665.90,8150.40,8476.50,8671.80,8879.70,9162.60,9162.60,9162.60,9162.60,9162.60,9162.60,9162.60,9162.60],
+  "W-4": [5719.80,6152.10,6328.50,6502.20,6801.90,7098.00,7398.00,7848.30,8243.70,8619.90,8928.60,9228.90,9669.60,10032.00,10445.40,10445.40,10653.60,10653.60,10653.60,10653.60,10653.60,10653.60],
+  "W-5": [null,null,null,null,null,null,null,null,null,null,null,10169.70,10685.70,11070.30,11495.10,11495.10,12070.80,12070.80,12673.50,12673.50,13308.30,13308.30],
+  // COMMISSIONED OFFICERS
+  "O-1": [4150.20,4320.00,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40],
+  "O-2": [4782.00,5446.20,6272.40,6484.50,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70],
+  "O-3": [5534.10,6273.90,6770.40,7382.70,7737.00,8125.50,8375.70,8788.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20],
+  "O-4": [6294.60,7286.40,7773.60,7881.00,8332.20,8816.40,9420.00,9888.30,10214.40,10401.60,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90],
+  "O-5": [7295.40,8218.20,8787.00,8894.10,9249.60,9461.40,9928.50,10271.70,10715.10,11391.30,11713.80,12032.70,12394.80,12394.80,12394.80,12394.80,12394.80,12394.80,12394.80,12394.80,12394.80,12394.80],
+  "O-6": [8751.30,9613.80,10245.00,10245.00,10284.30,10725.00,10783.50,10783.50,11396.40,12479.70,13115.40,13751.10,14112.90,14479.20,15188.70,15188.70,15408.30,15408.30,15408.30,15408.30,15408.30,15408.30],
+  "O-7": [11540.10,12076.20,12324.30,12522.00,12878.70,13231.80,13639.20,14045.70,14454.30,15735.30,16817.70,16817.70,16817.70,16817.70,16904.40,16904.40,17242.20,17242.20,17242.20,17242.20,17242.20,17242.20],
+  "O-8": [13888.50,14343.90,14645.40,14729.40,15106.50,15735.30,15882.00,16479.60,16651.80,17166.60,17911.80,18598.20,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90],
+  "O-9": [null,null,null,null,null,null,null,null,null,null,null,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90],
+  "O-10":[null,null,null,null,null,null,null,null,null,null,null,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90],
+};
+
+// Rank titles for display
+const GRADE_LABELS = {
+  "E-1":"E-1 (Pvt/SR/Amn Basic)","E-2":"E-2 (PV2/SA/Amn)","E-3":"E-3 (PFC/SN/A1C)",
+  "E-4":"E-4 (SPC/CPL/PO3/SrA)","E-5":"E-5 (SGT/PO2/SSgt)","E-6":"E-6 (SSG/PO1/TSgt)",
+  "E-7":"E-7 (SFC/CPO/MSgt)","E-8":"E-8 (MSG/SCPO/SMSgt)","E-9":"E-9 (SGM/CSM/MCPO/CMSgt)",
+  "W-1":"W-1 (WO1)","W-2":"W-2 (CW2)","W-3":"W-3 (CW3)","W-4":"W-4 (CW4)","W-5":"W-5 (CW5)",
+  "O-1":"O-1 (2LT/ENS/2ndLt)","O-2":"O-2 (1LT/LTJG/1stLt)","O-3":"O-3 (CPT/LT/Capt)",
+  "O-4":"O-4 (MAJ/LCDR/Maj)","O-5":"O-5 (LTC/CDR/LtCol)","O-6":"O-6 (COL/CAPT/Col)",
+  "O-7":"O-7 (BG/RDML/BGen)","O-8":"O-8 (MG/RADM/MajGen)",
+  "O-9":"O-9 (LTG/VADM/LtGen)","O-10":"O-10 (GEN/ADM/Gen)",
+};
+
+const GRADE_GROUPS = [
+  {label:"Enlisted",grades:["E-1","E-2","E-3","E-4","E-5","E-6","E-7","E-8","E-9"]},
+  {label:"Warrant Officer",grades:["W-1","W-2","W-3","W-4","W-5"]},
+  {label:"Officer",grades:["O-1","O-2","O-3","O-4","O-5","O-6","O-7","O-8","O-9","O-10"]},
+];
+
+// Look up 2026 monthly basic pay for a given grade + total YOS
+function lookupPay(grade, yos) {
+  const row = PAY2026[grade];
+  if (!row) return null;
+  // Find the highest applicable column index
+  let idx = 0;
+  for (let i = 0; i < YOS_BREAKS.length; i++) {
+    if (yos > YOS_BREAKS[i]) idx = i;
+  }
+  return row[idx] || null;
+}
+
+const VA = {
+  10:{s:180.42}, 20:{s:356.66},
+  30:{s:552.47,sp:617.47,spc:666.47,c:596.47},
+  40:{s:795.84,sp:882.84,spc:947.84,c:853.84},
+  50:{s:1132.90,sp:1241.90,spc:1322.90,c:1205.90},
+  60:{s:1435.02,sp:1566.02,spc:1663.02,c:1523.02},
+  70:{s:1808.45,sp:1961.45,spc:2074.45,c:1910.45},
+  80:{s:2102.15,sp:2277.15,spc:2406.15,c:2219.15},
+  90:{s:2362.30,sp:2559.30,spc:2704.30,c:2494.30},
+  100:{s:3938.58,sp:4158.17,spc:4318.99,c:4085.43},
+};
+
+const STATES = {
+  "Alabama":{ok:true,note:"Fully exempt"},"Alaska":{ok:true,note:"No state income tax"},
+  "Arizona":{ok:true,note:"Fully exempt"},"Arkansas":{ok:true,note:"Fully exempt"},
+  "California":{ok:false,rate:9.3,note:"Partial: $20k exempt for AGI <$125k (single) — 2025–2030"},
+  "Colorado":{ok:true,note:"Exempt age 55+"},"Connecticut":{ok:true,note:"Fully exempt"},
+  "Delaware":{ok:false,rate:5.5,note:"$12,500 exempt (any age); taxed above that"},
+  "Florida":{ok:true,note:"No state income tax"},
+  "Georgia":{ok:true,note:"Partial: $17.5k (<62), $35k (62–64), $65k (65+); full $65k for all in 2026"},
+  "Hawaii":{ok:true,note:"Fully exempt"},
+  "Idaho":{ok:false,rate:5.8,note:"Taxed; exempt for disabled retirees and age 62+"},
+  "Illinois":{ok:true,note:"Fully exempt"},"Indiana":{ok:true,note:"Fully exempt"},
+  "Iowa":{ok:true,note:"Fully exempt"},"Kansas":{ok:true,note:"Fully exempt"},
+  "Kentucky":{ok:false,rate:4.5,note:"First $31,110 tax-free; taxed above that"},
+  "Louisiana":{ok:true,note:"Fully exempt"},"Maine":{ok:true,note:"Up to $10,000 exempt"},
+  "Maryland":{ok:true,note:"First $12,500 exempt; $20,000 at age 55"},
+  "Massachusetts":{ok:true,note:"Fully exempt"},"Michigan":{ok:true,note:"Fully exempt"},
+  "Minnesota":{ok:true,note:"Fully exempt"},"Mississippi":{ok:true,note:"Fully exempt"},
+  "Missouri":{ok:true,note:"Fully exempt"},
+  "Montana":{ok:false,rate:6.5,note:"50% deductible first 5 yrs; age 65+ get $5,500 subtraction"},
+  "Nebraska":{ok:true,note:"Fully exempt"},"Nevada":{ok:true,note:"No state income tax"},
+  "New Hampshire":{ok:true,note:"No state income tax (as of 2025)"},
+  "New Jersey":{ok:true,note:"Fully exempt"},"New Mexico":{ok:true,note:"Up to $30,000 exempt"},
+  "New York":{ok:true,note:"Fully exempt"},
+  "North Carolina":{ok:true,note:"Exempt under Bailey Exclusion for qualifying service"},
+  "North Dakota":{ok:true,note:"Fully exempt"},"Ohio":{ok:true,note:"Fully exempt"},
+  "Oklahoma":{ok:true,note:"Fully exempt"},
+  "Oregon":{ok:false,rate:9.0,note:"Taxed; full exemption legislation pending for 2026"},
+  "Pennsylvania":{ok:true,note:"Fully exempt"},
+  "Rhode Island":{ok:true,note:"Exempt age 59½+"},
+  "South Carolina":{ok:true,note:"Fully exempt (as of 2025)"},
+  "South Dakota":{ok:true,note:"No state income tax"},"Tennessee":{ok:true,note:"No state income tax"},
+  "Texas":{ok:true,note:"No state income tax"},
+  "Utah":{ok:false,rate:4.55,note:"Non-refundable credit offsets most/all tax on retirement pay"},
+  "Vermont":{ok:true,note:"Exempt AGI ≤$125k; partial $125k–$175k; fully taxed above (2025+)"},
+  "Virginia":{ok:true,note:"$40,000 exemption (2025 and beyond)"},
+  "Washington":{ok:true,note:"No state income tax"},"West Virginia":{ok:true,note:"Fully exempt"},
+  "Wisconsin":{ok:true,note:"Fully exempt"},"Wyoming":{ok:true,note:"No state income tax"},
+};
+
+const COL = {
+  // ── ALABAMA ──
+  "Anniston, AL":82,"Auburn, AL":88,"Birmingham, AL":87,"Dothan, AL":82,
+  "Huntsville, AL":90,"Mobile, AL":86,"Montgomery, AL":84,"Tuscaloosa, AL":87,
+  // ── ALASKA ──
+  "Anchorage, AK":130,"Fairbanks, AK":135,"Juneau, AK":140,"Kodiak, AK":138,
+  // ── ARIZONA ──
+  "Flagstaff, AZ":108,"Phoenix, AZ":103,"Sierra Vista, AZ":91,"Tucson, AZ":95,"Yuma, AZ":95,
+  // ── ARKANSAS ──
+  "Fayetteville, AR":88,"Fort Smith, AR":82,"Little Rock, AR":86,"Pine Bluff, AR":80,
+  // ── CALIFORNIA ──
+  "Bakersfield, CA":106,"Barstow, CA":105,"Fresno, CA":112,"Los Angeles, CA":158,
+  "Monterey, CA":172,"Oakland, CA":162,"Riverside, CA":130,"Sacramento, CA":122,
+  "San Bernardino, CA":118,"San Diego, CA":152,"San Francisco, CA":190,
+  "San Jose, CA":182,"Santa Barbara, CA":168,"Stockton, CA":118,"Ventura, CA":145,
+  // ── COLORADO ──
+  "Colorado Springs, CO":100,"Denver, CO":115,"Fort Collins, CO":108,
+  "Grand Junction, CO":99,"Pueblo, CO":91,
+  // ── CONNECTICUT ──
+  "Bridgeport, CT":132,"Groton, CT":120,"Hartford, CT":118,"New Haven, CT":122,
+  // ── DELAWARE ──
+  "Dover, DE":105,"Wilmington, DE":112,
+  // ── FLORIDA ──
+  "Destin/Fort Walton Beach, FL":100,"Fort Lauderdale, FL":116,"Gainesville, FL":97,
+  "Jacksonville, FL":93,"Key West, FL":145,"Melbourne, FL":98,"Miami, FL":118,
+  "Orlando, FL":100,"Panama City, FL":97,"Pensacola, FL":94,"Port St. Lucie, FL":102,
+  "Tallahassee, FL":95,"Tampa, FL":101,"West Palm Beach, FL":112,
+  // ── GEORGIA ──
+  "Albany, GA":80,"Athens, GA":91,"Atlanta, GA":106,"Augusta, GA":88,
+  "Columbus, GA":84,"Hinesville, GA":84,"Macon, GA":83,"Savannah, GA":92,
+  "Valdosta, GA":82,"Warner Robins, GA":85,
+  // ── HAWAII ──
+  "Hilo, HI":182,"Kailua-Kona, HI":185,"Maui, HI":201,"Oahu, HI":196,
+  // ── IDAHO ──
+  "Boise, ID":104,"Coeur d'Alene, ID":107,"Idaho Falls, ID":93,"Mountain Home, ID":90,
+  // ── ILLINOIS ──
+  "Chicago, IL":115,"Peoria, IL":90,"Rockford, IL":90,"Springfield, IL":88,
+  // ── INDIANA ──
+  "Evansville, IN":86,"Fort Wayne, IN":86,"Indianapolis, IN":92,"South Bend, IN":89,
+  // ── IOWA ──
+  "Cedar Rapids, IA":88,"Des Moines, IA":90,"Sioux City, IA":87,
+  // ── KANSAS ──
+  "Junction City/Fort Riley, KS":84,"Kansas City, KS":88,"Topeka, KS":83,"Wichita, KS":86,
+  // ── KENTUCKY ──
+  "Elizabethtown/Fort Campbell, KY":85,"Hopkinsville, KY":82,"Lexington, KY":90,
+  "Louisville, KY":88,"Richmond, KY":84,
+  // ── LOUISIANA ──
+  "Baton Rouge, LA":90,"Bossier City/Barksdale, LA":86,"New Orleans, LA":97,
+  "Shreveport, LA":85,
+  // ── MAINE ──
+  "Augusta, ME":101,"Bangor, ME":96,"Brunswick, ME":108,"Portland, ME":112,
+  // ── MARYLAND ──
+  "Annapolis, MD":120,"Baltimore, MD":115,"College Park, MD":130,
+  "Frederick, MD":118,"Hagerstown, MD":100,
+  // ── MASSACHUSETTS ──
+  "Boston, MA":162,"Cape Cod, MA":142,"Lowell, MA":130,"Springfield, MA":112,"Worcester, MA":120,
+  // ── MICHIGAN ──
+  "Ann Arbor, MI":108,"Detroit, MI":98,"Grand Rapids, MI":96,"Lansing, MI":91,
+  "Sault Ste. Marie, MI":89,
+  // ── MINNESOTA ──
+  "Duluth, MN":96,"Minneapolis-St. Paul, MN":106,"Rochester, MN":99,"St. Cloud, MN":93,
+  // ── MISSISSIPPI ──
+  "Biloxi/Keesler, MS":85,"Columbus, MS":79,"Gulfport, MS":86,"Hattiesburg, MS":82,
+  "Jackson, MS":83,
+  // ── MISSOURI ──
+  "Columbia, MO":90,"Jefferson City, MO":88,"Kansas City, MO":88,
+  "Springfield, MO":85,"St. Louis, MO":91,
+  // ── MONTANA ──
+  "Billings, MT":97,"Bozeman, MT":110,"Great Falls, MT":91,"Helena, MT":96,"Missoula, MT":105,
+  // ── NEBRASKA ──
+  "Lincoln, NE":89,"Offutt/Omaha, NE":89,
+  // ── NEVADA ──
+  "Las Vegas, NV":104,"Reno, NV":107,
+  // ── NEW HAMPSHIRE ──
+  "Concord, NH":112,"Manchester, NH":116,"Portsmouth, NH":118,
+  // ── NEW JERSEY ──
+  "Atlantic City, NJ":120,"Camden, NJ":115,"Jersey City, NJ":148,"Newark, NJ":145,
+  "Trenton, NJ":118,
+  // ── NEW MEXICO ──
+  "Alamogordo/Holloman, NM":87,"Albuquerque, NM":93,"Clovis/Cannon, NM":84,
+  "Las Cruces, NM":88,"Santa Fe, NM":112,
+  // ── NEW YORK ──
+  "Albany, NY":106,"Buffalo, NY":95,"Ithaca, NY":108,"New York, NY":187,
+  "Rochester, NY":99,"Syracuse, NY":98,"Watertown/Fort Drum, NY":94,
+  // ── NORTH CAROLINA ──
+  "Asheville, NC":103,"Camp Lejeune/Jacksonville, NC":86,"Charlotte, NC":98,
+  "Durham, NC":106,"Fayetteville/Fort Liberty, NC":86,"Goldsboro/Seymour Johnson, NC":84,
+  "Greensboro, NC":92,"Raleigh, NC":102,"Wilmington, NC":98,"Winston-Salem, NC":90,
+  // ── NORTH DAKOTA ──
+  "Bismarck, ND":93,"Fargo, ND":94,"Grand Forks, ND":91,"Minot, ND":90,
+  // ── OHIO ──
+  "Akron, OH":89,"Cincinnati, OH":95,"Cleveland, OH":94,"Columbus, OH":96,
+  "Dayton/Wright-Patterson, OH":91,"Toledo, OH":89,"Youngstown, OH":86,
+  // ── OKLAHOMA ──
+  "Enid/Vance, OK":80,"Lawton/Fort Sill, OK":81,"Oklahoma City, OK":86,"Tulsa, OK":87,
+  // ── OREGON ──
+  "Bend, OR":118,"Eugene, OR":112,"Medford, OR":108,"Portland, OR":130,"Salem, OR":108,
+  // ── PENNSYLVANIA ──
+  "Allentown, PA":105,"Erie, PA":91,"Harrisburg, PA":99,"Philadelphia, PA":118,
+  "Pittsburgh, PA":96,"Reading, PA":101,"Scranton, PA":91,
+  // ── RHODE ISLAND ──
+  "Newport, RI":128,"Providence, RI":122,
+  // ── SOUTH CAROLINA ──
+  "Beaufort/Parris Island, SC":96,"Charleston, SC":104,"Columbia, SC":91,
+  "Greenville, SC":94,"Myrtle Beach, SC":95,"Sumter/Shaw, SC":88,
+  // ── SOUTH DAKOTA ──
+  "Rapid City, SD":92,"Sioux Falls, SD":93,
+  // ── TENNESSEE ──
+  "Chattanooga, TN":92,"Clarksville/Fort Campbell, TN":85,"Jackson, TN":85,
+  "Knoxville, TN":91,"Memphis, TN":88,"Nashville, TN":102,
+  // ── TEXAS ──
+  "Abilene/Dyess, TX":83,"Amarillo, TX":84,"Austin, TX":102,"Beaumont, TX":88,
+  "Corpus Christi, TX":90,"Dallas, TX":100,"El Paso/Fort Bliss, TX":85,
+  "Fort Worth, TX":98,"Houston, TX":95,"Killeen/Fort Cavazos, TX":83,
+  "Laredo, TX":83,"Lubbock, TX":85,"Midland-Odessa, TX":97,"San Antonio, TX":91,
+  "Texarkana, TX":81,"Waco, TX":88,"Wichita Falls/Sheppard, TX":82,
+  // ── UTAH ──
+  "Logan, UT":96,"Ogden, UT":100,"Provo, UT":104,"Salt Lake City, UT":108,
+  "St. George, UT":103,
+  // ── VERMONT ──
+  "Burlington, VT":118,
+  // ── VIRGINIA ──
+  "Charlottesville, VA":114,"Fredericksburg, VA":118,"Hampton Roads/Norfolk, VA":100,
+  "Harrisonburg, VA":96,"Northern Virginia (DC area)":132,"Quantico, VA":122,
+  "Richmond, VA":95,"Roanoke, VA":91,"Virginia Beach, VA":98,
+  // ── WASHINGTON ──
+  "Bremerton, WA":120,"Everett, WA":130,"Olympia, WA":116,"Seattle, WA":145,
+  "Spokane/Fairchild, WA":96,"Tacoma/Joint Base Lewis-McChord, WA":118,"Yakima, WA":95,
+  // ── WEST VIRGINIA ──
+  "Charleston, WV":85,"Huntington, WV":82,"Morgantown, WV":90,
+  // ── WISCONSIN ──
+  "Green Bay, WI":92,"Madison, WI":104,"Milwaukee, WI":98,
+  // ── WYOMING ──
+  "Casper, WY":95,"Cheyenne, WY":94,
+  // ── DC ──
+  "Washington DC":158,
+  // ── OVERSEAS (CONUS-indexed) ──
+  "Baumholder, Germany":108,"Kaiserslautern, Germany":105,"Ramstein, Germany":110,
+  "Stuttgart, Germany":115,"Grafenwöhr, Germany":107,
+  "Aviano, Italy":112,"Naples, Italy":118,"Sigonella, Italy":108,"Vicenza, Italy":114,
+  "Rota, Spain":106,"Mildenhall/Lakenheath, UK":138,"Alconbury, UK":135,
+  "Yokota, Japan":128,"Kadena, Okinawa":118,"Sasebo, Japan":120,"Misawa, Japan":115,
+  "Camp Humphreys, South Korea":112,"Osan, South Korea":110,
+  "Guam (Andersen/Naval Base)":138,
+};
+
+const MHA_CITIES = {
+  // 2026 E-5 with dependents BAH rates — official DTMO table (effective Jan 1, 2026)
+  // GI Bill MHA uses these 2026 rates starting Aug 1, 2026.
+  // Current GI Bill cycle (Aug 2025–Jul 2026) uses 2025 rates (~4.2% lower on average).
+  // ── ALABAMA ──
+  "Anniston/Fort McClellan, AL":    1185,
+  "Auburn, AL":                     1707,
+  "Birmingham, AL":                 2439,
+  "Fort Rucker/Enterprise, AL":     1572,
+  "Huntsville, AL":                 1797,
+  "Mobile, AL":                     1887,
+  "Montgomery, AL":                 1683,
+  // ── ALASKA ──
+  "Anchorage, AK":                  2874,
+  "Fairbanks, AK":                  2436,
+  "Juneau, AK":                     3354,
+  "Kodiak Island, AK":              2865,
+  "Ketchikan, AK":                  2868,
+  "Sitka, AK":                      3210,
+  // ── ARIZONA ──
+  "Phoenix, AZ":                    2289,
+  "Fort Huachuca/Sierra Vista, AZ": 1719,
+  "Tucson/Davis-Monthan, AZ":       1905,
+  "Yuma, AZ":                       1695,
+  // ── ARKANSAS ──
+  "Fayetteville, AR":               1782,
+  "Fort Smith/Fort Chaffee, AR":    1263,
+  "Little Rock, AR":                1848,
+  // ── CALIFORNIA ──
+  "Barstow/Fort Irwin, CA":         2001,
+  "Beale AFB/Marysville, CA":       2967,
+  "Camp Pendleton/Oceanside, CA":   3963,
+  "China Lake/Ridgecrest, CA":      1563,
+  "Edwards AFB/Palmdale, CA":       2658,
+  "El Centro, CA":                  1986,
+  "Fresno, CA":                     2439,
+  "Humboldt County, CA":            1827,
+  "Lemoore NAS/Hanford, CA":        2139,
+  "Los Angeles, CA":                3882,
+  "Marin/Sonoma County, CA":        3303,
+  "Monterey, CA":                   3465,
+  "Oakland/Alameda, CA":            3759,
+  "Riverside, CA":                  3351,
+  "Sacramento, CA":                 2904,
+  "San Bernardino, CA":             3288,
+  "San Diego, CA":                  3975,
+  "San Francisco, CA":              5127,
+  "San Jose/Santa Clara County, CA":4659,
+  "San Luis Obispo, CA":            3198,
+  "Santa Barbara/Ventura, CA":      3537,
+  "Stockton, CA":                   2553,
+  "Travis AFB/Fairfield, CA":       3369,
+  "Twenty-Nine Palms MCB, CA":      1980,
+  "Vandenberg SFB/Santa Maria, CA": 3333,
+  // ── COLORADO ──
+  "Boulder, CO":                    2754,
+  "Colorado Springs, CO":           2358,
+  "Denver, CO":                     2841,
+  "Fort Collins, CO":               2268,
+  // ── CONNECTICUT ──
+  "Hartford, CT":                   2901,
+  "New Haven/Fairfield, CT":        3069,
+  "New London/Groton, CT":          2580,
+  // ── DELAWARE ──
+  "Dover AFB/Rehoboth, DE":         2277,
+  // ── FLORIDA ──
+  "Eglin AFB/Fort Walton Beach, FL":2433,
+  "Florida Keys, FL":               3969,
+  "Fort Myers Beach, FL":           2694,
+  "Fort Pierce, FL":                2691,
+  "Gainesville, FL":                2040,
+  "Jacksonville, FL":               2181,
+  "Miami/Fort Lauderdale, FL":      3660,
+  "Ocala, FL":                      2370,
+  "Orlando, FL":                    2658,
+  "Panama City/Tyndall, FL":        2163,
+  "Patrick SFB/Melbourne, FL":      2502,
+  "Pensacola, FL":                  1863,
+  "Tallahassee, FL":                1824,
+  "Tampa/MacDill, FL":              2709,
+  "Volusia County/Daytona, FL":     2286,
+  "West Palm Beach, FL":            3423,
+  // ── GEORGIA ──
+  "Albany, GA":                     1371,
+  "Atlanta, GA":                    2388,
+  "Augusta/Fort Eisenhower, GA":    1890,
+  "Brunswick/Kings Bay, GA":        2133,
+  "Columbus/Fort Moore, GA":        1716,
+  "Dahlonega, GA":                  2208,
+  "Hinesville/Fort Stewart, GA":    2310,
+  "Savannah, GA":                   2415,
+  "Valdosta/Moody AFB, GA":         1524,
+  "Warner Robins/Robins AFB, GA":   1800,
+  // ── HAWAII ──
+  "Oahu/Honolulu, HI":              3663,
+  "Maui County, HI":                4329,
+  "Hawaii County/Hilo, HI":         3594,
+  "Kauai County, HI":               3798,
+  // ── IDAHO ──
+  "Boise, ID":                      1926,
+  "Mountain Home AFB, ID":          1605,
+  // ── ILLINOIS ──
+  "Chicago, IL":                    3438,
+  "Great Lakes/North Chicago, IL":  2427,
+  "Peoria, IL":                     1572,
+  "Rock Island/Moline, IL":         1908,
+  "Scott AFB/Belleville, IL":       1542,
+  "Springfield/Decatur, IL":        1527,
+  // ── INDIANA ──
+  "Fort Wayne, IN":                 1947,
+  "Indianapolis, IN":               1875,
+  // ── IOWA ──
+  "Des Moines, IA":                 1770,
+  // ── KANSAS ──
+  "Fort Leavenworth, KS":           1815,
+  "Fort Riley/Junction City, KS":   1314,
+  "Topeka, KS":                     1626,
+  "Wichita/McConnell AFB, KS":      1377,
+  // ── KENTUCKY ──
+  "Fort Campbell/Clarksville, KY":  1815,
+  "Fort Knox, KY":                  1647,
+  "Lexington, KY":                  1875,
+  "Louisville, KY":                 1989,
+  // ── LOUISIANA ──
+  "Baton Rouge, LA":                1875,
+  "Fort Polk/Leesville, LA":        1218,
+  "New Orleans, LA":                1905,
+  "Shreveport/Barksdale AFB, LA":   1845,
+  "Lafayette, LA":                  1584,
+  // ── MAINE ──
+  "Bangor, ME":                     1893,
+  "Brunswick, ME":                  2205,
+  "Portland, ME":                   3252,
+  // ── MARYLAND ──
+  "Annapolis, MD":                  2928,
+  "Baltimore, MD":                  2610,
+  "Fort Detrick/Frederick, MD":     2682,
+  "Fort Meade/Laurel, MD":          2901,
+  "Indian Head/Waldorf, MD":        3249,
+  "Patuxent River NAS, MD":         2406,
+  "Washington DC Metro (MD)":       3132,
+  // ── MASSACHUSETTS ──
+  "Boston, MA":                     4791,
+  "Cape Cod/Plymouth, MA":          3924,
+  "Essex County/Salem, MA":         3477,
+  "Hanscom AFB/Bedford, MA":        4188,
+  "Nantucket, MA":                  4344,
+  "Springfield/Holyoke, MA":        2388,
+  "Worcester, MA":                  2919,
+  // ── MICHIGAN ──
+  "Ann Arbor, MI":                  2559,
+  "Detroit, MI":                    2361,
+  "Grand Rapids, MI":               2148,
+  "Lansing, MI":                    1806,
+  "Sault Ste. Marie, MI":           1536,
+  // ── MINNESOTA ──
+  "Duluth, MN":                     2064,
+  "Minneapolis/St. Paul, MN":       2541,
+  // ── MISSISSIPPI ──
+  "Columbus AFB, MS":               1398,
+  "Gulfport/Keesler, MS":           1602,
+  "Hattiesburg/Camp Shelby, MS":    1395,
+  "Jackson, MS":                    1920,
+  "Meridian NAS, MS":               1290,
+  // ── MISSOURI ──
+  "Fort Leonard Wood/Rolla, MO":    1479,
+  "Kansas City, MO":                1986,
+  "Springfield, MO":                1389,
+  "St. Louis/Scott AFB, MO":        2436,
+  "Whiteman AFB/Sedalia, MO":       1611,
+  // ── MONTANA ──
+  "Great Falls/Malmstrom, MT":      1608,
+  "Helena, MT":                     1887,
+  // ── NEBRASKA ──
+  "Lincoln, NE":                    1788,
+  "Omaha/Offutt AFB, NE":           2085,
+  // ── NEVADA ──
+  "Las Vegas/Nellis AFB, NV":       2070,
+  "Reno/Carson City, NV":           2391,
+  // ── NEW HAMPSHIRE ──
+  "Manchester/Concord, NH":         3177,
+  "Portsmouth/Pease, NH":           3321,
+  // ── NEW JERSEY ──
+  "Atlantic City/Egg Harbor, NJ":   2655,
+  "Cape May NWS, NJ":               2754,
+  "Fort Dix/McGuire/Lakehurst, NJ": 2823,
+  "Fort Monmouth/Earle NWS, NJ":    3549,
+  "Northern New Jersey, NJ":        4749,
+  "Trenton, NJ":                    3465,
+  // ── NEW MEXICO ──
+  "Albuquerque/Kirtland AFB, NM":   2211,
+  "Cannon AFB/Clovis, NM":          1365,
+  "Holloman AFB/Alamogordo, NM":    1590,
+  "Las Cruces/White Sands, NM":     1701,
+  "Santa Fe/Los Alamos, NM":        2964,
+  // ── NEW YORK ──
+  "Albany, NY":                     2634,
+  "Buffalo, NY":                    2214,
+  "Fort Drum/Watertown, NY":        1665,
+  "Long Island, NY":                4425,
+  "New York City, NY":              5070,
+  "Rochester, NY":                  2214,
+  "Rome/Griffiss AFB, NY":          2109,
+  "Staten Island, NY":              3735,
+  "Syracuse, NY":                   2049,
+  "West Point, NY":                 3468,
+  "Westchester County, NY":         4479,
+  // ── NORTH CAROLINA ──
+  "Asheville, NC":                  2214,
+  "Camp Lejeune/Jacksonville, NC":  1584,
+  "Charlotte, NC":                  2169,
+  "Cherry Point MCAS/Morehead, NC": 1851,
+  "Durham/Chapel Hill, NC":         2118,
+  "Elizabeth City, NC":             2508,
+  "Fort Liberty/Fayetteville, NC":  1806,
+  "Greensboro, NC":                 1809,
+  "Outer Banks, NC":                2604,
+  "Raleigh, NC":                    2091,
+  "Seymour Johnson AFB/Goldsboro, NC":1521,
+  "Wilmington, NC":                 2040,
+  // ── NORTH DAKOTA ──
+  "Bismarck, ND":                   1596,
+  "Fargo, ND":                      1707,
+  "Grand Forks AFB, ND":            1731,
+  "Minot AFB, ND":                  1548,
+  // ── OHIO ──
+  "Akron, OH":                      1581,
+  "Cincinnati, OH":                 2283,
+  "Cleveland, OH":                  1998,
+  "Columbus, OH":                   1875,
+  "Dayton/Wright-Patterson, OH":    1650,
+  "Toledo, OH":                     2031,
+  // ── OKLAHOMA ──
+  "Altus AFB, OK":                  1254,
+  "Fort Sill/Lawton, OK":           1233,
+  "Oklahoma City/Tinker, OK":       1644,
+  "Tulsa, OK":                      1638,
+  "Vance AFB/Enid, OK":             1200,
+  // ── OREGON ──
+  "Corvallis, OR":                  2388,
+  "Eugene, OR":                     2187,
+  "Portland, OR":                   2379,
+  "Salem, OR":                      2004,
+  // ── PENNSYLVANIA ──
+  "Allentown/Bethlehem, PA":        2373,
+  "Carlisle Barracks, PA":          2076,
+  "Erie, PA":                       1464,
+  "Philadelphia, PA":               2691,
+  "Pittsburgh, PA":                 2283,
+  "State College, PA":              1791,
+  "Wilkes-Barre/Scranton, PA":      1740,
+  "Willow Grove/Philadelphia suburbs, PA": 2934,
+  // ── RHODE ISLAND ──
+  "Newport/NWS Newport, RI":        2847,
+  "Providence, RI":                 3195,
+  // ── SOUTH CAROLINA ──
+  "Beaufort/Parris Island, SC":     2403,
+  "Charleston, SC":                 2385,
+  "Columbia/Fort Jackson, SC":      1878,
+  "Greenville, SC":                 1923,
+  "Myrtle Beach, SC":               2097,
+  "Sumter/Shaw AFB, SC":            1503,
+  // ── SOUTH DAKOTA ──
+  "Rapid City/Ellsworth AFB, SD":   1986,
+  "Sioux Falls, SD":                1554,
+  // ── TENNESSEE ──
+  "Chattanooga, TN":                1986,
+  "Johnson City/Kingsport, TN":     1548,
+  "Knoxville, TN":                  2184,
+  "Memphis, TN":                    2154,
+  "Nashville, TN":                  2268,
+  // ── TEXAS ──
+  "Abilene/Dyess AFB, TX":          1554,
+  "Austin, TX":                     2241,
+  "Beaumont, TX":                   1518,
+  "College Station, TX":            1758,
+  "Corpus Christi NAS, TX":         1788,
+  "Dallas, TX":                     2469,
+  "Del Rio/Laughlin AFB, TX":       1470,
+  "El Paso/Fort Bliss, TX":         1809,
+  "Fort Worth/NAS JRB, TX":         2118,
+  "Houston, TX":                    2193,
+  "Killeen/Fort Cavazos, TX":       1695,
+  "Lubbock, TX":                    1476,
+  "San Angelo/Goodfellow AFB, TX":  1578,
+  "San Antonio, TX":                1869,
+  "Waco, TX":                       1755,
+  "Wichita Falls/Sheppard AFB, TX": 1491,
+  // ── UTAH ──
+  "Hill AFB/Ogden, UT":             2118,
+  "Provo, UT":                      2058,
+  "Salt Lake City, UT":             2130,
+  // ── VERMONT ──
+  "Burlington, VT":                 3120,
+  // ── VIRGINIA ──
+  "Charlottesville, VA":            2373,
+  "Dahlgren/Fort A.P. Hill, VA":    2313,
+  "Fort Belvoir/Quantico, VA":      2955,
+  "Hampton/Newport News/Langley, VA":2274,
+  "Norfolk/Portsmouth/NAS Oceana, VA":2430,
+  "Richmond/Fort Gregg-Adams, VA":  2358,
+  "Roanoke, VA":                    1911,
+  "Washington DC Metro (VA)":       3132,
+  "Warrenton/Culpeper, VA":         3066,
+  // ── WASHINGTON ──
+  "Bremerton/NB Kitsap, WA":        2364,
+  "Everett/NAS Whidbey Island, WA": 2748,
+  "Seattle, WA":                    3135,
+  "Spokane/Fairchild AFB, WA":      2184,
+  "Tacoma/JBLM, WA":                2556,
+  "Yakima, WA":                     1923,
+  // ── WASHINGTON DC ──
+  "Washington DC":                  3132,
+  // ── WEST VIRGINIA ──
+  "Charleston, WV":                 1404,
+  "Morgantown, WV":                 1641,
+  // ── WISCONSIN ──
+  "Madison, WI":                    2655,
+  "Milwaukee, WI":                  2607,
+  // ── WYOMING ──
+  "Cheyenne/F.E. Warren, WY":       1653,
+};
+
+const fmt = n => (n<0?"-$":"$") + Math.abs(Math.round(n)).toLocaleString("en-US");
+const dk = dep => ({Single:"s",Spouse:"sp","Spouse + Child":"spc","Child Only":"c"}[dep]||"s");
+
+function pension(rt, yos, h3) {
+  if (rt==="REDUX") return h3 * Math.min(0.40+Math.max(0,yos-20)*0.035, 0.75);
+  return h3 * (rt==="BRS"?0.020:0.025) * Math.min(yos,40);
+}
+function pct(rt, yos) {
+  if (rt==="REDUX") return Math.min(40+Math.max(0,yos-20)*3.5,75);
+  return Math.min(yos*(rt==="BRS"?2.0:2.5),100);
+}
+function combinedVA(ratings) {
+  if (!ratings.length) return 0;
+  const s=[...ratings].sort((a,b)=>b-a);
+  let rem=100,c=0;
+  for (const r of s){c+=rem*(r/100);rem-=rem*(r/100);}
+  return Math.round(Math.round(c)/10)*10;
+}
+
+// ── MEDICAL RETIREMENT (PDRL/TDRL) ─────────────────────────────────────
+// Source: 10 USC § 1201/§ 1202; congress.gov/crs-product/IF10483
+// Formula: max(DoD disability %, YOS × multiplier) × High-3, capped at 75%
+// BRS members get 2.0% for the YOS leg (NOT 2.5%) — confirmed by DoD Defense Primer
+// TDRL: minimum 50% multiplier while on temporary list
+function medicalPension(yos, h3, dodPct, tdrl, retType) {
+  const yosMult = yos * (retType === "BRS" ? 2.0 : 2.5);
+  const disabMult = tdrl ? Math.max(dodPct, 50) : dodPct;
+  const finalMult = Math.min(Math.max(yosMult, disabMult), 75);
+  return { pay: h3 * (finalMult / 100), mult: finalMult, yosMult, disabMult };
+}
+
+// ── RESERVE/GUARD RETIREMENT ────────────────────────────────────────────
+// Source: 10 USC § 12733; militarypay.defense.gov/Pay/Retirement/Reserve.aspx
+// Formula: (totalPoints ÷ 360) × multiplier × High-3
+// BRS: 2.0% multiplier. High-3/Final Pay: 2.5% multiplier.
+function reservePension(points, h3, rt) {
+  const equivYOS = points / 360;
+  const mult = rt === "BRS" ? 0.020 : 0.025;
+  return { pay: h3 * mult * equivYOS, equivYOS, multPct: mult * 100 };
+}
+
+// Helper: compute pension by separation type
+function pensionBySepType(separationType, retType, yos, h3, medDodPct, tdrl, reservePoints, currentAge, payStartAge) {
+  if (separationType === "active") return pension(retType, yos, h3);
+  if (separationType === "medical") return medicalPension(yos, h3, medDodPct, tdrl, retType).pay;
+  if (separationType === "reserve") return (currentAge >= payStartAge) ? reservePension(reservePoints, h3, retType).pay : 0;
+  return 0; // veteran
+}
+
+// ── 2026 FEDERAL INCOME TAX — Progressive Brackets ───────────────────
+// Source: IRS Rev. Proc. 2025-28
+// Standard deductions: $15,000 single / $30,000 MFJ
+const TAX_BRACKETS_2026 = {
+  single: [
+    { rate: 0.10, min: 0,       max: 11925 },
+    { rate: 0.12, min: 11925,   max: 48475 },
+    { rate: 0.22, min: 48475,   max: 103350 },
+    { rate: 0.24, min: 103350,  max: 197300 },
+    { rate: 0.32, min: 197300,  max: 250525 },
+    { rate: 0.35, min: 250525,  max: 626350 },
+    { rate: 0.37, min: 626350,  max: Infinity },
+  ],
+  mfj: [
+    { rate: 0.10, min: 0,       max: 23850 },
+    { rate: 0.12, min: 23850,   max: 96950 },
+    { rate: 0.22, min: 96950,   max: 206700 },
+    { rate: 0.24, min: 206700,  max: 394600 },
+    { rate: 0.32, min: 394600,  max: 501050 },
+    { rate: 0.35, min: 501050,  max: 751600 },
+    { rate: 0.37, min: 751600,  max: Infinity },
+  ],
+};
+
+const STANDARD_DEDUCTION_2026 = { single: 15000, mfj: 30000 };
+
+// Returns { annualTax, monthlyTax, effectiveRate }
+// taxableAnnualGross = all taxable income (pension + other) — VA comp excluded
+// filingStatus = "single" | "mfj"
+function calcFederalTax(taxableAnnualGross, filingStatus) {
+  const deduction = STANDARD_DEDUCTION_2026[filingStatus] ?? 15000;
+  const taxableIncome = Math.max(0, taxableAnnualGross - deduction);
+  const brackets = TAX_BRACKETS_2026[filingStatus] ?? TAX_BRACKETS_2026.single;
+
+  let annualTax = 0;
+  for (const bracket of brackets) {
+    if (taxableIncome <= bracket.min) break;
+    const taxableInBracket = Math.min(taxableIncome, bracket.max) - bracket.min;
+    annualTax += taxableInBracket * bracket.rate;
+  }
+
+  const effectiveRate = taxableAnnualGross > 0
+    ? annualTax / taxableAnnualGross
+    : 0;
+
+  return {
+    annualTax: Math.round(annualTax),
+    monthlyTax: Math.round(annualTax / 12),
+    effectiveRate,
+  };
+}
+
+// ── TRICARE 2026 PREMIUM RATES (Monthly, Retiree Enrollment Fees) ────
+// Source: tricare.mil/costs — CY2026 rates (effective Jan 1, 2026)
+// Group A = entered service before Jan 1, 2018; Group B = on/after Jan 1, 2018
+const TRICARE_PLANS = {
+  prime: {
+    label: "TRICARE Prime",
+    note: "Lowest out-of-pocket for retirees < 65. Network only, PCM required.",
+    medicare_b: 0,
+    groupA: { self: 31.83, family: 63.75 },
+    groupB: { self: 38.58, family: 77.25 },
+  },
+  select: {
+    label: "TRICARE Select",
+    note: "Freedom to see any provider. Higher cost-shares, no referral needed.",
+    medicare_b: 0,
+    groupA: { self: 15.58, family: 31.25 },
+    groupB: { self: 49.58, family: 99.25 },
+  },
+  tfl: {
+    label: "TRICARE For Life",
+    note: "Wraps around Medicare for retirees 65+. Requires Medicare Part B enrollment.",
+    medicare_b: 185.00,
+    groupA: { self: 0, family: 0 },
+    groupB: { self: 0, family: 0 },
+  },
+  select_overseas: {
+    label: "TRICARE Select Overseas",
+    note: "Select plan for retirees living overseas. Similar cost-shares to stateside Select.",
+    medicare_b: 0,
+    groupA: { self: 15.58, family: 31.25 },
+    groupB: { self: 49.58, family: 99.25 },
+  },
+};
+
+// TRICARE Reserve Select
+// Source: tricare.mil 2026 Costs & Fees PDF — effective Jan 1, 2026
+const TRICARE_RS = {
+  individual: 57.88,
+  family:     286.66,
+  note: "TRICARE Reserve Select · Available to Selected Reserve (drilling) members only. Lost if you stop drilling."
+};
+
+// TRICARE Retired Reserve (gray area retirees not yet drawing pay)
+// Source: tricare.mil 2026 Costs & Fees PDF — effective Jan 1, 2026
+const TRICARE_TRR = {
+  individual: 645.90,
+  family:     1548.30,
+  note: "TRICARE Retired Reserve · Available if you've retired from the Reserve but aren't yet drawing retirement pay. Compare with ACA marketplace — premiums are significant."
+};
+
+// VA Healthcare Priority Groups
+// Source: va.gov/health-care/eligibility/priority-groups/ (verified March 2026)
+const VA_PRIORITY_GROUPS = [
+  { group: 1, who: "50%+ service-connected disability; TDIU (unemployability); or Medal of Honor", copay: "None for SC conditions", free: true },
+  { group: 2, who: "30–40% service-connected disability", copay: "None for SC conditions", free: true },
+  { group: 3, who: "10–20% service-connected disability; Purple Heart; former POW; or discharged for disability", copay: "None for SC conditions", free: true },
+  { group: 4, who: "Receiving VA Aid & Attendance or Housebound benefits; or catastrophically disabled", copay: "Reduced or no copays", free: false },
+  { group: 5, who: "0% non-compensable or non-SC disability with income below VA threshold; or VA pension recipients", copay: "Reduced copays", free: false },
+  { group: 6, who: "Combat veterans (post-9/11, 10-yr window); PACT Act toxic exposure; Camp Lejeune; Vietnam/Gulf War exposures; 0% SC compensable", copay: "$0 for related conditions; $30/visit for others", free: false },
+  { group: 7, who: "Income above VA threshold but below geographic (GMT) threshold — agrees to copays", copay: "Standard copays", free: false },
+  { group: 8, who: "Income above all thresholds, no qualifying SC disability — agrees to copays", copay: "Standard copays", free: false },
+];
+
+function getVAPriorityGroup(vaRating) {
+  if (vaRating >= 50) return 1;
+  if (vaRating >= 30) return 2;
+  if (vaRating >= 10) return 3;
+  return 5;
+}
+
+// ── VGLI RATE TABLE ──────────────────────────────────────────────────
+// Source: va.gov/life-insurance/options-eligibility/vgli/ — Monthly cost per $1,000 of coverage
+// Keyed by upper age of bracket (29 = "under 30", 34 = "30-34", etc.)
+const VGLI_RATES = {
+  29: 0.07, 34: 0.09, 39: 0.13, 44: 0.20,
+  49: 0.33, 54: 0.52, 59: 0.80, 64: 1.20,
+  69: 2.10, 74: 3.30, 99: 4.50,
+};
+
+function vgliRate(age) {
+  if (age < 30) return VGLI_RATES[29];
+  if (age < 35) return VGLI_RATES[34];
+  if (age < 40) return VGLI_RATES[39];
+  if (age < 45) return VGLI_RATES[44];
+  if (age < 50) return VGLI_RATES[49];
+  if (age < 55) return VGLI_RATES[54];
+  if (age < 60) return VGLI_RATES[59];
+  if (age < 65) return VGLI_RATES[64];
+  if (age < 70) return VGLI_RATES[69];
+  if (age < 75) return VGLI_RATES[74];
+  return VGLI_RATES[99];
+}
+
+function vgliMonthly(coverage, age) {
+  return (coverage / 1000) * vgliRate(age);
+}
+
+// ── GI BILL ELIGIBILITY TIERS ────────────────────────────────────────
+// Source: va.gov/education/about-gi-bill-benefits/post-9-11/
+const ELIG_TIERS = [
+  { pct: 100, label: "100% — 36+ months active duty" },
+  { pct: 90,  label: "90% — 30 months" },
+  { pct: 80,  label: "80% — 24 months" },
+  { pct: 70,  label: "70% — 18 months" },
+  { pct: 60,  label: "60% — 12 months" },
+  { pct: 50,  label: "50% — 6 months" },
+  { pct: 40,  label: "40% — 90 days" },
+];
+
+const ENROLL_OPTS = [
+  { v: 1.0,  l: "Full-Time (100%)" },
+  { v: 0.75, l: "¾ Time (75%)" },
+  { v: 0.5,  l: "Half-Time (50%)" },
+  { v: 0.25, l: "¼ Time (25%)" },
+];
+
+// Post-9/11 GI Bill online-only MHA rate for the 2026 academic year cycle
+// Source: va.gov/education/benefit-rates — Aug 2026–Jul 2027 cycle
+const GI_BILL_ONLINE_MHA = 1261;
+
+const FONTS=`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:wght@700&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');`;
+const CSS=`
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#151c2e;--card:#1f2d45;--sub:#1f2d45;--ink:#f0ece4;--mut:#8a9ab5;--fnt:#8a9ab5;
+  --nv:#c2782a;--nvm:#e09448;--nvl:rgba(194,120,42,.12);
+  --gn:#5a9e6f;--gnb:rgba(90,158,111,.12);--rd:#c0392b;--rdb:rgba(192,57,43,.12);
+  --gd:#e09448;--gdb:rgba(224,148,72,.12);--br:#2a3a55;--brm:#2a3a55;
+  --sh:56px;--tabh:64px;
+  --safe-b:env(safe-area-inset-bottom,0px);
+  --safe-t:env(safe-area-inset-top,0px);
+}
+html{-webkit-text-size-adjust:100%;-webkit-tap-highlight-color:transparent}
+body{background:var(--bg);color:var(--ink);font-family:Barlow,sans-serif;
+  font-size:16px;line-height:1.5;overscroll-behavior-y:contain;
+  -webkit-font-smoothing:antialiased}
+html{background:var(--bg)}
+::-webkit-scrollbar{width:0;height:0}
+@keyframes fu{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+.fu{animation:fu .22s ease-out both}
+
+/* ── TOP STATUS BAR ── */
+.sb{position:fixed;top:0;left:0;right:0;
+  height:calc(var(--sh) + var(--safe-t));padding-top:var(--safe-t);
+  background:var(--sub);
+  z-index:200;display:flex;align-items:center;justify-content:space-between;
+  padding-left:16px;padding-right:16px;
+  box-shadow:0 1px 8px rgba(0,0,0,.35);border-bottom:1px solid var(--br)}
+.sb-left{display:flex;flex-direction:column;justify-content:center;min-width:0}
+.sb-title{font-family:'Libre Baskerville',serif;font-size:11px;
+  color:var(--nv);letter-spacing:.03em;line-height:1}
+.sb-total{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:600;
+  color:var(--ink);line-height:1.2;letter-spacing:-.01em}
+.sb-sub{font-size:10px;font-weight:600;color:var(--mut);
+  letter-spacing:.06em;text-transform:uppercase;margin-top:1px}
+.sb-right{display:flex;gap:14px;align-items:center}
+.sb-pill{display:flex;flex-direction:column;align-items:flex-end;
+  padding:5px 10px;border-radius:8px;min-width:68px}
+.sb-pill-l{font-size:8px;font-weight:700;letter-spacing:.08em;
+  text-transform:uppercase;color:var(--mut);margin-bottom:1px}
+.sb-pill-v{font-family:'IBM Plex Mono',monospace;font-size:15px;
+  font-weight:600;color:var(--ink);white-space:nowrap;line-height:1.15}
+.sb-pill-v.pos{color:var(--gn)}.sb-pill-v.warn{color:var(--nvm)}
+.sb-pill-v.neg{color:var(--rd)}
+
+/* ── BOTTOM TAB BAR ── */
+.btabs{position:fixed;bottom:0;left:0;right:0;z-index:200;
+  background:var(--sub);border-top:1px solid var(--br);
+  padding-bottom:var(--safe-b)}
+.btabs-scroll{display:flex;overflow-x:auto;-webkit-overflow-scrolling:touch;
+  scroll-snap-type:x proximity;scrollbar-width:none}
+.btabs-scroll::-webkit-scrollbar{display:none}
+.btab{flex:0 0 auto;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:3px;
+  min-width:72px;width:72px;height:var(--tabh);
+  border:none;background:none;cursor:pointer;
+  font-family:Barlow,sans-serif;font-size:10px;font-weight:500;
+  color:var(--mut);position:relative;
+  -webkit-tap-highlight-color:transparent;
+  transition:color .15s}
+.btab:active{background:var(--sub)}
+.btab.on{color:var(--nvm);font-weight:700}
+.btab.on::after{content:'';position:absolute;top:0;left:50%;
+  transform:translateX(-50%);width:32px;height:2.5px;
+  background:var(--nv);border-radius:0 0 2px 2px}
+.btab-ico{font-size:20px;line-height:1;height:22px;display:flex;align-items:center;justify-content:center}
+.btab.on .btab-ico{transform:scale(1.1)}
+.btab-dot{position:absolute;top:6px;right:14px;width:5px;height:5px;
+  border-radius:50%;background:var(--gn)}
+
+/* ── MAIN CONTENT ── */
+.main{margin-top:calc(var(--sh) + var(--safe-t));
+  padding:20px 16px calc(var(--tabh) + var(--safe-b) + 20px);
+  max-width:600px;margin-left:auto;margin-right:auto}
+
+/* ── SECTION HEAD ── */
+.sh2{margin-bottom:20px}
+.sh2 h2{font-family:'Libre Baskerville',serif;font-size:20px;color:var(--ink);
+  margin-bottom:4px;line-height:1.3}
+.sh2 p{font-size:14px;color:var(--mut);line-height:1.55}
+
+/* ── CARD ── */
+.card{background:var(--card);border:1px solid var(--br);border-radius:12px;
+  padding:18px 16px;margin-bottom:14px}
+.cttl{font-size:10px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--fnt);margin-bottom:14px}
+
+/* ── GRIDS — single column mobile-first ── */
+.g2,.g23,.g3{display:grid;grid-template-columns:1fr;gap:14px}
+
+/* ── FORM ── */
+.field{margin-bottom:16px}.field:last-child{margin-bottom:0}
+.flbl{display:block;font-size:12px;font-weight:700;letter-spacing:.04em;
+  text-transform:uppercase;color:var(--mut);margin-bottom:6px}
+.fhint{font-size:12px;color:var(--fnt);margin-top:5px;line-height:1.45}
+.iwrap{position:relative;display:flex;align-items:center}
+.ipre{position:absolute;left:14px;font-family:'IBM Plex Mono',monospace;
+  font-size:16px;color:var(--mut);pointer-events:none;z-index:1}
+.isuf{position:absolute;right:14px;font-size:13px;font-weight:600;
+  color:var(--mut);pointer-events:none}
+input[type=number]{width:100%;border:1.5px solid var(--br);border-radius:10px;
+  padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:16px;
+  color:var(--ink);background:var(--bg);outline:none;
+  min-height:48px;
+  transition:border-color .13s,box-shadow .13s;
+  -moz-appearance:textfield}
+input[type=number]::-webkit-inner-spin-button{opacity:.3}
+input[type=number].pre{padding-left:28px}
+input[type=number].suf{padding-right:48px}
+input[type=number]:focus{border-color:var(--nvm);box-shadow:0 0 0 3px rgba(194,120,42,.18)}
+select{width:100%;border:1.5px solid var(--br);border-radius:10px;
+  padding:12px 38px 12px 14px;font-family:Barlow,sans-serif;font-size:16px;
+  color:var(--ink);background:var(--bg);outline:none;cursor:pointer;appearance:none;
+  min-height:48px;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%238a9ab5' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat:no-repeat;background-position:right 14px center;
+  transition:border-color .13s}
+select:focus{border-color:var(--nvm)}
+.tg{display:flex;gap:6px;flex-wrap:wrap}
+.tb{padding:10px 16px;border-radius:8px;border:1.5px solid var(--br);background:var(--bg);
+  color:var(--mut);font-family:Barlow,sans-serif;font-size:14px;font-weight:500;
+  cursor:pointer;transition:all .11s;min-height:44px;
+  display:flex;align-items:center;justify-content:center}
+.tb:active{transform:scale(.97)}
+.tb.on{background:var(--nv);border-color:var(--nv);color:var(--ink)}
+
+/* ── STATS ── */
+.bsl{font-size:10px;font-weight:700;letter-spacing:.09em;
+  text-transform:uppercase;color:var(--fnt);margin-bottom:6px}
+.bsv{font-family:'IBM Plex Mono',monospace;font-size:28px;font-weight:600;line-height:1}
+.bss{font-size:12px;color:var(--mut);margin-top:5px}
+.mt{background:var(--sub);border-radius:10px;padding:14px 16px}
+.mtl{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--fnt);margin-bottom:4px}
+.mtv{font-family:'IBM Plex Mono',monospace;font-size:19px;font-weight:600}
+.mts{font-size:11px;color:var(--fnt);margin-top:3px}
+
+/* ── DATA ROWS ── */
+.dr{display:flex;justify-content:space-between;align-items:flex-start;
+  padding:11px 0;border-bottom:1px solid var(--br)}
+.dr:last-child{border-bottom:none}
+.drl{font-size:14px;color:var(--mut)}
+.drs{font-size:11px;color:var(--fnt);margin-top:2px}
+.drv{font-family:'IBM Plex Mono',monospace;font-size:15px;font-weight:500;
+  text-align:right;flex-shrink:0;margin-left:12px}
+
+/* ── INFO BOXES ── */
+.ib{border-radius:10px;padding:14px 16px;font-size:14px;line-height:1.6}
+.ib-gn{background:var(--gnb);border-left:3px solid var(--gn);color:var(--gn)}
+.ib-gd{background:var(--gdb);border-left:3px solid var(--gd);color:#7A5208}
+.ib-nv{background:var(--nvl);border-left:3px solid var(--nv);color:var(--nv)}
+.ib-rd{background:var(--rdb);border-left:3px solid var(--rd);color:var(--rd)}
+
+/* ── PROGRESS ── */
+.pb{height:8px;background:var(--sub);border-radius:100px;overflow:hidden}
+.pbf{height:100%;border-radius:100px;transition:width .45s ease-out}
+
+/* ── TABLE ── */
+.dt{width:100%;border-collapse:collapse;font-size:13px}
+.dt th{text-align:left;font-size:9px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;color:var(--fnt);padding:6px 8px;
+  border-bottom:1px solid var(--br)}
+.dt td{padding:8px 8px;border-bottom:1px solid var(--br);
+  font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--ink)}
+.dt tr:last-child td{border-bottom:none}
+.dt tr.hi td{background:var(--sub);border-left:2px solid var(--nv)}
+.dt tr.hi td:first-child{color:var(--nvm);font-weight:600}
+hr{border:none;border-top:1px solid var(--br);margin:16px 0}
+.chip{display:inline-block;padding:6px 12px;background:var(--sub);border-radius:6px;
+  font-size:13px;color:var(--mut);cursor:pointer;transition:background .12s;
+  margin:3px;min-height:36px;line-height:1.5}
+.chip:active{background:var(--brm)}
+.chip.g{background:var(--gnb);color:var(--gn)}
+
+/* ── DESKTOP BREAKPOINT ── */
+@media(min-width:768px){
+  .main{padding:28px 32px calc(var(--tabh) + var(--safe-b) + 28px);max-width:720px}
+  .g2{grid-template-columns:1fr 1fr}
+  .g23{grid-template-columns:2fr 3fr}
+  .g3{grid-template-columns:1fr 1fr 1fr}
+  .bsv{font-size:34px}
+  .btab{min-width:80px;width:auto;padding:0 6px}
+}
+
+/* ── INFO BUTTON ── */
+.info-btn{width:36px;height:36px;border-radius:50%;border:1.5px solid var(--br);
+  background:transparent;color:var(--mut);font-size:18px;font-weight:600;
+  cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:all .15s;-webkit-tap-highlight-color:transparent;flex-shrink:0}
+.info-btn:active{background:var(--nvl);border-color:var(--nv);color:var(--nvm)}
+
+/* ── INFO MENU OVERLAY ── */
+.info-overlay{position:fixed;inset:0;z-index:500;display:flex;align-items:flex-end;
+  justify-content:center;background:rgba(0,0,0,.55);animation:fo .18s ease-out}
+@keyframes fo{from{opacity:0}to{opacity:1}}
+.info-sheet{background:var(--card);border-radius:16px 16px 0 0;width:100%;
+  max-width:480px;padding:24px 20px calc(20px + var(--safe-b));
+  animation:fsu .22s ease-out}
+@keyframes fsu{from{transform:translateY(100%)}to{transform:translateY(0)}}
+.info-sheet-title{font-family:'Barlow Condensed',sans-serif;font-size:14px;
+  font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);
+  margin-bottom:16px}
+.info-sheet-btn{display:flex;align-items:center;gap:14px;width:100%;
+  padding:16px;border-radius:10px;border:1px solid var(--br);background:var(--bg);
+  color:var(--ink);font-family:Barlow,sans-serif;font-size:16px;font-weight:500;
+  cursor:pointer;margin-bottom:10px;transition:border-color .13s;
+  -webkit-tap-highlight-color:transparent}
+.info-sheet-btn:active{border-color:var(--nv)}
+.info-sheet-btn span:first-child{font-size:20px;width:28px;text-align:center}
+.info-sheet-cancel{display:block;width:100%;padding:14px;border:none;
+  background:transparent;color:var(--mut);font-family:Barlow,sans-serif;
+  font-size:15px;font-weight:600;cursor:pointer;margin-top:6px}
+
+/* ── MODAL SCREEN (Support / Privacy) ── */
+.modal-screen{position:fixed;inset:0;z-index:600;background:var(--bg);
+  overflow-y:auto;-webkit-overflow-scrolling:touch;animation:fu .22s ease-out both}
+.modal-hdr{position:sticky;top:0;z-index:10;background:var(--bg);
+  display:flex;align-items:center;gap:12px;padding:16px;
+  border-bottom:1px solid var(--br)}
+.modal-back{width:40px;height:40px;border-radius:50%;border:1.5px solid var(--br);
+  background:transparent;color:var(--ink);font-size:20px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+  -webkit-tap-highlight-color:transparent}
+.modal-back:active{background:var(--nvl);border-color:var(--nv)}
+.modal-htxt{font-family:'Barlow Condensed',sans-serif;font-size:18px;
+  font-weight:700;letter-spacing:.04em;text-transform:uppercase;color:var(--ink)}
+.modal-body{padding:20px 16px 40px;max-width:600px;margin:0 auto}
+
+/* ── SUPPORT SCREEN ── */
+.sup-hero{margin-bottom:28px}
+.sup-hero h2{font-family:'Libre Baskerville',serif;font-size:22px;color:var(--ink);
+  margin-bottom:6px}
+.sup-hero p{font-size:14px;color:var(--mut);line-height:1.55}
+.sup-contact{background:var(--card);border:1px solid var(--br);border-radius:12px;
+  padding:20px 16px;margin-bottom:28px}
+.sup-contact-lbl{font-size:10px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--nvm);margin-bottom:10px}
+.sup-contact-email{font-family:'IBM Plex Mono',monospace;font-size:15px;
+  color:var(--ink);margin-bottom:4px}
+.sup-contact-note{font-size:12px;color:var(--mut);margin-bottom:14px}
+.sup-contact-btn{display:block;width:100%;padding:14px;border:none;border-radius:10px;
+  background:var(--nv);color:var(--ink);font-family:'Barlow Condensed',sans-serif;
+  font-size:15px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  cursor:pointer;text-align:center;text-decoration:none;
+  transition:opacity .13s;-webkit-tap-highlight-color:transparent}
+.sup-contact-btn:active{opacity:.8}
+.faq-title{font-size:10px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--nvm);margin-bottom:14px}
+.faq-item{border-bottom:1px solid var(--br)}
+.faq-q{display:flex;align-items:center;justify-content:space-between;gap:12px;
+  width:100%;padding:16px 0;border:none;background:none;cursor:pointer;
+  text-align:left;font-family:Barlow,sans-serif;font-size:15px;font-weight:600;
+  color:var(--ink);-webkit-tap-highlight-color:transparent}
+.faq-q span:last-child{font-size:18px;color:var(--nvm);flex-shrink:0;
+  transition:transform .2s}
+.faq-q.open span:last-child{transform:rotate(45deg)}
+.faq-a{padding:0 0 16px;font-size:14px;color:var(--mut);line-height:1.65;
+  animation:fu .18s ease-out both}
+
+/* ── PRIVACY SCREEN ── */
+.prv-callout{background:var(--nvl);border:1px solid rgba(194,120,42,.25);
+  border-radius:12px;padding:18px 16px;margin-bottom:28px;
+  font-size:14px;color:var(--nvm);line-height:1.65;font-weight:500}
+.prv-section{margin-bottom:24px;padding-bottom:24px;
+  border-bottom:1px solid rgba(194,120,42,.12)}
+.prv-section:last-of-type{border-bottom:none}
+.prv-num{font-size:10px;font-weight:700;letter-spacing:.11em;
+  text-transform:uppercase;color:var(--nvm);margin-bottom:6px}
+.prv-h{font-family:'Barlow Condensed',sans-serif;font-size:17px;
+  font-weight:700;color:var(--ink);margin-bottom:8px}
+.prv-p{font-size:14px;color:var(--mut);line-height:1.65}
+.prv-ul{font-size:14px;color:var(--mut);line-height:1.65;
+  padding-left:18px;margin-top:6px}
+.prv-ul li{margin-bottom:4px}
+.modal-footer{margin-top:32px;padding-top:20px;border-top:1px solid var(--br);
+  text-align:center}
+.modal-footer p{font-size:12px;color:var(--fnt);line-height:1.6;margin-bottom:4px}
+`;
+
+// ── DEBRIEFED CTA CARDS ───────────────────────────────────────────────
+const DEBRIEFED_TEXTURE = `url("data:image/svg+xml,%3Csvg width='60' height='60' viewBox='0 0 60 60' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23fbbf24' fill-opacity='0.05'%3E%3Cpath d='M36 34v-4h-2v4h-4v2h4v4h2v-4h4v-2h-4z'/%3E%3C/g%3E%3C/svg%3E")`;
+
+function DebriefedGapCard({ gap }) {
+  const [hov, setHov] = useState(false);
+  return (
+    <div style={{ background:"#1a2744", backgroundImage:DEBRIEFED_TEXTURE, borderRadius:16, padding:24, border:"1px solid rgba(255,255,255,0.06)", boxShadow:"0 2px 12px rgba(0,0,0,0.3)", fontFamily:"'Barlow',sans-serif", margin:"16px 0" }}>
+      <div style={{ fontFamily:"'Barlow Condensed'", fontWeight:700, fontSize:11, letterSpacing:2, color:"#d4a017", textTransform:"uppercase", marginBottom:8 }}>BUILT BY VETERANS</div>
+      <div style={{ fontFamily:"'Bebas Neue'", fontSize:30, color:"#fff", lineHeight:1.05, marginBottom:10 }}>Got a ${Math.round(gap).toLocaleString()}/mo gap to close?</div>
+      <div style={{ fontSize:15, color:"rgba(255,255,255,0.7)", lineHeight:1.55, marginBottom:20 }}>Debriefed translates your military experience into civilian career terms — helping you find roles that match your skills and close the gap.</div>
+      <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:20 }}>
+        {["Free to start","Resume translation","Job matching"].map(p=>(
+          <div key={p} style={{ background:"rgba(212,160,23,0.12)", border:"1px solid rgba(212,160,23,0.25)", borderRadius:20, padding:"4px 10px", fontSize:12, color:"#d4a017", fontFamily:"'Barlow Condensed'", fontWeight:600 }}>✓ {p}</div>
+        ))}
+      </div>
+      <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer"
+        onMouseEnter={()=>hov||setHov(true)} onMouseLeave={()=>setHov(false)}
+        style={{ display:"block", background:hov?"#f0c14b":"#d4a017", color:"#0a1628", borderRadius:12, padding:"13px 24px", fontFamily:"'Barlow Condensed'", fontWeight:700, fontSize:16, textAlign:"center", cursor:"pointer", transition:"all 0.2s ease", textDecoration:"none" }}>
+        Try Debriefed Free →
+      </a>
+      <div style={{ textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.3)", marginTop:10 }}>No credit card required</div>
+    </div>
+  );
+}
+
+function DebriefedGeneralCard() {
+  const [hov1, setHov1] = useState(false);
+  const [hov2, setHov2] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  if (dismissed) return null;
+  return (
+    <div style={{ background:"#1a2744", backgroundImage:DEBRIEFED_TEXTURE, borderRadius:16, padding:24, border:"1px solid rgba(255,255,255,0.06)", boxShadow:"0 2px 12px rgba(0,0,0,0.3)", fontFamily:"'Barlow',sans-serif", position:"relative", margin:"16px 0" }}>
+      <button onClick={()=>setDismissed(true)} style={{ position:"absolute", top:12, right:14, background:"none", border:"none", color:"rgba(255,255,255,0.25)", fontSize:20, cursor:"pointer", lineHeight:1, padding:4 }}>×</button>
+      <div style={{ fontFamily:"'Barlow Condensed'", fontWeight:700, fontSize:11, letterSpacing:2, color:"#d4a017", textTransform:"uppercase", marginBottom:8 }}>BUILT BY VETERANS</div>
+      <div style={{ fontFamily:"'Bebas Neue'", fontSize:28, color:"#fff", lineHeight:1.05, marginBottom:10 }}>Your service, translated.</div>
+      <div style={{ fontSize:14, color:"rgba(255,255,255,0.7)", lineHeight:1.55, marginBottom:20 }}>Transitioning soon? Debriefed helps you turn your MOS, rank, and years of service into a civilian career — free to start.</div>
+      <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer"
+        onMouseEnter={()=>setHov1(true)} onMouseLeave={()=>setHov1(false)}
+        style={{ display:"block", background:hov1?"#f0c14b":"#d4a017", color:"#0a1628", borderRadius:12, padding:"13px 24px", fontFamily:"'Barlow Condensed'", fontWeight:700, fontSize:15, textAlign:"center", cursor:"pointer", transition:"all 0.2s ease", textDecoration:"none" }}>
+        Try Debriefed Free →
+      </a>
+      <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer"
+        onMouseEnter={()=>setHov2(true)} onMouseLeave={()=>setHov2(false)}
+        style={{ display:"block", background:hov2?"#243a5f":"#1e3a5f", color:"#d3d3d3", borderRadius:12, padding:"12px 24px", fontFamily:"'Barlow Condensed'", fontWeight:600, fontSize:14, textAlign:"center", cursor:"pointer", transition:"all 0.2s ease", textDecoration:"none", marginTop:8 }}>
+        Learn more
+      </a>
+      <div style={{ textAlign:"center", fontSize:12, color:"rgba(255,255,255,0.3)", marginTop:10 }}>No credit card required</div>
+    </div>
+  );
+}
+
+// ── ATOMS ──────────────────────────────────────────────────────────────
+const C={green:"var(--gn)",red:"var(--rd)",navy:"var(--nvm)",gold:"var(--nvm)",ink:"var(--ink)"};
+
+function NF({label,value,onChange,min,max,step=1,pre,suf,hint}){
+  const dec=()=>{const n=value-step;onChange(min!=null?Math.max(min,n):n);};
+  const inc=()=>{const n=value+step;onChange(max!=null?Math.min(max,n):n);};
+  const btnS={flex:"0 0 48px",height:48,border:"1.5px solid var(--br)",background:"var(--bg)",
+    color:"var(--nvm)",fontSize:22,fontWeight:600,fontFamily:"Barlow,sans-serif",
+    cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
+    WebkitTapHighlightColor:"transparent"};
+  return(
+    <div className="field">
+      {label&&<label className="flbl">{label}</label>}
+      <div style={{display:"flex",gap:0}}>
+        <button type="button" onClick={dec} style={{...btnS,borderRadius:"10px 0 0 10px",borderRight:"none"}}
+          aria-label="Decrease">-</button>
+        <div className="iwrap" style={{flex:1,minWidth:0}}>
+          {pre&&<span className="ipre">{pre}</span>}
+          <input type="number" inputMode="decimal" value={value} min={min} max={max} step={step}
+            className={(pre?"pre ":"")+(suf?"suf":"")}
+            style={{borderRadius:0,textAlign:"center"}}
+            onChange={e=>onChange(Number(e.target.value))}/>
+          {suf&&<span className="isuf">{suf}</span>}
+        </div>
+        <button type="button" onClick={inc} style={{...btnS,borderRadius:"0 10px 10px 0",borderLeft:"none"}}
+          aria-label="Increase">+</button>
+      </div>
+      {hint&&<div className="fhint">{hint}</div>}
+    </div>
+  );
+}
+
+function SF({label,value,onChange,options,hint}){
+  return(
+    <div className="field">
+      {label&&<label className="flbl">{label}</label>}
+      <select value={value} onChange={e=>onChange(e.target.value)}
+        style={{fontSize:16,minHeight:48}}>
+        {options.map(o=>{const v=typeof o==="object"?o.v:o,l=typeof o==="object"?o.l:o;return <option key={v} value={v}>{l}</option>;})}
+      </select>
+      {hint&&<div className="fhint">{hint}</div>}
+    </div>
+  );
+}
+
+function TG({label,value,onChange,options,hint}){
+  return(
+    <div className="field">
+      {label&&<label className="flbl">{label}</label>}
+      <div className="tg" style={{display:"grid",gridTemplateColumns:`repeat(${Math.min(options.length,3)},1fr)`,gap:6}}>
+        {options.map(o=>{const v=typeof o==="object"?o.v:o,l=typeof o==="object"?o.l:o;
+          return <button key={v} className={"tb"+(value===v?" on":"")}
+            style={{width:"100%",fontSize:14,padding:"12px 8px"}}
+            onClick={()=>onChange(v)}>{l}</button>;
+        })}
+      </div>
+      {hint&&<div className="fhint">{hint}</div>}
+    </div>
+  );
+}
+
+function BStat({label,value,sub,color}){
+  return(
+    <div>
+      <div className="bsl">{label}</div>
+      <div className="bsv" style={{color:C[color]||C.ink}}>{value}</div>
+      {sub&&<div className="bss">{sub}</div>}
+    </div>
+  );
+}
+
+function MT({label,value,sub,color}){
+  return(
+    <div className="mt">
+      <div className="mtl">{label}</div>
+      <div className="mtv" style={{color:C[color]||C.ink}}>{value}</div>
+      {sub&&<div className="mts">{sub}</div>}
+    </div>
+  );
+}
+
+function DR({label,value,sub,color}){
+  return(
+    <div className="dr">
+      <div><div className="drl">{label}</div>{sub&&<div className="drs">{sub}</div>}</div>
+      <div className="drv" style={{color:C[color]||C.ink}}>{value}</div>
+    </div>
+  );
+}
+
+function PBar({value,max,color="var(--nv)"}){
+  return <div className="pb"><div className="pbf" style={{width:`${Math.min(100,(value/max)*100)}%`,background:color}}/></div>;
+}
+
+// ── COLLAPSIBLE DETAIL TOGGLE ──────────────────────────────────────────
+function Reveal({label,children}){
+  const [open,setOpen]=useState(false);
+  return(
+    <div style={{marginTop:12}}>
+      <button type="button" onClick={()=>setOpen(!open)}
+        style={{display:"flex",alignItems:"center",gap:8,background:"none",border:"none",
+          cursor:"pointer",fontFamily:"Barlow,sans-serif",fontSize:13,fontWeight:600,
+          color:"var(--nvm)",padding:"8px 0",WebkitTapHighlightColor:"transparent"}}>
+        <span style={{transform:open?"rotate(90deg)":"rotate(0)",transition:"transform .15s",fontSize:11}}>&#9654;</span>
+        {label}
+      </button>
+      {open&&<div style={{animation:"fu .18s ease-out both"}}>{children}</div>}
+    </div>
+  );
+}
+
+// ── TAB 1: DASHBOARD (pure output — home screen) ──────────────────────
+function UnconfiguredBanner({go}){
+  return(
+    <div onClick={()=>go("myinfo")} style={{background:"var(--gnb)",border:"1px solid var(--gn)",borderRadius:10,padding:"12px 16px",marginBottom:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+      <span style={{fontSize:13,color:"var(--ink)"}}>Using default values — <strong>tap My Info</strong> to enter your numbers.</span>
+      <span style={{fontSize:16,color:"var(--gn)"}}>&#8594;</span>
+    </div>
+  );
+}
+
+function DashboardTab({state,isConfigured,go}){
+  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,sbp,sbpCoverage,
+         selectedState,desiredIncome,income,filingStatus,medDodPct,tdrl,reservePoints,currentAge,payStartAge,
+         giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear}=state;
+  const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
+  const key=dk(vaDeps);
+  const isReserveEligibleNow=separationType==="reserve"&&currentAge>=payStartAge;
+  const g=pensionBySepType(separationType,retType,yos,h3,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
+  const sbpC=sbp?g*(sbpCoverage/100)*0.065:0;
+  const netP=g-sbpC;
+  const vaM=(VA[vaRating]?.[key]||VA[vaRating]?.s)||0;
+  const si=STATES[selectedState]||{ok:true};
+  const taxableAnnual=netP*12+(income||0);
+  const {monthlyTax:fedTax,effectiveRate:fedEffRate}=calcFederalTax(taxableAnnual,filingStatus||"single");
+  const stTax=si.ok?0:netP*((si.rate||0)/100);
+  const atP=netP-fedTax-stTax;
+  const mhaBase=giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[giSchoolCity]||0);
+  const mhaMo=giUsing?Math.round(mhaBase*(giEligPct/100)*giEnroll):0;
+  const mhaBooksMo=giUsing?Math.round((1000*(giEligPct/100))/12):0;
+  const otherMo=Math.round((income||0)/12);
+  const totalBase=atP+vaM+otherMo;
+  const totalSchool=totalBase+mhaMo;
+  const healthPrem=(()=>{
+    if(separationType==="veteran") return 0;
+    if(separationType==="reserve"&&!isReserveEligibleNow){
+      const rr=state.reserveHealthType==="trs"?TRICARE_RS:state.reserveHealthType==="trr"?TRICARE_TRR:null;
+      return rr?(state.tricareFamSize==="family"?rr.family:rr.individual):0;
+    }
+    const tp=TRICARE_PLANS[state.tricareplan]||TRICARE_PLANS.prime;
+    const gr=tp[`group${state.tricareGroup||"A"}`]||tp.groupA;
+    const mp=state.tricareplan==="tfl"?(state.tricareFamSize==="family"?370:185):0;
+    return (gr[state.tricareFamSize]||gr.self)+mp;
+  })();
+  const insuranceMo=Math.round(healthPrem+(state.useVgli?vgliMonthly(state.vgliCoverage,state.vgliAge):0)+(state.otherLifePremium||0));
+  const totalAfterInsRaw=totalSchool-insuranceMo;
+  const deductionsExceedIncome=totalAfterInsRaw<0&&(insuranceMo+sbpC)>0;
+  const totalAfterIns=Math.max(0,totalAfterInsRaw);
+  const gap=desiredIncome-totalAfterIns;
+  const isAnyRetiree=separationType==="active"||(separationType==="medical"&&yos>=20)||(separationType==="reserve"&&isReserveEligibleNow);
+  const elig=isAnyRetiree&&vaRating>=50;
+  const p=separationType==="active"?pct(retType,yos):separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType).mult:0;
+  const pensionLabel=separationType==="active"?"Pension / mo":separationType==="medical"?"Med. Ret. / mo":separationType==="reserve"?(isReserveEligibleNow?"Reserve Pay / mo":`Reserve (Age ${payStartAge})`):"No Pension";
+
+  const [showFullDisclaimer,setShowFullDisclaimer]=useState(false);
+
+  return(
+    <div className="fu">
+      {!isConfigured&&<UnconfiguredBanner go={go}/>}
+      <div className="sh2"><h2>Your Financial Dashboard</h2>
+        <p>{separationType==="veteran"?"Veteran":separationType==="medical"?"Medical Retiree":separationType==="reserve"?"Reserve/Guard":"Active Duty"} / {retType} / {yos} YOS / {selectedState}</p>
+      </div>
+
+      {/* Hero stat cards — 2 wide */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+        <div className="card" style={{textAlign:"center",padding:"16px 10px"}}>
+          <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"var(--fnt)",marginBottom:6}}>{pensionLabel}</div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:600,color:separationType==="veteran"?"var(--mut)":"var(--nv)",lineHeight:1}}>{separationType==="veteran"?"\u2014":fmt(atP)}</div>
+          <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>{separationType==="veteran"?"N/A":separationType==="reserve"&&!isReserveEligibleNow?"projected":"after tax"}</div>
+        </div>
+        <div className="card" style={{textAlign:"center",padding:"16px 10px"}}>
+          <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"var(--fnt)",marginBottom:6}}>VA Comp / mo</div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:600,color:"var(--gn)",lineHeight:1}}>{fmt(vaM)}</div>
+          <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>tax-free</div>
+        </div>
+      </div>
+
+      {/* Grand total card */}
+      <div className="card" style={{marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
+          <div>
+            <div className="bsl">Grand Total / mo</div>
+            <div className="bsv" style={{color:gap<=0?"var(--gn)":"var(--nv)"}}>{fmt(totalSchool)}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"var(--fnt)"}}>Annual</div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:17,fontWeight:600,color:"var(--nv)"}}>{fmt(totalSchool*12)}</div>
+          </div>
+        </div>
+        <DR label="Pension (net)" value={fmt(atP)} color="navy"/>
+        <DR label="VA Compensation" value={fmt(vaM)} color="green" sub="Tax-free"/>
+        {mhaMo>0&&<DR label="GI Bill MHA" value={fmt(mhaMo)} color="green" sub={`${giMonthsPerYear} mo/yr · tax-free`}/>}
+        {otherMo>0&&<DR label="Other Income" value={fmt(otherMo)} sub={fmt(income)+"/yr"}/>}
+        {insuranceMo>0&&<DR label="Insurance Premiums" value={`-${fmt(insuranceMo)}`} color="red" sub="TRICARE + VGLI + other"/>}
+        {deductionsExceedIncome&&<div className="ib ib-rd" style={{marginTop:10,fontSize:12}}>Estimated deductions exceed income. Review insurance and SBP selections.</div>}
+      </div>
+
+      {/* Gap / surplus */}
+      <div className="card" style={{marginBottom:14}}>
+        <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
+          <span>Benefits vs. target ({fmt(desiredIncome)}/mo)</span>
+          <span>{Math.min(100,(totalAfterIns/desiredIncome)*100).toFixed(0)}%</span>
+        </div>
+        <PBar value={totalAfterIns} max={desiredIncome} color={gap<=0?"var(--gn)":totalAfterIns/desiredIncome>.7?"var(--gd)":"var(--nv)"}/>
+        <div style={{marginTop:10}}>
+          {gap<=0?(
+            <div className="ib ib-gn"><strong>Fully covered.</strong> Surplus of {fmt(Math.abs(gap))}/mo ({fmt(Math.abs(gap)*12)}/yr).</div>
+          ):(
+            <div className="ib ib-gd"><strong>Gap: {fmt(gap)}/mo.</strong> Need ~{fmt((gap/0.75)*12)}/yr gross salary to close.</div>
+          )}
+        </div>
+      </div>
+
+      {/* Status badges */}
+      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+        {elig&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gnb)",color:"var(--gn)",fontSize:12,fontWeight:600}}>CRDP Eligible</span>}
+        {separationType==="veteran"&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gdb)",color:"var(--gd)",fontSize:12,fontWeight:600}}>Veteran (no pension)</span>}
+        <span style={{padding:"6px 12px",borderRadius:20,background:si.ok?"var(--gnb)":"var(--rdb)",color:si.ok?"var(--gn)":"var(--rd)",fontSize:12,fontWeight:600}}>{selectedState}: {si.ok?"Tax-Exempt":"Taxed"}</span>
+        {mhaMo>0&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gnb)",color:"var(--gn)",fontSize:12,fontWeight:600}}>GI Bill Active</span>}
+      </div>
+
+      {/* Pension quick breakdown */}
+      <div className="card" style={{marginBottom:14}}>
+        <div className="cttl">{separationType==="veteran"?"Income Summary":"Pension Breakdown"}</div>
+        {separationType==="veteran"?(
+          <div className="ib ib-gd" style={{fontSize:13}}>No DoD retirement pay. Your income comes from VA compensation, GI Bill, and civilian earnings.</div>
+        ):(
+          <>
+            <DR label="Separation Type" value={separationType==="active"?"Active Duty":separationType==="medical"?"Medical (Ch. 61)":"Reserve/Guard"}/>
+            <DR label="Retirement System" value={retType}/>
+            {separationType==="reserve"?(
+              <DR label="Equiv. YOS (points)" value={`${(reservePoints/360).toFixed(1)} yrs`} sub={`${reservePoints} total points`}/>
+            ):(
+              <DR label="Years of Service" value={`${yos} years`}/>
+            )}
+            {separationType==="medical"&&<DR label="DoD Disability %" value={`${medDodPct}%${tdrl?" (TDRL)":""}`}/>}
+            <DR label="Pension Multiplier" value={`${p.toFixed(1)}%`} sub={`of High-3 ${fmt(h3)}/mo`}/>
+            <DR label="Gross Monthly" value={fmt(g)}/>
+            {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}/mo`} color="red"/>}
+            <DR label="Federal Tax (est.)" value={`-${fmt(fedTax)}/mo`} color="red" sub={`${(fedEffRate*100).toFixed(1)}% effective · ${(filingStatus||"single")==="mfj"?"MFJ":"Single"}`}/>
+            <DR label={`State Tax — ${selectedState}`} value={si.ok?"Exempt":`-${fmt(stTax)}/mo`} color={si.ok?"green":"red"}/>
+            <DR label="Net After-Tax Pension" value={fmt(atP)+"/mo"} color="navy"/>
+            {separationType==="reserve"&&!isReserveEligibleNow&&(
+              <div className="ib ib-gd" style={{marginTop:10,fontSize:13}}>Reserve pay starts at age {payStartAge}. Currently age {currentAge}.</div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* Debriefed promos */}
+      {gap>0&&<DebriefedGapCard gap={gap}/>}
+      <DebriefedGeneralCard/>
+
+      {/* ── SHORT DISCLAIMER ── */}
+      <div style={{fontSize:11,color:"var(--mut)",lineHeight:1.6,marginTop:20,padding:"12px 0",borderTop:"1px solid var(--sub)"}}>
+        Estimates only. Not affiliated with DoD, DFAS, VA, or any government agency. Verify all figures at dfas.mil, va.gov, and tricare.mil before making financial decisions.
+      </div>
+
+      {/* ── FULL DISCLAIMER ── */}
+      <div style={{textAlign:"center",marginBottom:8}}>
+        <button onClick={()=>setShowFullDisclaimer(!showFullDisclaimer)}
+          style={{background:"none",border:"none",color:"var(--mut)",fontSize:12,cursor:"pointer",textDecoration:"underline",padding:4}}>
+          {showFullDisclaimer?"Hide":"About & Disclaimer"}
+        </button>
+      </div>
+      {/* ── FOOTER CREDIT ── */}
+      <div style={{textAlign:"center",marginTop:16,marginBottom:8}}>
+        <span style={{fontSize:11,color:"var(--mut)"}}>MilCalc · By the maker of Debriefed · <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer" style={{color:"var(--mut)",textDecoration:"none"}}>getdebriefed.co</a></span>
+      </div>
+
+      {showFullDisclaimer&&(
+        <div className="card" style={{fontSize:12,color:"var(--fnt)",lineHeight:1.7}}>
+          <div style={{marginBottom:14}}><strong style={{color:"var(--ink)"}}>Not Government Affiliated</strong><br/>
+            This app is not affiliated with, endorsed by, or sponsored by the Department of Defense, the Defense Finance and Accounting Service (DFAS), the Department of Veterans Affairs (VA), the Defense Health Agency (TRICARE), or any other federal or state government agency.</div>
+          <div style={{marginBottom:14}}><strong style={{color:"var(--ink)"}}>Estimates Only</strong><br/>
+            All calculations are estimates based on publicly available 2026 rate tables and standard formulas. Your actual pension, VA compensation, TRICARE costs, and tax liability may differ based on your specific service history, discharge status, legal rulings, and individual circumstances.</div>
+          <div style={{marginBottom:14}}><strong style={{color:"var(--ink)"}}>Data Sources</strong><br/>
+            Pay tables sourced from DFAS.mil. VA compensation rates from VA.gov. TRICARE premiums from TRICARE.mil. BAH/MHA rates from DTMO. State tax information reflects general guidance and may not account for your specific situation. Rates are updated periodically but may not reflect the most recent changes.</div>
+          <div style={{marginBottom:14}}><strong style={{color:"var(--ink)"}}>Not Financial or Legal Advice</strong><br/>
+            Nothing in this app constitutes financial, legal, tax, or benefits advice. Consult a VA-accredited claims agent, military retirement financial counselor, or licensed tax professional before making decisions about your benefits.</div>
+          <div style={{marginBottom:14}}><strong style={{color:"var(--ink)"}}>Healthcare Coverage</strong><br/>
+            TRICARE plan costs and eligibility shown are estimates. Actual enrollment fees, copays, and coverage depend on your specific enrollment status, location, and plan. Verify current costs at tricare.mil or by calling 1-800-444-5445.</div>
+          <div><strong style={{color:"var(--ink)"}}>VA Disability</strong><br/>
+            Combined disability ratings and compensation amounts are calculated using the VA's standard whole-person method but are estimates only. Your actual rating and payment are determined solely by the Department of Veterans Affairs.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── TAB 2: BENEFITS (output-only detail views) ───────────────────────
+function BenefitsTab({state,isConfigured,go}){
+  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaRatings,sbp,sbpCoverage,
+         selectedState,medDodPct,tdrl,reservePoints,currentAge,payStartAge,
+         giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear}=state;
+  const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
+  const derivedPay=usePayGrade?lookupPay(payGrade,yos):null;
+  const key=dk(vaDeps);
+  const isReserveEligibleNow=separationType==="reserve"&&currentAge>=payStartAge;
+  const g=pensionBySepType(separationType,retType,yos,h3,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
+  const p=separationType==="active"?pct(retType,yos):separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType).mult:separationType==="reserve"?reservePension(reservePoints,h3,retType).multPct*(reservePoints/360):0;
+  const sbpC=sbp?g*(sbpCoverage/100)*0.065:0;
+  const net=g-sbpC;
+  const vaM=(VA[vaRating]?.[key]||VA[vaRating]?.s)||0;
+  const comb=combinedVA(vaRatings);
+  const combMo=(VA[comb]?.[key]||VA[comb]?.s)||0;
+  const isAnyRetiree=separationType==="active"||(separationType==="medical"&&yos>=20)||(separationType==="reserve"&&isReserveEligibleNow);
+  const elig=isAnyRetiree&&vaRating>=50;
+  const [crdpOpen,setCrdpOpen]=useState(false);
+  const bTaxableAnn=net*12+(state.income||0);
+  const {effectiveRate:bEffRate}=calcFederalTax(bTaxableAnn,state.filingStatus||"single");
+  const bAfterTaxMo=net*(1-bEffRate);
+
+  // GI Bill
+  const rate26=MHA_CITIES[giSchoolCity]||0;
+  const baseRate=giOnline?GI_BILL_ONLINE_MHA:rate26;
+  const mhaMonthly=giOnline?baseRate*(giEligPct/100):baseRate*(giEligPct/100)*giEnroll;
+  const bookStipend=1000*(giEligPct/100);
+  const annualMHA=mhaMonthly*giMonthsPerYear;
+
+  // Insurance — branches by separation type
+  const plan=TRICARE_PLANS[state.tricareplan]||TRICARE_PLANS.prime;
+  const grpRates=plan[`group${state.tricareGroup||"A"}`]||plan.groupA;
+  const stdTricarePremium=grpRates[state.tricareFamSize]||grpRates.self;
+  const medicarePremium=state.tricareplan==="tfl"?(state.tricareFamSize==="family"?plan.medicare_b*2:plan.medicare_b):0;
+  const tricarePremium=(()=>{
+    if(separationType==="veteran") return 0;
+    if(separationType==="reserve"&&!isReserveEligibleNow){
+      const rr=state.reserveHealthType==="trs"?TRICARE_RS:state.reserveHealthType==="trr"?TRICARE_TRR:null;
+      return rr?(state.tricareFamSize==="family"?rr.family:rr.individual):0;
+    }
+    return stdTricarePremium+medicarePremium;
+  })();
+  const vgliMo=state.useVgli?vgliMonthly(state.vgliCoverage,state.vgliAge):0;
+  const totalInsurance=tricarePremium+vgliMo+(state.otherLifePremium||0);
+  const vaPG=getVAPriorityGroup(vaRating);
+  const vaPGInfo=VA_PRIORITY_GROUPS[vaPG-1];
+
+  return(
+    <div className="fu">
+      {!isConfigured&&<UnconfiguredBanner go={go}/>}
+      <div className="sh2"><h2>Your Benefits</h2><p>Detailed breakdown of each income source and deduction.</p></div>
+
+      {/* ── PENSION DETAIL ── */}
+      <div className="card">
+        <div className="cttl">{separationType==="veteran"?"Service Status":separationType==="medical"?"Medical Retirement":"Military Pension"}</div>
+        {separationType==="veteran"?(
+          <div>
+            <div className="ib ib-gd" style={{fontSize:13,marginBottom:12}}>No DoD retirement pay. Veterans who separated before qualifying for retirement receive no pension.</div>
+            <div className="ib ib-nv" style={{fontSize:13}}>Still eligible for: VA disability compensation, GI Bill benefits, VA Healthcare, and all planning tools in this app.</div>
+          </div>
+        ):separationType==="medical"?(
+          <div>
+            <div style={{marginBottom:16}}>
+              <BStat label="Gross Monthly Med. Retirement" value={fmt(g)} color="navy"
+                sub={`Multiplier: ${medicalPension(yos,h3,medDodPct,tdrl,retType).mult.toFixed(1)}% of High-3${tdrl?" (TDRL — min 50%)":""}`}/>
+            </div>
+            <div style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
+                <span>YOS leg: {yos} yrs × {retType==="BRS"?"2.0":"2.5"}% = {medicalPension(yos,h3,medDodPct,tdrl,retType).yosMult.toFixed(1)}%</span>
+                <span>DoD: {medicalPension(yos,h3,medDodPct,tdrl,retType).disabMult}%</span>
+              </div>
+              <PBar value={medicalPension(yos,h3,medDodPct,tdrl,retType).mult} max={75} color="var(--nv)"/>
+            </div>
+            <div className="ib ib-nv" style={{fontSize:12,marginBottom:12}}>
+              Formula: max(DoD disability {medDodPct}%, YOS {yos} × {retType==="BRS"?"2.0":"2.5"}%) = {medicalPension(yos,h3,medDodPct,tdrl,retType).mult.toFixed(1)}% × High-3, capped at 75%.
+            </div>
+            <hr/>
+            <DR label="Gross Pension" value={fmt(g)}/>
+            {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}`} color="red" sub="6.5% of covered base amount"/>}
+            <DR label="Net Monthly" value={fmt(net)} color="navy"/>
+            <DR label="Net Annual" value={fmt(net*12)} color="navy"/>
+            <hr/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <MT label="Est. After-Tax /mo" value={fmt(bAfterTaxMo)} color="green" sub={`${(bEffRate*100).toFixed(1)}% effective rate`}/>
+              <MT label="Annual After-Tax" value={fmt(bAfterTaxMo*12)} color="green" sub="Not FICA-taxed"/>
+            </div>
+          </div>
+        ):separationType==="reserve"?(
+          <div>
+            <div style={{marginBottom:16}}>
+              <BStat label={isReserveEligibleNow?"Gross Monthly Reserve Pay":"Projected Reserve Pay"} value={fmt(reservePension(reservePoints,h3,retType).pay)} color={isReserveEligibleNow?"navy":"gold"}
+                sub={`${reservePoints} pts ÷ 360 = ${(reservePoints/360).toFixed(1)} equiv. yrs × ${retType==="BRS"?"2.0":"2.5"}% × High-3`}/>
+            </div>
+            {!isReserveEligibleNow&&(
+              <div className="ib ib-gd" style={{fontSize:13,marginBottom:12}}>
+                Reserve pay starts at age {payStartAge}. You are currently {currentAge}. {payStartAge-currentAge} years until pay begins.
+              </div>
+            )}
+            <div className="ib ib-nv" style={{fontSize:12,marginBottom:12}}>
+              High-3 is calculated from the 36 months before pay starts (age {payStartAge}), using pay rates at that time — not when you stopped drilling.
+            </div>
+            <hr/>
+            <DR label="Total Points" value={reservePoints.toLocaleString()}/>
+            <DR label="Equiv. YOS" value={`${(reservePoints/360).toFixed(1)} years`}/>
+            <DR label="Gross Monthly" value={fmt(reservePension(reservePoints,h3,retType).pay)}/>
+            {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}`} color="red"/>}
+            <DR label="Net Monthly" value={fmt(net)} color="navy"/>
+          </div>
+        ):(
+          <div>
+            <div style={{marginBottom:16}}>
+              <BStat label="Gross Monthly Pension" value={fmt(g)} color="navy"
+                sub={`${yos} yrs x ${retType==="BRS"?"2.0":retType==="REDUX"?"varies":"2.5"}% = ${p.toFixed(1)}% of High-3`}/>
+            </div>
+            <div style={{marginBottom:14}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
+                <span>Multiplier: {p.toFixed(1)}%</span><span>Max: {retType==="REDUX"?"75":"100"}%</span>
+              </div>
+              <PBar value={p} max={retType==="REDUX"?75:100} color={p>=50?"var(--gn)":"var(--nv)"}/>
+            </div>
+            <hr/>
+            <DR label="Gross Pension" value={fmt(g)}/>
+            {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}`} color="red" sub="6.5% of covered base amount"/>}
+            <DR label="Net Monthly" value={fmt(net)} color="navy"/>
+            <DR label="Net Annual" value={fmt(net*12)} color="navy"/>
+            <hr/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <MT label="Est. After-Tax /mo" value={fmt(bAfterTaxMo)} color="green" sub={`${(bEffRate*100).toFixed(1)}% effective rate`}/>
+              <MT label="Annual After-Tax" value={fmt(bAfterTaxMo*12)} color="green" sub="Not FICA-taxed"/>
+            </div>
+            {usePayGrade&&derivedPay&&(
+              <div className="ib ib-nv" style={{marginTop:12,fontSize:12}}>
+                <strong>2026 DFAS rate:</strong> {GRADE_LABELS[payGrade]} at {yos} yrs = <strong>{fmt(derivedPay)}/mo</strong>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Collapsed reference: DFAS pay table */}
+        {separationType==="active"&&usePayGrade&&(
+          <Reveal label="Show DFAS Pay Table">
+            <table className="dt">
+              <thead><tr><th>YOS</th><th>Monthly Pay</th><th>High-3 Pension</th></tr></thead>
+              <tbody>
+                {[20,22,24,26,28,30].map(y=>{
+                  const pay=lookupPay(payGrade,y);
+                  if(!pay) return null;
+                  const pen=pension(retType,y,pay);
+                  return(
+                    <tr key={y} className={y===yos?"hi":""}>
+                      <td>{y} yrs</td><td>{fmt(pay)}</td>
+                      <td style={{color:"var(--nv)",fontWeight:600}}>{fmt(pen)}/mo</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <p style={{fontSize:11,color:"var(--fnt)",marginTop:8}}>Source: DFAS.mil — Effective January 1, 2026 (3.8% raise).</p>
+          </Reveal>
+        )}
+
+        {retType==="REDUX"&&(
+          <div className="ib ib-gd" style={{marginTop:12,fontSize:13}}>
+            <strong>REDUX:</strong> $30k CSB at 15 yrs. COLA reduced 1%/yr until 62. Accrual beyond 20 yrs: 3.5%/yr, capped at 75%.
+          </div>
+        )}
+      </div>
+
+      {/* ── VA DISABILITY DETAIL ── */}
+      <div className="card">
+        <div className="cttl">VA Disability Compensation</div>
+        <div style={{marginBottom:16}}>
+          <BStat label="Monthly VA Compensation" value={fmt(vaM)} color="green"
+            sub={`${vaRating}% rating · ${vaDeps} · 100% tax-free`}/>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
+          <MT label="Annual" value={fmt(vaM*12)} color="green"/>
+          <MT label="Tax-Equiv. Value" value={`${fmt(bEffRate<1?vaM/(1-bEffRate):vaM)}/mo`} color="navy" sub={`At ${(bEffRate*100).toFixed(1)}% effective rate`}/>
+        </div>
+
+        {vaRatings.length>0&&<>
+          <hr/>
+          <div className="cttl">Combined Rating (VA Math)</div>
+          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>
+            {vaRatings.map((r,i)=><span key={i} className="chip g">{r}%</span>)}
+          </div>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <MT label="Combined Rating" value={`${comb}%`} color="navy"/>
+            <MT label="Monthly Comp." value={fmt(combMo)} color="green"/>
+          </div>
+        </>}
+
+        {/* Collapsed reference: VA rate table */}
+        <Reveal label="Show 2026 VA Rate Table">
+          <table className="dt">
+            <thead><tr><th>Rating</th><th>Single</th><th>w/ Spouse</th></tr></thead>
+            <tbody>
+              {[10,20,30,40,50,60,70,80,90,100].map(r=>(
+                <tr key={r} className={r===vaRating?"hi":""}>
+                  <td>{r}%</td><td>{fmt(VA[r].s)}</td><td>{VA[r].sp?fmt(VA[r].sp):"---"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </Reveal>
+      </div>
+
+      {/* ── CRDP / CRSC (expandable) ── */}
+      <div className="card">
+        <button type="button" onClick={()=>setCrdpOpen(!crdpOpen)}
+          style={{display:"flex",alignItems:"center",justifyContent:"space-between",width:"100%",
+            background:"none",border:"none",cursor:"pointer",padding:0,fontFamily:"Barlow,sans-serif"}}>
+          <div className="cttl" style={{marginBottom:0}}>CRDP / CRSC — Concurrent Receipt</div>
+          <span style={{fontSize:18,color:"var(--mut)",transition:"transform .15s",
+            transform:crdpOpen?"rotate(180deg)":"rotate(0)"}}>&#9662;</span>
+        </button>
+        <div style={{fontSize:12,color:"var(--mut)",marginTop:4,marginBottom:8}}>
+          For retirees with 50%+ VA rating. Active duty retirees need 20+ years. Medical (Chapter 61) retirees also need 20+ years. Reserve retirees must be actively receiving retirement pay.
+        </div>
+        <div style={{marginTop:8}}>
+          <div className={"ib "+(elig?"ib-gn":"ib-gd")} style={{fontSize:13}}>
+            {elig
+              ?`✓ You qualify — ${separationType==="medical"?"medical retiree (20+ yrs)":separationType==="reserve"?"Reserve/Guard drawing pay":"active duty retiree"} with ${vaRating}% VA rating.`
+              :separationType==="veteran"
+                ?`Veterans without retirement pay are not eligible for CRDP. See CRSC below if you have combat-related injuries.`
+                :separationType==="medical"&&yos<20
+                  ?`Chapter 61 medical retirees with fewer than 20 years of service do not qualify for CRDP. You may qualify for CRSC if your disability is combat-related. Current YOS: ${yos}.`
+                  :separationType==="reserve"&&!isReserveEligibleNow
+                    ?`CRDP eligibility begins when Reserve retirement pay starts at age ${payStartAge}.`
+                    :`To qualify: must be a retiree with 50%+ VA rating. Current rating: ${vaRating}%.`}
+          </div>
+        </div>
+        {crdpOpen&&(
+          <div style={{marginTop:12,animation:"fu .18s ease-out both"}}>
+            <DR label="Pension (net of SBP)" value={fmt(g-sbpC)}/>
+            <DR label="VA Compensation" value={fmt(vaM)} color="green" sub="Tax-free"/>
+            <hr/>
+            <BStat label="Combined Monthly" value={fmt(g-sbpC+vaM)} color={elig?"green":"navy"}
+              sub={fmt((g-sbpC+vaM)*12)+"/year"}/>
+            {elig&&(
+              <div className="ib ib-gn" style={{marginTop:12,fontSize:13}}>
+                <strong>CRDP adds {fmt(vaM)}/mo</strong> ({fmt(vaM*12)}/yr) that would have been offset under pre-2004 rules. Over 20 years: <strong>{fmt(vaM*12*20)}</strong>.
+              </div>
+            )}
+            <div style={{marginTop:12,fontSize:13,color:"var(--mut)",lineHeight:1.6}}>
+              <strong style={{color:"var(--ink)"}}>CRSC</strong> is for combat/training injuries at any rating. Applied through your branch (HRC, AFPC, etc). You cannot receive both CRDP and CRSC — DFAS pays whichever is higher.
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ── GI BILL MHA (only if giUsing) ── */}
+      {giUsing&&(
+        <div className="card">
+          <div className="cttl">GI Bill MHA</div>
+          <div style={{marginBottom:16}}>
+            <BStat label="Monthly MHA (2026 rates)" value={fmt(mhaMonthly)} color="green"
+              sub={giOnline
+                ?`Online flat rate x ${giEligPct}% eligibility`
+                :`${fmt(baseRate)} base x ${giEligPct}% elig. x ${(giEnroll*100).toFixed(0)}% enrollment`}/>
+          </div>
+          <DR label="Monthly MHA" value={fmt(mhaMonthly)} color="green" sub="Tax-free · school months only"/>
+          <DR label="Books Stipend" value={fmt(bookStipend)+"/yr"} color="green" sub="Paid at term start"/>
+          <DR label={`Annual MHA (${giMonthsPerYear} mo)`} value={fmt(annualMHA)} color="green"/>
+          <DR label="Annual Total (MHA + Books)" value={fmt(annualMHA+bookStipend)} color="green"/>
+          <hr/>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <MT label="Lifetime (4 yr)" value={fmt((annualMHA+bookStipend)*4)} color="navy"/>
+            <MT label="Monthly avg" value={fmt((annualMHA+bookStipend)/12)} color="green" sub="incl. books"/>
+          </div>
+        </div>
+      )}
+
+      {/* ── INSURANCE / HEALTHCARE BREAKDOWN ── */}
+      <div className="card">
+        <div className="cttl">{separationType==="veteran"?"VA Healthcare":"Insurance Premiums"}</div>
+        {separationType==="veteran"?(
+          <div>
+            <div className="ib ib-nv" style={{fontSize:13,marginBottom:12}}>
+              <strong>VA Priority Group {vaPG}</strong>: {vaPGInfo.who}
+            </div>
+            <DR label="Healthcare Copay" value={vaPGInfo.free?"$0":"Varies"} color={vaPGInfo.free?"green":"navy"} sub={vaPGInfo.copay}/>
+            <DR label="Healthcare Premium" value="$0" color="green" sub="VA Healthcare has no premium"/>
+            <Reveal label="Show All Priority Groups">
+              <table className="dt">
+                <thead><tr><th>PG</th><th>Who Qualifies</th><th>Copay</th></tr></thead>
+                <tbody>{VA_PRIORITY_GROUPS.map(pg=>(
+                  <tr key={pg.group} className={pg.group===vaPG?"hi":""}>
+                    <td style={{color:"var(--nv)",fontWeight:600}}>{pg.group}</td>
+                    <td style={{fontSize:11,fontFamily:"Barlow,sans-serif",color:"var(--mut)"}}>{pg.who}</td>
+                    <td style={{fontSize:11,fontFamily:"Barlow,sans-serif"}}>{pg.copay}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </Reveal>
+          </div>
+        ):separationType==="reserve"&&!isReserveEligibleNow?(
+          <div>
+            <DR label="Health Plan" value={state.reserveHealthType==="trs"?"TRICARE Reserve Select":state.reserveHealthType==="trr"?"TRICARE Retired Reserve":"Civilian/Marketplace"} color="navy"
+              sub={state.reserveHealthType==="trs"?TRICARE_RS.note:state.reserveHealthType==="trr"?TRICARE_TRR.note:"ACA marketplace or employer plan"}/>
+            <DR label="Monthly Premium" value={fmt(tricarePremium)} color="navy"
+              sub={state.tricareFamSize==="family"?"Family":"Individual"}/>
+            {state.reserveHealthType==="trr"&&(
+              <div className="ib ib-gd" style={{marginTop:10,fontSize:12}}>TRR premiums are significant. Compare with healthcare.gov marketplace plans in your area.</div>
+            )}
+          </div>
+        ):(
+          <div>
+            <DR label="TRICARE Premium" value={fmt(stdTricarePremium)} color="navy"
+              sub={plan.label+(state.tricareFamSize==="family"?" · Family":" · Self")}/>
+            {state.tricareplan==="tfl"&&(
+              <DR label="Medicare Part B" value={fmt(medicarePremium)} color="navy"
+                sub={state.tricareFamSize==="family"?"2 enrollees x $185/mo":"Standard 2026 premium"}/>
+            )}
+          </div>
+        )}
+        {state.useVgli&&<DR label="VGLI Premium" value={fmt(Math.round(vgliMo))} color="navy"
+          sub={`$${state.vgliCoverage.toLocaleString()} coverage · Age ${state.vgliAge}`}/>}
+        {state.otherLifePremium>0&&<DR label="Other Life Insurance" value={fmt(state.otherLifePremium)} color="navy"/>}
+        <hr/>
+        <BStat label="Total Monthly Premiums" value={fmt(Math.round(totalInsurance))} color="red"
+          sub={`$${Math.round(totalInsurance*12).toLocaleString()}/year`}/>
+
+        {state.useVgli&&(
+          <Reveal label="Show VGLI Rate Schedule">
+            <table className="dt">
+              <thead><tr><th>Age</th><th>Rate/$1k</th><th>Your cost/mo</th></tr></thead>
+              <tbody>
+                {[[29,"Under 29"],[34,"30-34"],[39,"35-39"],[44,"40-44"],[49,"45-49"],
+                  [54,"50-54"],[59,"55-59"],[64,"60-64"],[69,"65-69"],[74,"70-74"],[99,"75+"]
+                ].map(([bracket,label])=>{
+                  const rate=VGLI_RATES[bracket];
+                  const mo=Math.round((state.vgliCoverage/1000)*rate);
+                  return(
+                    <tr key={bracket} className={vgliRate(state.vgliAge)===rate?"hi":""}>
+                      <td style={{color:"var(--mut)"}}>{label}</td>
+                      <td style={{fontFamily:"IBM Plex Mono, monospace"}}>${rate.toFixed(2)}</td>
+                      <td style={{fontFamily:"IBM Plex Mono, monospace",color:"var(--nv)"}}>${mo}/mo</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            <div style={{fontSize:11,color:"var(--mut)",marginTop:8}}>Source: VA.gov VGLI rate tables · 2026</div>
+          </Reveal>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── TAB 3: PLANNING (what-if tools with inputs) ──────────────────────
+function EditInMyInfo({label,value,go}){
+  return(
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--sub)"}}>
+      <div>
+        <div style={{fontSize:11,fontWeight:600,textTransform:"uppercase",letterSpacing:".06em",color:"var(--mut)"}}>{label}</div>
+        <div style={{fontSize:15,fontWeight:600,color:"var(--ink)",marginTop:2}}>{value}</div>
+      </div>
+      <button onClick={()=>go("myinfo")} style={{background:"none",border:"none",color:"var(--nv)",fontSize:12,fontWeight:600,cursor:"pointer",whiteSpace:"nowrap"}}>
+        Edit in My Info &#8594;
+      </button>
+    </div>
+  );
+}
+
+function PlanningTab({state,set,go}){
+  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,sbp,sbpCoverage,
+         selectedState,income,desiredIncome,colFrom,colTo,monthlyIncome,filingStatus,
+         medDodPct,tdrl,reservePoints,currentAge,payStartAge,
+         giUsing,giEligPct,giSchoolCity,giEnroll,giOnline}=state;
+  const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
+  const key=dk(vaDeps);
+  const isReserveEligibleNow=separationType==="reserve"&&currentAge>=payStartAge;
+  const g=pensionBySepType(separationType,retType,yos,h3,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
+  const sbpC=sbp?g*(sbpCoverage/100)*0.065:0;
+  const netP=g-sbpC;
+  const annP=netP*12;
+  const annVA=(VA[vaRating]?.[key]||VA[vaRating]?.s||0)*12;
+  const vaM=(VA[vaRating]?.[key]||VA[vaRating]?.s)||0;
+  const si=STATES[selectedState]||{ok:true,note:""};
+  const stTax=si.ok?0:annP*((si.rate||0)/100);
+  const taxableAnnualP=annP+(income||0);
+  const {annualTax:fedTaxAnn,effectiveRate:pEffRate}=calcFederalTax(taxableAnnualP,filingStatus||"single");
+  const take=annP+annVA+income-fedTaxAnn-stTax;
+  const friendly=["Texas","Florida","Nevada","Wyoming","South Dakota","Washington","Tennessee","Mississippi","Illinois","Alabama","Hawaii"];
+
+  // COL
+  const fi=COL[colFrom]||100,ti=COL[colTo]||100;
+  const adj=monthlyIncome*(ti/fi),diff=adj-monthlyIncome;
+  const cats=[
+    {n:"Housing",w:.33,v:1.6},{n:"Groceries",w:.13,v:.6},{n:"Utilities",w:.07,v:.5},
+    {n:"Transportation",w:.10,v:.7},{n:"Healthcare",w:.08,v:.6},{n:"Misc.",w:.10,v:.5},
+  ];
+
+  // Gap
+  const {monthlyTax:pFedTaxMo}=calcFederalTax(taxableAnnualP,filingStatus||"single");
+  const stTaxMo=si.ok?0:netP*((si.rate||0)/100);
+  const atP=netP-pFedTaxMo-stTaxMo;
+  const mhaBase=giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[giSchoolCity]||0);
+  const mhaMo=giUsing?Math.round(mhaBase*(giEligPct/100)*giEnroll):0;
+  const otherMo=Math.round((income||0)/12);
+  const totalBase=atP+vaM+otherMo;
+  const totalIncRaw=totalBase+mhaMo;
+  const totalInc=Math.max(0,totalIncRaw);
+  const gap=desiredIncome-totalInc;
+  const sal=gap>0?gap/0.75:0;
+  const hr=sal*12/2080;
+  const cov=Math.min(100,(totalInc/desiredIncome)*100);
+  const gs=[
+    {g:"GS-9",r:"$56,111-$72,940",lo:56111},{g:"GS-11",r:"$68,405-$88,926",lo:68405},
+    {g:"GS-12",r:"$81,966-$106,549",lo:81966},{g:"GS-13",r:"$97,376-$126,585",lo:97376},
+    {g:"GS-14",r:"$115,079-$149,651",lo:115079},{g:"GS-15",r:"$135,435-$176,300",lo:135435},
+  ];
+
+  const [section,setSection]=useState("taxes");
+
+  return(
+    <div className="fu">
+      <div className="sh2"><h2>Planning Tools</h2><p>Explore taxes, cost of living, and income gap scenarios.</p></div>
+
+      {/* Sub-nav */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:18}}>
+        {[{id:"taxes",l:"Taxes"},{id:"col",l:"Cost of Living"},{id:"gap",l:"Income Gap"}].map(s=>(
+          <button key={s.id} className={"tb"+(section===s.id?" on":"")}
+            style={{width:"100%",fontSize:14,padding:"12px 8px"}}
+            onClick={()=>setSection(s.id)}>{s.l}</button>
+        ))}
+      </div>
+
+      {/* ── TAXES ── */}
+      {section==="taxes"&&(
+        <div>
+          <div className="card">
+            <div className="cttl">Location & Income</div>
+            <EditInMyInfo label="State of Residence" value={selectedState} go={go}/>
+            <EditInMyInfo label="Other Annual Income" value={income>0?fmt(income):"$0"} go={go}/>
+            <div style={{marginTop:12}} className={"ib "+(si.ok?"ib-gn":"ib-rd")}><strong>{selectedState}:</strong> {si.note}</div>
+          </div>
+          <div className="card">
+            <div className="cttl">Annual Tax Breakdown</div>
+            <DR label="Pension Income" value={fmt(annP)}/>
+            <DR label="VA Compensation" value={fmt(annVA)} color="green" sub="Always tax-free"/>
+            {income>0&&<DR label="Other Income" value={fmt(income)}/>}
+            <DR label="Est. Federal Tax" value={`-${fmt(fedTaxAnn)}`} color="red" sub={taxableAnnualP>0?`${(pEffRate*100).toFixed(1)}% effective · ${(filingStatus||"single")==="mfj"?"MFJ":"Single"} · incl. $${(STANDARD_DEDUCTION_2026[filingStatus||"single"]||15000).toLocaleString()} std. deduction`:"No taxable income"}/>
+            <DR label={`State Tax — ${selectedState}`} value={si.ok?"Exempt":`-${fmt(stTax)}`} color={si.ok?"green":"red"} sub={si.ok?"No state tax on your pension":`${si.rate}% rate`}/>
+            <hr/>
+            <BStat label="Total Annual Take-Home" value={fmt(take)} color="green" sub={`${fmt(take/12)}/month after all taxes`}/>
+          </div>
+          <div className="card">
+            <div className="cttl">Long-Term State Tax Impact</div>
+            <p style={{fontSize:14,color:"var(--mut)",lineHeight:1.6}}>
+              {si.ok
+                ?<>Living in <strong style={{color:"var(--ink)"}}>{selectedState}</strong> saves you roughly <strong style={{color:"var(--gn)"}}>{fmt(annP*0.05)}/year</strong> compared to a 5% state. Over 20 years: <strong style={{color:"var(--gn)"}}>{fmt(annP*0.05*20)}</strong> stays with you.</>
+                :<>Moving to a tax-exempt state could save <strong style={{color:"var(--gn)"}}>{fmt(stTax)}/year</strong>. Over 20 years: <strong style={{color:"var(--gn)"}}>{fmt(stTax*20)}</strong>.</>}
+            </p>
+          </div>
+          <Reveal label="Show Tax-Friendly States">
+            <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+              {friendly.map(s=><span key={s} className="chip" onClick={()=>set("selectedState",s)}>{s}</span>)}
+            </div>
+          </Reveal>
+        </div>
+      )}
+
+      {/* ── COST OF LIVING ── */}
+      {section==="col"&&(
+        <div>
+          <div className="card">
+            <div className="cttl">Compare Cities</div>
+            <SF label="From" value={colFrom} onChange={v=>set("colFrom",v)} options={Object.keys(COL).sort()}/>
+            <SF label="To" value={colTo} onChange={v=>set("colTo",v)} options={Object.keys(COL).sort()}/>
+            <NF label="Current Monthly Income" value={monthlyIncome} onChange={v=>set("monthlyIncome",v)} pre="$" step={100}/>
+            <hr/>
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+              <MT label={colFrom.split(",")[0]} value={fi.toString()} sub="COL index"/>
+              <MT label={colTo.split(",")[0]} value={ti.toString()} color={ti>fi?"red":"green"} sub="COL index"/>
+            </div>
+          </div>
+          <div className="card">
+            <div className="cttl">Purchasing Power</div>
+            <div style={{marginBottom:16}}>
+              <BStat label="Equivalent Income Needed" value={fmt(adj)} color={diff>0?"red":"green"}
+                sub={`${Math.abs(((ti-fi)/fi)*100).toFixed(1)}% ${diff>0?"more expensive":"cheaper"} than ${colFrom.split(",")[0]}`}/>
+            </div>
+            <div className={"ib "+(diff>0?"ib-gd":"ib-gn")} style={{marginBottom:16}}>
+              {diff>0
+                ?`Your ${fmt(monthlyIncome)}/mo has the buying power of ${fmt(adj)} in ${colTo.split(",")[0]}. You need ${fmt(diff)}/mo more.`
+                :`Your money goes further — ${fmt(monthlyIncome)}/mo in ${colFrom.split(",")[0]} equals ${fmt(adj)} in ${colTo.split(",")[0]}. You save ${fmt(Math.abs(diff))}/mo.`}
+            </div>
+            <div className="cttl">Breakdown by Category</div>
+            {cats.map(({n,w,v})=>{
+              const d=((ti-fi)/fi)*v*monthlyIncome*w;
+              return(
+                <div key={n} style={{marginBottom:11}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}>
+                    <span style={{color:"var(--mut)"}}>{n}</span>
+                    <span style={{fontFamily:"'IBM Plex Mono',monospace",color:d>0?"var(--rd)":"var(--gn)",fontWeight:500}}>{d>0?"+":""}{fmt(d)}/mo</span>
+                  </div>
+                  <PBar value={Math.abs(d)} max={500} color={d>0?"var(--rd)":"var(--gn)"}/>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ── INCOME GAP ── */}
+      {section==="gap"&&(
+        <div>
+          <div className="card">
+            <div className="cttl">Income Target</div>
+            <EditInMyInfo label="Desired Monthly Take-Home" value={fmt(desiredIncome)} go={go}/>
+            <div style={{height:8}}/>
+            <div className="cttl" style={{marginTop:0}}>Your Benefits (after tax)</div>
+            <DR label="Pension (after taxes & SBP)" value={fmt(atP)} color="navy"/>
+            <DR label="VA Compensation" value={fmt(vaM)} color="green" sub="Tax-free"/>
+            {mhaMo>0&&<DR label="GI Bill MHA" value={fmt(mhaMo)} color="green" sub="School months · tax-free"/>}
+            {otherMo>0&&<DR label="Other Income / Salary" value={fmt(otherMo)} color="ink" sub="Monthly average"/>}
+            <hr/>
+            <DR label="Total Monthly Income" value={fmt(totalInc)} color="navy" sub={mhaMo>0?`Break months: ${fmt(totalBase)}`:""}/>
+          </div>
+          <div className="card">
+            <div className="cttl">Coverage</div>
+            <div style={{marginBottom:16}}>
+              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
+                <span>Benefits cover {cov.toFixed(0)}% of your target</span>
+                <span>{fmt(totalInc)} of {fmt(desiredIncome)}</span>
+              </div>
+              <PBar value={totalInc} max={desiredIncome} color={gap<=0?"var(--gn)":cov>70?"var(--gd)":"var(--nv)"}/>
+            </div>
+            {gap<=0?(
+              <div className="ib ib-gn"><strong>Fully covered.</strong> Surplus of {fmt(Math.abs(gap))}/mo ({fmt(Math.abs(gap)*12)}/yr).</div>
+            ):(
+              <>
+                <div className="ib ib-gd" style={{marginBottom:16}}><strong>Gap: {fmt(gap)}/month.</strong> You need {fmt(gap*12)}/year in additional income.</div>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
+                  <MT label="Annual Salary Needed" value={fmt(sal*12)} color="navy" sub="gross, est. 25% tax"/>
+                  <MT label="Hourly Rate (FT)" value={`$${hr.toFixed(2)}`} color="navy" sub={`$${(hr*2).toFixed(2)}/hr part-time`}/>
+                </div>
+                <Reveal label="Show GS Pay Reference">
+                  <table className="dt">
+                    <thead><tr><th>Grade</th><th>Salary Range</th></tr></thead>
+                    <tbody>{gs.map(({g,r,lo})=>(
+                      <tr key={g} className={sal*12>=lo&&sal*12<lo*1.38?"hi":""}>
+                        <td style={{color:"var(--nv)",fontWeight:600}}>{g}</td><td>{r}</td>
+                      </tr>
+                    ))}</tbody>
+                  </table>
+                </Reveal>
+              </>
+            )}
+          </div>
+          {gap>0&&<DebriefedGapCard gap={gap}/>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── TAB 4: PROFILE (all inputs consolidated) ─────────────────────────
+function ProfileTab({state,set,isConfigured}){
+  const {separationType,retType,yos,high3,usePayGrade,payGrade,sbp,sbpCoverage,
+         medDodPct,tdrl,reservePoints,currentAge,payStartAge,reserveHealthType,
+         vaRating,vaDeps,vaRatings,selectedState,income,desiredIncome,
+         giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear,
+         tricareplan,tricareFamSize,tricareGroup,useVgli,vgliCoverage,vgliAge,otherLifePremium}=state;
+  const [addR,setAddR]=useState(10);
+  const [confirmReset,setConfirmReset]=useState(false);
+  const derivedPay=usePayGrade?lookupPay(payGrade,yos):null;
+
+  // Mark as visited on first render
+  if(!state._hasVisitedMyInfo) setTimeout(()=>set("_hasVisitedMyInfo",true),0);
+
+  const plan=TRICARE_PLANS[tricareplan];
+  const PLAN_OPTS=[
+    {v:"prime",l:"TRICARE Prime"},{v:"select",l:"TRICARE Select"},
+    {v:"tfl",l:"TRICARE For Life (65+)"},{v:"select_overseas",l:"TRICARE Select Overseas"},
+  ];
+  const FAM_OPTS=[{v:"self",l:"Self Only"},{v:"family",l:"Self + Family"}];
+  const VGLI_OPTS=[100000,200000,300000,400000,500000].map(v=>({v,l:"$"+v.toLocaleString()}));
+
+  return(
+    <div className="fu">
+      {!isConfigured&&(
+        <div className="ib ib-nv" style={{marginBottom:16,fontSize:14,lineHeight:1.6}}>
+          <strong>Welcome!</strong> Fill this out first. Your Dashboard updates instantly as you go.
+        </div>
+      )}
+      <div className="sh2"><h2>My Info</h2><p>Set up once — all numbers update everywhere automatically.</p></div>
+
+      {/* ── SERVICE PROFILE ── */}
+      <div className="card">
+        <div className="cttl">Service Profile</div>
+        <div className="field">
+          <label className="flbl">Separation Type</label>
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
+            {[{v:"active",l:"Active Duty Retiree"},{v:"medical",l:"Medical Retiree"},{v:"reserve",l:"Reserve / Guard"},{v:"veteran",l:"Veteran (no pension)"}].map(o=>(
+              <button key={o.v} className={"tb"+(separationType===o.v?" on":"")}
+                style={{width:"100%",fontSize:13,padding:"12px 8px"}}
+                onClick={()=>set("separationType",o.v)}>{o.l}</button>
+            ))}
+          </div>
+        </div>
+
+        {separationType==="veteran"&&(
+          <div>
+            <div className="ib ib-gd" style={{fontSize:13,marginBottom:12}}>No DoD retirement pay. Veterans who separated before qualifying for retirement receive no pension.</div>
+            <div className="ib ib-nv" style={{fontSize:13}}>Still eligible for: VA disability compensation, GI Bill benefits, VA Healthcare, and all planning tools in this app.</div>
+          </div>
+        )}
+
+        {separationType==="medical"&&(
+          <div className="ib ib-nv" style={{fontSize:13,marginBottom:12}}>
+            Medical retirement (PDRL/TDRL) is available at any YOS. Pay = higher of (DoD disability %) or (YOS × {retType==="BRS"?"2.0":"2.5"}%), capped at 75%.
+          </div>
+        )}
+
+        {separationType==="reserve"&&(
+          <div className="ib ib-nv" style={{fontSize:13,marginBottom:12}}>
+            Reserve/Guard retirement needs 20 qualifying years (50+ points/year). Pay = (Total Points ÷ 360) × {retType==="BRS"?"2.0":"2.5"}% × High-3. Starts at age 60 (or earlier with qualifying active service).
+          </div>
+        )}
+
+        {separationType!=="veteran"&&(
+          <TG label="Retirement System" value={retType} onChange={v=>set("retType",v)}
+            options={separationType==="medical"?["High-3","BRS"]:["High-3","BRS","REDUX"]}
+            hint={{
+              "High-3":"Legacy system — 2.5%/yr. Highest base pension at 20 years.",
+              "BRS":"Blended Retirement — 2.0%/yr + TSP matching up to 5%.",
+              "REDUX":"$30k CSB at 15 yrs. 40% at 20 yrs + 3.5%/yr thereafter.",
+            }[retType]}/>
+        )}
+
+        {(separationType==="active"||separationType==="medical")&&(
+          <NF label={separationType==="medical"?"Years of Service at Separation":"Years of Service"} value={yos} onChange={v=>set("yos",v)} min={0} max={40} suf="yrs"
+            hint={separationType==="medical"?"YOS at time of medical separation — any amount qualifies":"Minimum 20 years for retirement eligibility"}/>
+        )}
+
+        {separationType==="medical"&&(
+          <>
+            <NF label="DoD Disability Rating %" value={medDodPct} onChange={v=>set("medDodPct",v)} min={0} max={100} step={10} suf="%"
+              hint="Rating from Physical Evaluation Board (PEB) — separate from your VA rating"/>
+            <TG label="Disability Status" value={tdrl?"tdrl":"pdrl"} onChange={v=>set("tdrl",v==="tdrl")}
+              options={[{v:"pdrl",l:"Permanent (PDRL)"},{v:"tdrl",l:"Temporary (TDRL)"}]}
+              hint={tdrl?"TDRL applies a minimum 50% multiplier while condition is re-evaluated":"Permanently retired — final disability rating applies"}/>
+          </>
+        )}
+
+        {separationType==="reserve"&&(
+          <>
+            <NF label="Total Career Retirement Points" value={reservePoints} onChange={v=>set("reservePoints",v)} min={1000} max={14600} step={50} suf="pts"
+              hint="Sum of all career retirement points. Min 1,000 (20 qualifying years × 50 pts/yr). Max ~365/yr for full AD years — 30-yr careers with deployments often reach 8,000–11,000+. Check your branch's personnel portal for your exact total."/>
+            <NF label="Current Age" value={currentAge} onChange={v=>set("currentAge",v)} min={35} max={80} suf="yrs"/>
+            <NF label="Pay Start Age" value={payStartAge} onChange={v=>set("payStartAge",v)} min={50} max={60} suf="yrs"
+              hint="Default 60. Reduces by 3 months per 90 days of qualifying active duty after Jan 28, 2008. Cannot go below 50."/>
+            <NF label="Years of Service (for CRDP)" value={yos} onChange={v=>set("yos",v)} min={0} max={40} suf="yrs"
+              hint="Total creditable years — used for CRDP eligibility (20+ required)"/>
+          </>
+        )}
+
+        {separationType!=="veteran"&&(
+          <div className="field">
+            <label className="flbl">High-3 Monthly Base Pay</label>
+            {separationType==="reserve"&&(
+              <div className="fhint" style={{marginBottom:8}}>High-3 is calculated from the 36 months before pay starts (age {payStartAge}), using pay rates at that time.</div>
+            )}
+            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
+              <button className={"tb"+((!usePayGrade)?" on":"")} onClick={()=>set("usePayGrade",false)}
+                style={{width:"100%",fontSize:14,padding:"12px 8px"}}>Manual Entry</button>
+              <button className={"tb"+(usePayGrade?" on":"")} onClick={()=>set("usePayGrade",true)}
+                style={{width:"100%",fontSize:14,padding:"12px 8px"}}>By Pay Grade</button>
+            </div>
+            {usePayGrade?(
+              <>
+                <div className="field" style={{marginBottom:8}}>
+                  <label className="flbl">Pay Grade at Retirement</label>
+                  <select value={payGrade} onChange={e=>set("payGrade",e.target.value)}
+                    style={{fontSize:16,minHeight:48}}>
+                    {GRADE_GROUPS.map(g=>(
+                      <optgroup key={g.label} label={`-- ${g.label} --`}>
+                        {g.grades.map(gr=>{
+                          const pay=lookupPay(gr,yos);
+                          return <option key={gr} value={gr} disabled={!pay}>{GRADE_LABELS[gr]}{pay?` — ${fmt(pay)}/mo`:' — N/A at this YOS'}</option>;
+                        })}
+                      </optgroup>
+                    ))}
+                  </select>
+                </div>
+                {derivedPay?(
+                  <div className="ib ib-nv" style={{fontSize:12}}>
+                    <strong>2026 DFAS rate:</strong> {GRADE_LABELS[payGrade]} at {yos} yrs = <strong>{fmt(derivedPay)}/mo</strong> basic pay.
+                  </div>
+                ):(
+                  <div className="ib ib-gd" style={{fontSize:12}}>This grade is not available at {yos} years of service.</div>
+                )}
+              </>
+            ):(
+              <NF value={high3} onChange={v=>set("high3",v)} pre="$" min={0} step={50}
+                hint="Average of your 3 highest-paid consecutive years (36 months)"/>
+            )}
+          </div>
+        )}
+
+        {separationType!=="veteran"&&<hr/>}
+        {separationType!=="veteran"&&<div className="cttl" style={{marginTop:0}}>Survivor Benefit Plan (SBP)</div>}
+        {separationType!=="veteran"&&(
+          <>
+            <TG value={sbp?"y":"n"} onChange={v=>set("sbp",v==="y")}
+              options={[{v:"n",l:"Not Enrolled"},{v:"y",l:"Enrolled"}]}/>
+            {sbp&&<div style={{marginTop:12}}>
+              <NF label="Coverage % of Base Amount" value={sbpCoverage} onChange={v=>set("sbpCoverage",v)} min={0} max={100} step={5} suf="%"
+                hint="Survivor receives 55% of covered amount"/>
+            </div>}
+            {!sbp&&<div className="ib ib-gd" style={{marginTop:10,fontSize:13}}>Without SBP, your pension ends at death — your surviving spouse receives nothing.</div>}
+            {separationType==="reserve"&&(
+              <div className="fhint" style={{marginTop:8}}>Reserve Component SBP (RCSBP) elections are made at retirement from the reserve, not when pay starts.</div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* ── VA DISABILITY ── */}
+      <div className="card">
+        <div className="cttl">VA Disability</div>
+        <SF label="Disability Rating" value={vaRating} onChange={v=>set("vaRating",Number(v))}
+          options={[{v:0,l:"None / Not yet rated"},...[10,20,30,40,50,60,70,80,90,100].map(v=>({v,l:`${v}%`}))]}/>
+        <TG label="Dependent Status" value={vaDeps} onChange={v=>set("vaDeps",v)}
+          options={["Single","Spouse","Spouse + Child","Child Only"]}/>
+
+        <hr/>
+        <div className="cttl" style={{marginTop:0}}>Combined Rating Calculator (VA Math)</div>
+        <p style={{fontSize:13,color:"var(--mut)",marginBottom:12,lineHeight:1.5}}>VA applies each rating to your remaining "whole person" — not simple addition.</p>
+        <div style={{display:"flex",gap:8,marginBottom:12}}>
+          <select value={addR} onChange={e=>setAddR(Number(e.target.value))} style={{flex:1,fontSize:16,minHeight:48}}>
+            {[10,20,30,40,50,60,70,80,90,100].map(v=><option key={v} value={v}>{v}%</option>)}
+          </select>
+          <button onClick={()=>set("vaRatings",[...vaRatings,addR])}
+            style={{background:"var(--nv)",color:"var(--ink)",border:"none",borderRadius:10,padding:"0 20px",
+              fontFamily:"Barlow,sans-serif",fontWeight:600,fontSize:16,cursor:"pointer",flexShrink:0,minHeight:48}}>
+            + Add
+          </button>
+        </div>
+        <div style={{display:"flex",flexWrap:"wrap",gap:5,minHeight:32,marginBottom:10}}>
+          {vaRatings.length===0&&<span style={{color:"var(--fnt)",fontSize:13}}>Add individual ratings above</span>}
+          {vaRatings.map((r,i)=><span key={i} className="chip g" onClick={()=>set("vaRatings",vaRatings.filter((_,j)=>j!==i))}>{r}% x</span>)}
+        </div>
+        {vaRatings.length>0&&(
+          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+            <MT label="Combined Rating" value={`${combinedVA(vaRatings)}%`} color="navy"/>
+            <MT label="Monthly Comp." value={fmt((VA[combinedVA(vaRatings)]?.[dk(vaDeps)]||VA[combinedVA(vaRatings)]?.s)||0)} color="green"/>
+          </div>
+        )}
+      </div>
+
+      {/* ── LOCATION & INCOME ── */}
+      <div className="card">
+        <div className="cttl">Location & Income</div>
+        <SF label="State of Residence" value={selectedState} onChange={v=>set("selectedState",v)} options={Object.keys(STATES).sort()}/>
+        <TG label="Filing Status" value={state.filingStatus||"single"} onChange={v=>set("filingStatus",v)}
+          options={[{v:"single",l:"Single"},{v:"mfj",l:"Married Filing Jointly"}]}
+          hint="Affects standard deduction and tax brackets"/>
+        <NF label="Other Annual Income" value={income} onChange={v=>set("income",v)} pre="$" step={1000}
+          hint="Employment, TSP withdrawals, or other taxable income"/>
+        <NF label="Desired Monthly Take-Home" value={desiredIncome} onChange={v=>set("desiredIncome",v)} pre="$" step={100}
+          hint="After-tax income target for gap analysis"/>
+      </div>
+
+      {/* ── GI BILL ── */}
+      <div className="card">
+        <div className="cttl">GI Bill</div>
+        <TG label="Using the GI Bill?" value={giUsing?"y":"n"} onChange={v=>set("giUsing",v==="y")}
+          options={[{v:"n",l:"No / Not yet"},{v:"y",l:"Yes, enrolled"}]}/>
+        {giUsing&&(
+          <div style={{marginTop:12}}>
+            <SF label="Active Duty Service Time" value={giEligPct}
+              onChange={v=>set("giEligPct",Number(v))}
+              options={ELIG_TIERS.map(t=>({v:t.pct,l:t.label}))}/>
+            <TG label="Attendance Mode" value={giOnline?"online":"inperson"}
+              onChange={v=>set("giOnline",v==="online")}
+              options={[{v:"inperson",l:"In-Person / Hybrid"},{v:"online",l:"Online Only"}]}/>
+            {!giOnline&&(
+              <SF label="School Location" value={giSchoolCity}
+                onChange={v=>set("giSchoolCity",v)}
+                options={Object.keys(MHA_CITIES).sort()}
+                hint="Select the city closest to your school."/>
+            )}
+            <SF label="Enrollment Status" value={giEnroll}
+              onChange={v=>set("giEnroll",Number(v))}
+              options={ENROLL_OPTS}/>
+            <NF label="Months of MHA Per Year" value={giMonthsPerYear}
+              onChange={v=>set("giMonthsPerYear",v)} min={1} max={12} suf="mo"
+              hint="Typically 9-10 months (not paid during breaks)"/>
+          </div>
+        )}
+      </div>
+
+      {/* ── INSURANCE ── */}
+      <div className="card">
+        <div className="cttl">{separationType==="veteran"?"VA Healthcare":separationType==="reserve"&&currentAge<payStartAge?"Reserve Healthcare":"TRICARE"}</div>
+        {separationType==="veteran"?(
+          <div>
+            <div className="ib ib-nv" style={{fontSize:13,marginBottom:12}}>
+              <strong>VA Priority Group {getVAPriorityGroup(vaRating)}</strong>: {VA_PRIORITY_GROUPS[getVAPriorityGroup(vaRating)-1].who}
+            </div>
+            <DR label="Copays" value={VA_PRIORITY_GROUPS[getVAPriorityGroup(vaRating)-1].free?"$0":"Varies"} color={VA_PRIORITY_GROUPS[getVAPriorityGroup(vaRating)-1].free?"green":"navy"} sub={VA_PRIORITY_GROUPS[getVAPriorityGroup(vaRating)-1].copay}/>
+            <div className="fhint" style={{marginTop:8}}>VA Healthcare has no monthly premium. Copays depend on your priority group and whether conditions are service-connected.</div>
+          </div>
+        ):separationType==="reserve"&&currentAge<payStartAge?(
+          <div>
+            <TG label="Health Coverage Type" value={reserveHealthType}
+              onChange={v=>set("reserveHealthType",v)}
+              options={[{v:"trs",l:"TRS ($57.88)"},{v:"trr",l:"TRR ($645.90)"},{v:"civilian",l:"Civilian/ACA"}]}
+              hint={reserveHealthType==="trs"?TRICARE_RS.note:reserveHealthType==="trr"?TRICARE_TRR.note:"ACA marketplace or employer plan"}/>
+            <SF label="Coverage Level" value={tricareFamSize} onChange={v=>set("tricareFamSize",v)}
+              options={FAM_OPTS}/>
+            {reserveHealthType==="trs"&&(
+              <div className="ib ib-nv" style={{marginTop:8,fontSize:12}}>
+                TRS Premium: {fmt(tricareFamSize==="family"?TRICARE_RS.family:TRICARE_RS.individual)}/mo
+              </div>
+            )}
+            {reserveHealthType==="trr"&&(
+              <div className="ib ib-gd" style={{marginTop:8,fontSize:12}}>
+                TRR Premium: {fmt(tricareFamSize==="family"?TRICARE_TRR.family:TRICARE_TRR.individual)}/mo — compare with healthcare.gov marketplace plans.
+              </div>
+            )}
+          </div>
+        ):(
+          <div>
+            <TG label="Service Entry Group" value={tricareGroup}
+              onChange={v=>set("tricareGroup",v)}
+              options={[{v:"A",l:"Group A (pre-2018)"},{v:"B",l:"Group B (2018+)"}]}
+              hint="Determines your enrollment fee tier."/>
+            <SF label="Plan" value={tricareplan} onChange={v=>set("tricareplan",v)}
+              options={PLAN_OPTS}
+              hint={plan.note}/>
+            {tricareplan!=="tfl"&&(
+              <SF label="Coverage Level" value={tricareFamSize} onChange={v=>set("tricareFamSize",v)}
+                options={FAM_OPTS}/>
+            )}
+            {tricareplan==="tfl"&&(
+              <div className="ib ib-nv" style={{marginTop:8,fontSize:12}}>
+                TRICARE For Life has no premium but requires Medicare Part B ($185/mo per person, 2026).
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      <div className="card">
+        <div className="cttl">Life Insurance</div>
+        <TG label="VGLI Enrolled?" value={useVgli?"y":"n"} onChange={v=>set("useVgli",v==="y")}
+          options={[{v:"y",l:"Yes"},{v:"n",l:"No"}]}/>
+        {useVgli&&(<>
+          <SF label="Coverage Amount" value={vgliCoverage} onChange={v=>set("vgliCoverage",Number(v))}
+            options={VGLI_OPTS}/>
+          <NF label="Your Age" value={vgliAge} onChange={v=>set("vgliAge",v)}
+            min={25} max={90} suf="yrs"
+            hint="VGLI premiums increase every 5 years."/>
+        </>)}
+        <hr/>
+        <NF label="Other Life Insurance Premium" value={otherLifePremium}
+          onChange={v=>set("otherLifePremium",v)}
+          pre="$" suf="/mo"
+          hint="Any other term or whole life policy premiums"/>
+      </div>
+
+      {/* ── RESET ── */}
+      <div style={{marginTop:24,textAlign:"center"}}>
+        {!confirmReset?(
+          <button onClick={()=>setConfirmReset(true)}
+            style={{background:"none",border:"none",color:"var(--mut)",fontSize:13,cursor:"pointer",textDecoration:"underline",padding:8}}>
+            Reset all data
+          </button>
+        ):(
+          <div className="card" style={{textAlign:"center",padding:20}}>
+            <p style={{fontSize:14,color:"var(--rd)",fontWeight:600,marginBottom:12}}>Are you sure? This clears all your numbers.</p>
+            <div style={{display:"flex",gap:10,justifyContent:"center"}}>
+              <button onClick={()=>{try{localStorage.removeItem(STORAGE_KEY);localStorage.removeItem(TAB_KEY);}catch{}window.location.reload();}}
+                style={{background:"var(--rd)",color:"var(--ink)",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:600,fontSize:14,cursor:"pointer"}}>
+                Yes, reset everything
+              </button>
+              <button onClick={()=>setConfirmReset(false)}
+                style={{background:"var(--sub)",color:"var(--ink)",border:"none",borderRadius:8,padding:"10px 24px",fontWeight:600,fontSize:14,cursor:"pointer"}}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── SUPPORT SCREEN ────────────────────────────────────────────────────
+const FAQ_ITEMS=[
+  {q:"How accurate are MilCalc\u2019s estimates?",a:"MilCalc uses current pay tables, 2026 tax brackets, and published TRICARE premium rates to produce estimates. These are planning estimates, not guarantees. Your actual benefits will be determined by your branch of service, DFAS, the VA, and other government agencies. Always verify final numbers with your finance office or a VSO before making major financial decisions."},
+  {q:"Does MilCalc store my personal or financial data?",a:"No. MilCalc stores only your most recent inputs locally on your device so you don\u2019t have to re-enter them each time. This data never leaves your device. We have no servers, no accounts, and no cloud sync."},
+  {q:"What retirement systems does MilCalc support?",a:"MilCalc supports Active Duty retirement (Legacy High-3 and BRS), Medical separation, Reserve/Guard retirement (points-based), and Veteran estimates (VA compensation without retirement pay)."},
+  {q:"How is CRDP eligibility determined?",a:"CRDP is available to retirees with 20+ qualifying years of service AND a VA disability rating of 50% or higher. If you qualify, CRDP eliminates the VA waiver and lets you receive both your full retirement pay and full VA compensation simultaneously."},
+  {q:"My state isn\u2019t showing a tax exemption \u2014 is that correct?",a:"MilCalc includes confirmed state-level exemptions for military retirement pay. If your state recently changed its policy, email us and we\u2019ll get it corrected quickly."},
+  {q:"How do I clear my saved data?",a:"Android: Settings \u2192 Apps \u2192 MilCalc \u2192 Clear Data. iOS: Delete and reinstall the app."},
+  {q:"I found a calculation error. How do I report it?",a:"Email support@getdebriefed.co with subject \u201CCalculation Error.\u201D Include your inputs (pay grade, YOS, VA rating, filing status, state) and what you believe the correct result should be."},
+  {q:"Will MilCalc add TSP projections or savings planning?",a:"TSP and long-term savings projections are on the roadmap for a future version. Let us know at support@getdebriefed.co \u2014 user demand helps us prioritize."},
+];
+
+function SupportScreen({onClose}){
+  const [open,setOpen]=useState(null);
+  return(
+    <div className="modal-screen">
+      <div className="modal-hdr">
+        <button className="modal-back" onClick={onClose} aria-label="Close">&larr;</button>
+        <div className="modal-htxt">Support</div>
+      </div>
+      <div className="modal-body">
+        <div className="sup-hero">
+          <h2>Support</h2>
+          <p>Questions about your calculations? We&rsquo;ve got you.</p>
+        </div>
+        <div className="sup-contact">
+          <div className="sup-contact-lbl">Email Support</div>
+          <div className="sup-contact-email">support@getdebriefed.co</div>
+          <div className="sup-contact-note">Typically respond within 1&ndash;2 business days</div>
+          <a className="sup-contact-btn" href="mailto:support@getdebriefed.co?subject=MilCalc%20Support">Send Email</a>
+        </div>
+        <div className="faq-title">Frequently Asked Questions</div>
+        {FAQ_ITEMS.map((f,i)=>(
+          <div className="faq-item" key={i}>
+            <button className={"faq-q"+(open===i?" open":"")} onClick={()=>setOpen(open===i?null:i)}>
+              <span>{f.q}</span>
+              <span>+</span>
+            </button>
+            {open===i&&<div className="faq-a">{f.a}</div>}
+          </div>
+        ))}
+        <div className="modal-footer">
+          <p>&copy; 2026 MilCalc</p>
+          <p>Not affiliated with the U.S. Department of Defense, DFAS, or the Department of Veterans Affairs.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PRIVACY SCREEN ───────────────────────────────────────────────────
+const PRIVACY_SECTIONS=[
+  {num:"01",title:"Overview",body:"MilCalc is a military pay and retirement calculator. We built it with a privacy-first philosophy. We do not have a server backend that receives your data. There are no accounts, no sign-in, and no cloud sync. Everything stays on your device."},
+  {num:"02",title:"Data We Do Not Collect",body:"MilCalc does not collect:",list:["Name, email, phone, or contact info","Military service records or rank","Social Security numbers","Financial data or income figures you enter","Health or VA disability information","Location data or device identifiers","Usage analytics or behavioral tracking data"]},
+  {num:"03",title:"Local Storage",body:"MilCalc uses local storage (key: milcalc_state) to save your most recent inputs. This data never leaves your device, is not accessible to us or any third party, and can be cleared by uninstalling the app or clearing app data in device settings."},
+  {num:"04",title:"Analytics & Tracking",body:"MilCalc does not use analytics SDKs, crash reporting tools, advertising identifiers, or behavioral tracking. No ads. No network requests for data collection."},
+  {num:"05",title:"Third-Party Services",body:"MilCalc does not integrate with third-party data services or advertising networks. The app is distributed through the App Store and Google Play, which have their own privacy policies independent of MilCalc."},
+  {num:"06",title:"Children\u2019s Privacy",body:"MilCalc is intended for adults \u2014 current and former members of the U.S. military and their families. Not directed at children under 13."},
+  {num:"07",title:"Changes to This Policy",body:"We may update this policy. Continued use after changes constitutes acceptance. Given that MilCalc collects no personal data, future changes are unlikely to materially affect your privacy."},
+  {num:"08",title:"Contact",body:"Questions? Email: support@getdebriefed.co"},
+];
+
+function PrivacyScreen({onClose}){
+  return(
+    <div className="modal-screen">
+      <div className="modal-hdr">
+        <button className="modal-back" onClick={onClose} aria-label="Close">&larr;</button>
+        <div className="modal-htxt">Privacy Policy</div>
+      </div>
+      <div className="modal-body">
+        <div className="prv-callout">
+          MilCalc does not collect, transmit, or store any personal information. All calculations run entirely on your device.
+        </div>
+        {PRIVACY_SECTIONS.map(s=>(
+          <div className="prv-section" key={s.num}>
+            <div className="prv-num">{s.num}</div>
+            <div className="prv-h">{s.title}</div>
+            <p className="prv-p">{s.body}</p>
+            {s.list&&<ul className="prv-ul">{s.list.map((li,i)=><li key={i}>{li}</li>)}</ul>}
+          </div>
+        ))}
+        <div style={{textAlign:"center",marginTop:8}}>
+          <p style={{fontSize:12,color:"#8a9ab5"}}>Effective date: March 1, 2026 &middot; Last updated: March 2026</p>
+        </div>
+        <div className="modal-footer">
+          <p>&copy; 2026 MilCalc</p>
+          <p>Not affiliated with the U.S. Department of Defense, DFAS, or the Department of Veterans Affairs.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── APP ────────────────────────────────────────────────────────────────
+// ── GI BILL MHA DATA ───────────────────────────────────────────────────
+// (data constants end here — section components replaced by 4-tab architecture above)
+
+const NAV=[
+  {id:"myinfo",label:"My Info",ico:"\u{1F4CB}"},
+  {id:"dashboard",label:"Dashboard",ico:"\u2605"},
+  {id:"benefits",label:"Benefits",ico:"\u{1FA96}"},
+  {id:"planning",label:"Planning",ico:"\u{1F4CA}"},
+];
+
+const STORAGE_KEY="milcalc_state";
+const TAB_KEY="milcalc_tab";
+
+function loadSaved(){
+  try{const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):null;}
+  catch{return null;}
+}
+function loadTab(){
+  try{
+    const saved=localStorage.getItem(TAB_KEY);
+    // Migrate old tab IDs
+    if(saved&&["pension","va","crdp","taxes","col","gibill","insurance","gap","summary"].includes(saved)) return "dashboard";
+    if(saved==="profile") return "myinfo";
+    // First-run: if no saved state, start on My Info
+    const hasSaved=localStorage.getItem(STORAGE_KEY);
+    if(!hasSaved) return "myinfo";
+    return saved||"dashboard";
+  }catch{return "dashboard";}
+}
+
+export default function App(){
+  const [tab,setTab]=useState(loadTab);
+  const [infoMenu,setInfoMenu]=useState(false);
+  const [screen,setScreen]=useState(null); // "support" | "privacy" | null
+
+  const defaults={
+    separationType:"active",
+    retType:"High-3",yos:0,high3:0,usePayGrade:true,payGrade:"E-7",sbp:false,sbpCoverage:55,
+    medDodPct:50,tdrl:false,
+    reservePoints:3600,currentAge:45,payStartAge:60,reserveHealthType:"trs",
+    vaRating:0,vaDeps:"Single",vaRatings:[],
+    selectedState:"Texas",income:0,filingStatus:"single",
+    colFrom:"Fayetteville, NC",colTo:"Austin, TX",monthlyIncome:5000,
+    desiredIncome:6000,
+    giUsing:false,giEligPct:100,giSchoolCity:"Austin, TX",giEnroll:1.0,giOnline:false,giMonthsPerYear:9,
+    tricareplan:"prime",tricareFamSize:"self",tricareGroup:"A",
+    useVgli:true,vgliCoverage:400000,vgliAge:45,otherLifePremium:0,
+    _hasVisitedMyInfo:false,
+  };
+  const [s,setS]=useState(()=>({...defaults,...(loadSaved()||{})}));
+  const set=(k,v)=>setS(x=>{const n={...x,[k]:v};try{localStorage.setItem(STORAGE_KEY,JSON.stringify(n));}catch{}return n;});
+  const go=id=>{setTab(id);try{localStorage.setItem(TAB_KEY,id);}catch{}window.scrollTo(0,0);};
+
+  // Derived values for status bar
+  const derivedAppPay=s.usePayGrade?lookupPay(s.payGrade,s.yos):null;
+  const h3=(s.usePayGrade&&derivedAppPay)?derivedAppPay:s.high3;
+  const isReserveEligibleNowApp=s.separationType==="reserve"&&s.currentAge>=s.payStartAge;
+  const g=pensionBySepType(s.separationType,s.retType,s.yos,h3,s.medDodPct,s.tdrl,s.reservePoints,s.currentAge,s.payStartAge);
+  const sbpC=s.sbp?g*(s.sbpCoverage/100)*0.065:0;
+  const netP=g-sbpC;
+  const si=STATES[s.selectedState]||{ok:true};
+  const appTaxableAnn=netP*12+(s.income||0);
+  const {monthlyTax:appFedTax}=calcFederalTax(appTaxableAnn,s.filingStatus||"single");
+  const stTax=si.ok?0:netP*((si.rate||0)/100);
+  const atP=netP-appFedTax-stTax;
+  const vaM=(VA[s.vaRating]?.[dk(s.vaDeps)]||VA[s.vaRating]?.s)||0;
+  const mhaBase=s.giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[s.giSchoolCity]||0);
+  const mhaMo=s.giUsing?Math.round(mhaBase*(s.giEligPct/100)*s.giEnroll):0;
+  const otherMo=Math.round((s.income||0)/12);
+  const total=Math.max(0,atP+vaM+otherMo+mhaMo);
+  const healthPrem2=(()=>{
+    if(s.separationType==="veteran") return 0; // VA Healthcare
+    if(s.separationType==="reserve"&&!isReserveEligibleNowApp){
+      const rr=s.reserveHealthType==="trs"?TRICARE_RS:s.reserveHealthType==="trr"?TRICARE_TRR:null;
+      return rr?(s.tricareFamSize==="family"?rr.family:rr.individual):0;
+    }
+    const tp2=TRICARE_PLANS[s.tricareplan]||TRICARE_PLANS.prime;
+    const gr2=tp2[`group${s.tricareGroup||"A"}`]||tp2.groupA;
+    const mp2=s.tricareplan==="tfl"?(s.tricareFamSize==="family"?370:185):0;
+    return (gr2[s.tricareFamSize]||gr2.self)+mp2;
+  })();
+  const insuranceMo=Math.round(healthPrem2+(s.useVgli?vgliMonthly(s.vgliCoverage,s.vgliAge):0)+(s.otherLifePremium||0));
+  const gap=s.desiredIncome-(total-insuranceMo);
+
+  return(
+    <>
+      <style>{FONTS}</style>
+      <style>{CSS}</style>
+
+      {/* ── TOP STATUS BAR ── */}
+      <div className="sb">
+        <div className="sb-left">
+          <div className="sb-title">Monthly Total</div>
+          <div className="sb-total">{s._hasVisitedMyInfo?fmt(total):"\u2014"}</div>
+          <div className="sb-sub">{s._hasVisitedMyInfo?`${s.separationType==="veteran"?"Veteran":s.separationType==="medical"?"Med. Ret.":s.separationType==="reserve"?"Reserve":s.retType} / ${s.yos} YOS`:"Set up My Info to see your numbers"}</div>
+        </div>
+        <div className="sb-right">
+          <div className="sb-pill">
+            <div className="sb-pill-l">VA</div>
+            <div className="sb-pill-v pos">{s._hasVisitedMyInfo?fmt(vaM):"\u2014"}</div>
+          </div>
+          <div className="sb-pill">
+            <div className="sb-pill-l">{gap>0?"Gap":"Surplus"}</div>
+            <div className={"sb-pill-v "+(gap>0?"warn":"pos")}>{s._hasVisitedMyInfo?(gap>0?fmt(gap):"+"+fmt(Math.abs(gap))):"\u2014"}</div>
+          </div>
+          <button className="info-btn" onClick={()=>setInfoMenu(true)} aria-label="Info menu">{"\u24D8"}</button>
+        </div>
+      </div>
+
+      {/* ── INFO MENU BOTTOM SHEET ── */}
+      {infoMenu&&(
+        <div className="info-overlay" onClick={()=>setInfoMenu(false)}>
+          <div className="info-sheet" onClick={e=>e.stopPropagation()}>
+            <div className="info-sheet-title">Info</div>
+            <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);setScreen("support");}}>
+              <span>{"\u2709"}</span><span>Support / FAQ</span>
+            </button>
+            <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);setScreen("privacy");}}>
+              <span>{"\u{1F512}"}</span><span>Privacy Policy</span>
+            </button>
+            <button className="info-sheet-cancel" onClick={()=>setInfoMenu(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
+
+      {/* ── SUPPORT / PRIVACY SCREENS ── */}
+      {screen==="support"&&<SupportScreen onClose={()=>setScreen(null)}/>}
+      {screen==="privacy"&&<PrivacyScreen onClose={()=>setScreen(null)}/>}
+
+      {/* ── MAIN CONTENT ── */}
+      <main className="main">
+        {tab==="myinfo"    &&<ProfileTab state={s} set={set} isConfigured={s._hasVisitedMyInfo}/>}
+        {tab==="dashboard"&&<DashboardTab state={s} isConfigured={s._hasVisitedMyInfo} go={go}/>}
+        {tab==="benefits" &&<BenefitsTab state={s} isConfigured={s._hasVisitedMyInfo} go={go}/>}
+        {tab==="planning" &&<PlanningTab state={s} set={set} go={go}/>}
+      </main>
+
+      {/* ── BOTTOM TAB BAR ── */}
+      <nav className="btabs">
+        <div className="btabs-scroll" style={{justifyContent:"space-around"}}>
+          {NAV.map(n=>(
+            <button key={n.id} className={"btab"+(tab===n.id?" on":"")}
+              style={{flex:"1 1 0",minWidth:0,width:"auto"}}
+              onClick={()=>go(n.id)}>
+              <span className="btab-ico">{n.ico}</span>
+              <span>{n.label}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+    </>
+  );
+}
+

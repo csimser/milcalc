@@ -1,0 +1,153 @@
+name: Build iOS
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    # macOS runner — this is how you build iOS without owning a Mac
+    # GitHub gives 2,000 free minutes/month; macOS minutes cost 10x
+    # A typical iOS build takes ~15-20 minutes
+    runs-on: macos-14  # Apple Silicon — fastest available
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+
+      - name: Sync Capacitor
+        run: npx cap sync ios
+
+      # ── Code Signing Setup ───────────────────────────────────────────────
+      # You need to add these secrets in GitHub repo settings:
+      #
+      #   IOS_CERTIFICATE_P12_BASE64
+      #     Your Apple Distribution certificate (.p12), base64 encoded:
+      #     cat certificate.p12 | base64 | pbcopy
+      #
+      #   IOS_CERTIFICATE_PASSWORD
+      #     Password you set when exporting the .p12
+      #
+      #   IOS_PROVISIONING_PROFILE_BASE64
+      #     Your App Store Distribution provisioning profile, base64 encoded:
+      #     cat profile.mobileprovision | base64 | pbcopy
+      #
+      #   IOS_TEAM_ID
+      #     Your 10-character Apple Developer Team ID (found in developer.apple.com)
+      #
+      # HOW TO GET THESE (without a Mac):
+      # 1. Sign in to developer.apple.com
+      # 2. Certificates, IDs & Profiles → create Distribution certificate
+      # 3. Download and store safely — you can't re-download
+      # 4. Create App ID matching your appId in capacitor.config.ts
+      # 5. Create App Store provisioning profile
+      # 6. Download .mobileprovision file
+      # 7. Encode both with base64 and add as GitHub Secrets
+      # NOTE: You WILL need to borrow or rent a Mac once to export the .p12 cert.
+      # Consider: https://www.macincloud.com ($1.50/hr) for the one-time setup.
+
+      - name: Install Apple certificate and provisioning profile
+        env:
+          BUILD_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_P12_BASE64 }}
+          P12_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+          BUILD_PROVISION_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          KEYCHAIN_PASSWORD: ${{ secrets.IOS_KEYCHAIN_PASSWORD }}
+        run: |
+          # Create temp keychain
+          KEYCHAIN_PATH=$RUNNER_TEMP/app-signing.keychain-db
+          security create-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+          security set-keychain-settings -lut 21600 $KEYCHAIN_PATH
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" $KEYCHAIN_PATH
+
+          # Import certificate
+          echo "$BUILD_CERTIFICATE_BASE64" | base64 --decode > $RUNNER_TEMP/build_certificate.p12
+          security import $RUNNER_TEMP/build_certificate.p12 \
+            -P "$P12_PASSWORD" \
+            -A -t cert -f pkcs12 \
+            -k $KEYCHAIN_PATH
+          security list-keychain -d user -s $KEYCHAIN_PATH
+
+          # Apply provisioning profile
+          mkdir -p ~/Library/MobileDevice/Provisioning\ Profiles
+          echo "$BUILD_PROVISION_PROFILE_BASE64" | base64 --decode \
+            > ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
+
+      - name: Build iOS archive
+        run: |
+          xcodebuild \
+            -workspace ios/App/App.xcworkspace \
+            -scheme App \
+            -configuration Release \
+            -destination generic/platform=iOS \
+            -archivePath $RUNNER_TEMP/App.xcarchive \
+            CODE_SIGN_STYLE=Manual \
+            DEVELOPMENT_TEAM="${{ secrets.IOS_TEAM_ID }}" \
+            archive
+
+      - name: Export IPA
+        run: |
+          cat > $RUNNER_TEMP/ExportOptions.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store</string>
+            <key>teamID</key>
+            <string>${{ secrets.IOS_TEAM_ID }}</string>
+            <key>uploadBitcode</key>
+            <false/>
+            <key>compileBitcode</key>
+            <false/>
+          </dict>
+          </plist>
+          EOF
+
+          xcodebuild \
+            -exportArchive \
+            -archivePath $RUNNER_TEMP/App.xcarchive \
+            -exportOptionsPlist $RUNNER_TEMP/ExportOptions.plist \
+            -exportPath $RUNNER_TEMP/ipa
+
+      - name: Upload IPA artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-release-ipa
+          path: ${{ runner.temp }}/ipa/*.ipa
+          retention-days: 30
+
+      # ── Auto-upload to App Store Connect (optional) ─────────────────────
+      # Requires APP_STORE_CONNECT_API_KEY_ID, APP_STORE_CONNECT_ISSUER_ID,
+      # and APP_STORE_CONNECT_API_KEY_BASE64 secrets
+      # Uncomment when ready:
+      #
+      # - name: Upload to App Store Connect
+      #   env:
+      #     APP_STORE_CONNECT_API_KEY: ${{ secrets.APP_STORE_CONNECT_API_KEY_BASE64 }}
+      #   run: |
+      #     echo "$APP_STORE_CONNECT_API_KEY" | base64 --decode > /tmp/AuthKey.p8
+      #     xcrun altool --upload-app \
+      #       --type ios \
+      #       --file "${{ runner.temp }}/ipa/*.ipa" \
+      #       --apiKey "${{ secrets.APP_STORE_CONNECT_API_KEY_ID }}" \
+      #       --apiIssuer "${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}"
+
+      - name: Clean up keychain and provisioning profile
+        if: always()
+        run: |
+          security delete-keychain $RUNNER_TEMP/app-signing.keychain-db
+          rm -f ~/Library/MobileDevice/Provisioning\ Profiles/profile.mobileprovision
