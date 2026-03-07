@@ -982,8 +982,15 @@ hr{border:none;border-top:1px solid var(--br);margin:16px 0}
 /* ── DEBRIEFED BRAND BADGE ── */
 .db-badge{position:fixed;top:0;left:0;right:0;z-index:300;
   background:#0a0c0f;border-bottom:1px solid #2a3040;
-  display:flex;align-items:center;justify-content:center;
-  height:28px;gap:6px}
+  display:flex;align-items:center;justify-content:space-between;
+  height:28px;padding:0 12px}
+.db-home{background:none;border:none;cursor:pointer;
+  font-family:Rajdhani,Inter,sans-serif;font-size:11px;font-weight:600;
+  color:#8b919e;letter-spacing:.03em;padding:0;line-height:28px;
+  white-space:nowrap;transition:color .15s}
+.db-home:hover{color:#d4a84b}
+.db-badge-center{display:flex;align-items:center;gap:6px;
+  position:absolute;left:50%;transform:translateX(-50%)}
 .db-badge-d{width:16px;height:16px;background:#d4a84b;border-radius:3px;
   display:flex;align-items:center;justify-content:center;
   font-weight:700;font-size:10px;color:#0a0c0f;font-family:system-ui,sans-serif;line-height:1}
@@ -2717,6 +2724,7 @@ export default function App(){
   const [screen,setScreen]=useState(null); // "support" | "privacy" | null
 
   const enterApp=()=>{try{localStorage.setItem(LANDING_KEY,"1");}catch{}setEntered(true);};
+  const exitApp=()=>{try{localStorage.removeItem(LANDING_KEY);}catch{}setEntered(false);};
 
   const defaults={
     separationType:"active",
@@ -2783,8 +2791,11 @@ export default function App(){
 
       {/* ── DEBRIEFED BRAND BADGE ── */}
       <div className="db-badge">
-        <div className="db-badge-d">D</div>
-        <div className="db-badge-txt">Part of <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer">Debriefed</a></div>
+        <button className="db-home" onClick={exitApp} aria-label="Back to home">{"\u2190"} MilCalc</button>
+        <div className="db-badge-center">
+          <div className="db-badge-d">D</div>
+          <div className="db-badge-txt">Part of <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer">Debriefed</a></div>
+        </div>
       </div>
 
       {/* ── TOP STATUS BAR ── */}

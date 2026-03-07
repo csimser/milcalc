@@ -7,6 +7,7 @@ export default defineConfig({
     outDir: 'dist',
     // Capacitor needs relative paths
     base: './',
+    sourcemap: false,
     rollupOptions: {
       output: {
         // Keep chunk sizes reasonable for mobile WebView
