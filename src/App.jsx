@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
+import { track, r100 } from "./analytics.js";
 
 // ── DFAS 2026 BASIC PAY TABLES (Effective January 1, 2026) ─────────────
 // Source: DFAS.mil — Page updated Jan/Feb 2026 (3.8% raise per FY2026 NDAA)
@@ -806,7 +807,7 @@ const ENROLL_OPTS = [
 // Source: va.gov/education/benefit-rates — Aug 2026–Jul 2027 cycle
 const GI_BILL_ONLINE_MHA = 1261;
 
-const FONTS=`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:wght@700&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');`;
+const FONTS=`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:wght@700&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');`;
 const CSS=`
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -906,16 +907,14 @@ html{background:var(--bg)}
   font-size:16px;color:var(--mut);pointer-events:none;z-index:1}
 .isuf{position:absolute;right:14px;font-size:13px;font-weight:600;
   color:var(--mut);pointer-events:none}
-input[type=number]{width:100%;border:1.5px solid var(--br);border-radius:10px;
+input.nf{width:100%;border:1.5px solid var(--br);border-radius:10px;
   padding:12px 14px;font-family:'IBM Plex Mono',monospace;font-size:16px;
   color:var(--ink);background:var(--bg);outline:none;
   min-height:48px;
-  transition:border-color .13s,box-shadow .13s;
-  -moz-appearance:textfield}
-input[type=number]::-webkit-inner-spin-button{opacity:.3}
-input[type=number].pre{padding-left:28px}
-input[type=number].suf{padding-right:48px}
-input[type=number]:focus{border-color:var(--nvm);box-shadow:0 0 0 3px rgba(194,120,42,.18)}
+  transition:border-color .13s,box-shadow .13s}
+input.nf.pre{padding-left:28px}
+input.nf.suf{padding-right:48px}
+input.nf:focus{border-color:var(--nvm);box-shadow:0 0 0 3px rgba(194,120,42,.18)}
 select{width:100%;border:1.5px solid var(--br);border-radius:10px;
   padding:12px 38px 12px 14px;font-family:Barlow,sans-serif;font-size:16px;
   color:var(--ink);background:var(--bg);outline:none;cursor:pointer;appearance:none;
@@ -980,6 +979,85 @@ hr{border:none;border-top:1px solid var(--br);margin:16px 0}
 .chip:active{background:var(--brm)}
 .chip.g{background:var(--gnb);color:var(--gn)}
 
+/* ── DEBRIEFED BRAND BADGE ── */
+.db-badge{position:fixed;top:0;left:0;right:0;z-index:300;
+  background:#0a0c0f;border-bottom:1px solid #2a3040;
+  display:flex;align-items:center;justify-content:center;
+  height:28px;gap:6px}
+.db-badge-d{width:16px;height:16px;background:#d4a84b;border-radius:3px;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:10px;color:#0a0c0f;font-family:system-ui,sans-serif;line-height:1}
+.db-badge-txt{font-family:Rajdhani,Inter,sans-serif;font-size:11px;font-weight:600;
+  color:#8b919e;letter-spacing:.03em}
+.db-badge-txt a{color:#d4a84b;text-decoration:none}
+.db-badge-txt a:hover{text-decoration:underline}
+.has-badge .sb{top:28px}
+.has-badge .main{margin-top:calc(var(--sh) + var(--safe-t) + 28px)}
+
+/* ── LANDING PAGE ── */
+.lp{min-height:100vh;background:#0a0c0f;color:#e8eaed;
+  font-family:Inter,Barlow,sans-serif;overflow-x:hidden}
+.lp *{box-sizing:border-box}
+.lp-nav{display:flex;align-items:center;justify-content:space-between;
+  padding:20px 24px;max-width:1100px;margin:0 auto}
+.lp-logo{display:flex;align-items:center;gap:10px}
+.lp-logo-icon{width:32px;height:32px;background:#d4a84b;border-radius:6px;
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:18px;color:#0a0c0f;font-family:system-ui,sans-serif}
+.lp-logo-name{font-family:Rajdhani,sans-serif;font-weight:700;font-size:22px;color:#e8eaed;letter-spacing:.02em}
+.lp-nav-cta{background:#d4a84b;color:#0a0c0f;border:none;border-radius:8px;
+  padding:10px 22px;font-family:Rajdhani,sans-serif;font-weight:700;font-size:15px;
+  cursor:pointer;transition:background .15s;letter-spacing:.02em}
+.lp-nav-cta:hover{background:#e4bc5e}
+
+.lp-hero{max-width:1100px;margin:0 auto;padding:60px 24px 40px;text-align:center}
+.lp-hero-badge{display:inline-flex;align-items:center;gap:6px;
+  background:rgba(212,168,75,.1);border:1px solid rgba(212,168,75,.2);
+  border-radius:20px;padding:6px 16px;margin-bottom:24px;
+  font-size:12px;color:#d4a84b;font-weight:600;letter-spacing:.04em}
+.lp-hero h1{font-family:Rajdhani,sans-serif;font-weight:700;
+  font-size:clamp(36px,6vw,64px);line-height:1.05;color:#e8eaed;margin-bottom:16px}
+.lp-hero h1 span{color:#d4a84b}
+.lp-hero-sub{font-size:clamp(16px,2.5vw,20px);color:#8b919e;line-height:1.6;
+  max-width:560px;margin:0 auto 36px}
+.lp-hero-cta{display:inline-flex;align-items:center;gap:8px;
+  background:#d4a84b;color:#0a0c0f;border:none;border-radius:12px;
+  padding:16px 36px;font-family:Rajdhani,sans-serif;font-weight:700;
+  font-size:18px;cursor:pointer;transition:all .2s;letter-spacing:.02em}
+.lp-hero-cta:hover{background:#e4bc5e;transform:translateY(-1px);
+  box-shadow:0 8px 24px rgba(212,168,75,.25)}
+.lp-hero-cta svg{width:20px;height:20px}
+
+.lp-features{max-width:1100px;margin:0 auto;padding:40px 24px 60px;
+  display:grid;grid-template-columns:1fr;gap:20px}
+@media(min-width:640px){.lp-features{grid-template-columns:1fr 1fr;gap:24px}}
+@media(min-width:900px){.lp-features{grid-template-columns:repeat(4,1fr)}}
+.lp-feat{background:#1a1f2a;border:1px solid #2a3040;border-radius:14px;
+  padding:28px 24px;transition:border-color .2s}
+.lp-feat:hover{border-color:#d4a84b}
+.lp-feat-ico{font-size:28px;margin-bottom:14px;display:block}
+.lp-feat h3{font-family:Rajdhani,sans-serif;font-weight:700;font-size:18px;
+  color:#e8eaed;margin-bottom:8px}
+.lp-feat p{font-size:14px;color:#8b919e;line-height:1.6}
+
+.lp-install{max-width:600px;margin:0 auto;padding:0 24px 40px;text-align:center}
+.lp-install-card{background:#1a1f2a;border:1px solid #2a3040;border-radius:14px;
+  padding:24px;display:flex;align-items:center;gap:16px;text-align:left}
+.lp-install-ico{font-size:28px;flex-shrink:0}
+.lp-install-txt h4{font-family:Rajdhani,sans-serif;font-weight:700;font-size:16px;
+  color:#e8eaed;margin:0 0 4px}
+.lp-install-txt p{font-size:13px;color:#8b919e;margin:0;line-height:1.5}
+.lp-install-btn{background:#d4a84b;color:#0a0c0f;border:none;border-radius:8px;
+  padding:10px 20px;font-family:Rajdhani,sans-serif;font-weight:700;font-size:14px;
+  cursor:pointer;flex-shrink:0;transition:background .15s}
+.lp-install-btn:hover{background:#e4bc5e}
+
+.lp-footer{border-top:1px solid #2a3040;padding:28px 24px;text-align:center;
+  max-width:1100px;margin:0 auto}
+.lp-footer p{font-size:13px;color:#5a6070;line-height:1.6}
+.lp-footer a{color:#d4a84b;text-decoration:none}
+.lp-footer a:hover{text-decoration:underline}
+
 /* ── DESKTOP BREAKPOINT ── */
 @media(min-width:768px){
   .main{padding:28px 32px calc(var(--tabh) + var(--safe-b) + 28px);max-width:720px}
@@ -988,6 +1066,29 @@ hr{border:none;border-top:1px solid var(--br);margin:16px 0}
   .g3{grid-template-columns:1fr 1fr 1fr}
   .bsv{font-size:34px}
   .btab{min-width:80px;width:auto;padding:0 6px}
+}
+
+/* ── LARGE DESKTOP ── */
+@media(min-width:1024px){
+  .main{max-width:1060px;padding:32px 40px calc(var(--tabh) + var(--safe-b) + 32px)}
+  .sb{max-width:1060px;left:50%;transform:translateX(-50%);border-radius:0 0 12px 12px}
+  .has-badge .sb{max-width:1060px;left:50%;transform:translateX(-50%)}
+  .btabs{max-width:600px;left:50%;transform:translateX(-50%);
+    border-radius:12px 12px 0 0;border-left:1px solid var(--br);border-right:1px solid var(--br)}
+  .card{padding:24px 28px}
+  .sh2 h2{font-size:24px}
+  .modal-body{max-width:720px}
+  .info-sheet{max-width:540px}
+  .dt{font-size:14px}
+  .dt td{padding:10px 12px}
+  .dt th{padding:8px 12px;font-size:10px}
+}
+
+/* ── DESKTOP DASHBOARD LAYOUT ── */
+@media(min-width:900px){
+  .dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start}
+  .dash-grid>.card{margin-bottom:0}
+  .dash-full{grid-column:1/-1}
 }
 
 /* ── INFO BUTTON ── */
@@ -1136,6 +1237,104 @@ function DebriefedGeneralCard() {
   );
 }
 
+// ── LANDING PAGE ────────────────────────────────────────────────────────
+function LandingPage({onEnter}){
+  const [installPrompt,setInstallPrompt]=useState(null);
+  const [showInstallNudge,setShowInstallNudge]=useState(false);
+
+  useEffect(()=>{
+    track("Page Viewed",{page:"Landing"});
+    const handler=e=>{e.preventDefault();setInstallPrompt(e);setShowInstallNudge(true);};
+    window.addEventListener('beforeinstallprompt',handler);
+    // iOS detection — no beforeinstallprompt event
+    const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+    const isStandalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;
+    if(isIOS&&!isStandalone) setShowInstallNudge(true);
+    return ()=>window.removeEventListener('beforeinstallprompt',handler);
+  },[]);
+
+  const handleInstall=async()=>{
+    if(installPrompt){
+      track("PWA Install Prompted",{});
+      installPrompt.prompt();
+      const choice=await installPrompt.userChoice;
+      if(choice.outcome==="accepted") track("PWA Installed",{});
+      setInstallPrompt(null);
+    }
+  };
+
+  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
+
+  return(
+    <div className="lp">
+      <nav className="lp-nav">
+        <div className="lp-logo">
+          <div className="lp-logo-icon">M</div>
+          <div className="lp-logo-name">MilCalc</div>
+        </div>
+        <button className="lp-nav-cta" onClick={()=>{track("CTA Clicked",{location:"nav"});onEnter();}}>Open Calculator</button>
+      </nav>
+
+      <div className="lp-hero">
+        <div className="lp-hero-badge">
+          <span style={{width:14,height:14,background:'#d4a84b',borderRadius:3,display:'inline-flex',alignItems:'center',justifyContent:'center',fontSize:9,fontWeight:700,color:'#0a0c0f'}}>D</span>
+          Part of the Debriefed product family
+        </div>
+        <h1>Your military retirement,<br/><span>fully decoded.</span></h1>
+        <p className="lp-hero-sub">Pension, VA disability, TRICARE, GI Bill, taxes, and income gap analysis — all in one calculator built by veterans, for veterans.</p>
+        <button className="lp-hero-cta" onClick={()=>{track("CTA Clicked",{location:"hero"});onEnter();}}>
+          Open Calculator
+          <svg viewBox="0 0 20 20" fill="currentColor"><path fillRule="evenodd" d="M3 10a.75.75 0 01.75-.75h10.638L10.23 5.29a.75.75 0 111.04-1.08l5.5 5.25a.75.75 0 010 1.08l-5.5 5.25a.75.75 0 11-1.04-1.08l4.158-3.96H3.75A.75.75 0 013 10z"/></svg>
+        </button>
+      </div>
+
+      <div className="lp-features">
+        <div className="lp-feat">
+          <span className="lp-feat-ico">{"\u{1F3D6}"}</span>
+          <h3>Pension Calculator</h3>
+          <p>High-3, BRS, REDUX, medical retirement, and Reserve/Guard points-based pension with SBP analysis.</p>
+        </div>
+        <div className="lp-feat">
+          <span className="lp-feat-ico">{"\u{1FA96}"}</span>
+          <h3>VA Disability</h3>
+          <p>2026 VA compensation rates, combined rating calculator (VA math), CRDP/CRSC eligibility, and tax-equivalent value.</p>
+        </div>
+        <div className="lp-feat">
+          <span className="lp-feat-ico">{"\u{1F4CA}"}</span>
+          <h3>Tax Planning</h3>
+          <p>Federal tax estimates, state military retirement exemptions for all 50 states, and long-term tax impact analysis.</p>
+        </div>
+        <div className="lp-feat">
+          <span className="lp-feat-ico">{"\u{1F4B0}"}</span>
+          <h3>Income Gap</h3>
+          <p>See how your benefits stack up against your target income. Get salary benchmarks and GS pay grade references.</p>
+        </div>
+      </div>
+
+      {showInstallNudge&&(
+        <div className="lp-install">
+          <div className="lp-install-card">
+            <div className="lp-install-ico">{"\u{1F4F1}"}</div>
+            <div className="lp-install-txt">
+              <h4>Add to Home Screen</h4>
+              <p>{isIOS
+                ?"Tap the share button, then \"Add to Home Screen\" for the best experience."
+                :"Install MilCalc for instant access — works offline."
+              }</p>
+            </div>
+            {installPrompt&&<button className="lp-install-btn" onClick={()=>{track("Add to Home Screen Tapped",{});handleInstall();}}>Install</button>}
+          </div>
+        </div>
+      )}
+
+      <footer className="lp-footer">
+        <p>Part of the <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer">Debriefed</a> product family.  Built by veterans, for veterans.</p>
+        <p style={{marginTop:8}}>Not affiliated with DoD, DFAS, VA, or any government agency. All calculations are estimates.</p>
+      </footer>
+    </div>
+  );
+}
+
 // ── ATOMS ──────────────────────────────────────────────────────────────
 const C={green:"var(--gn)",red:"var(--rd)",navy:"var(--nvm)",gold:"var(--nvm)",ink:"var(--ink)"};
 
@@ -1154,10 +1353,12 @@ function NF({label,value,onChange,min,max,step=1,pre,suf,hint}){
           aria-label="Decrease">-</button>
         <div className="iwrap" style={{flex:1,minWidth:0}}>
           {pre&&<span className="ipre">{pre}</span>}
-          <input type="number" inputMode="decimal" value={value} min={min} max={max} step={step}
-            className={(pre?"pre ":"")+(suf?"suf":"")}
+          <input type="text" inputMode={step%1!==0?"decimal":"numeric"} value={value}
+            className={"nf"+(pre?" pre":"")+(suf?" suf":"")}
             style={{borderRadius:0,textAlign:"center"}}
-            onChange={e=>onChange(Number(e.target.value))}/>
+            onFocus={e=>e.target.select()}
+            onChange={e=>{const v=e.target.value;if(v===""||v==="-"){onChange(min!=null?Math.max(min,0):0);return;}
+              const n=Number(v);if(!isNaN(n)){let clamped=n;if(min!=null)clamped=Math.max(min,clamped);if(max!=null)clamped=Math.min(max,clamped);onChange(clamped);}}}/>
           {suf&&<span className="isuf">{suf}</span>}
         </div>
         <button type="button" onClick={inc} style={{...btnS,borderRadius:"0 10px 10px 0",borderLeft:"none"}}
@@ -1309,14 +1510,15 @@ function DashboardTab({state,isConfigured,go}){
         <p>{separationType==="veteran"?"Veteran":separationType==="medical"?"Medical Retiree":separationType==="reserve"?"Reserve/Guard":"Active Duty"} / {retType} / {yos} YOS / {selectedState}</p>
       </div>
 
+      <div className="dash-grid">
       {/* Hero stat cards — 2 wide */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
-        <div className="card" style={{textAlign:"center",padding:"16px 10px"}}>
+      <div className="dash-full" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
+        <div className="card" style={{textAlign:"center",padding:"16px 10px",marginBottom:0}}>
           <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"var(--fnt)",marginBottom:6}}>{pensionLabel}</div>
           <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:600,color:separationType==="veteran"?"var(--mut)":"var(--nv)",lineHeight:1}}>{separationType==="veteran"?"\u2014":fmt(atP)}</div>
           <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>{separationType==="veteran"?"N/A":separationType==="reserve"&&!isReserveEligibleNow?"projected":"after tax"}</div>
         </div>
-        <div className="card" style={{textAlign:"center",padding:"16px 10px"}}>
+        <div className="card" style={{textAlign:"center",padding:"16px 10px",marginBottom:0}}>
           <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"var(--fnt)",marginBottom:6}}>VA Comp / mo</div>
           <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:600,color:"var(--gn)",lineHeight:1}}>{fmt(vaM)}</div>
           <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>tax-free</div>
@@ -1324,7 +1526,7 @@ function DashboardTab({state,isConfigured,go}){
       </div>
 
       {/* Grand total card */}
-      <div className="card" style={{marginBottom:14}}>
+      <div className="card dash-full" style={{marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:10}}>
           <div>
             <div className="bsl">Grand Total / mo</div>
@@ -1344,7 +1546,7 @@ function DashboardTab({state,isConfigured,go}){
       </div>
 
       {/* Gap / surplus */}
-      <div className="card" style={{marginBottom:14}}>
+      <div className="card dash-full" style={{marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
           <span>Benefits vs. target ({fmt(desiredIncome)}/mo)</span>
           <span>{Math.min(100,(totalAfterIns/desiredIncome)*100).toFixed(0)}%</span>
@@ -1360,7 +1562,7 @@ function DashboardTab({state,isConfigured,go}){
       </div>
 
       {/* Status badges */}
-      <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
+      <div className="dash-full" style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
         {elig&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gnb)",color:"var(--gn)",fontSize:12,fontWeight:600}}>CRDP Eligible</span>}
         {separationType==="veteran"&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gdb)",color:"var(--gd)",fontSize:12,fontWeight:600}}>Veteran (no pension)</span>}
         <span style={{padding:"6px 12px",borderRadius:20,background:si.ok?"var(--gnb)":"var(--rdb)",color:si.ok?"var(--gn)":"var(--rd)",fontSize:12,fontWeight:600}}>{selectedState}: {si.ok?"Tax-Exempt":"Taxed"}</span>
@@ -1368,7 +1570,7 @@ function DashboardTab({state,isConfigured,go}){
       </div>
 
       {/* Pension quick breakdown */}
-      <div className="card" style={{marginBottom:14}}>
+      <div className="card dash-full" style={{marginBottom:14}}>
         <div className="cttl">{separationType==="veteran"?"Income Summary":"Pension Breakdown"}</div>
         {separationType==="veteran"?(
           <div className="ib ib-gd" style={{fontSize:13}}>No DoD retirement pay. Your income comes from VA compensation, GI Bill, and civilian earnings.</div>
@@ -1394,6 +1596,8 @@ function DashboardTab({state,isConfigured,go}){
           </>
         )}
       </div>
+
+      </div>{/* close dash-grid */}
 
       {/* Debriefed promos */}
       {gap>0&&<DebriefedGapCard gap={gap}/>}
@@ -1854,6 +2058,25 @@ function PlanningTab({state,set,go}){
 
   const [section,setSection]=useState("taxes");
 
+  // ── Analytics ──
+  const prevCOL=useRef(null);
+  useEffect(()=>{
+    const key=colFrom+"|"+colTo;
+    if(section==="col"&&colFrom!==colTo&&key!==prevCOL.current){
+      prevCOL.current=key;
+      track("COL City Compared",{city_from:colFrom,city_to:colTo,index_difference:ti-fi});
+    }
+  },[section,colFrom,colTo,fi,ti]);
+
+  const prevGap=useRef(null);
+  useEffect(()=>{
+    const key=desiredIncome+"|"+totalInc;
+    if(section==="gap"&&desiredIncome>0&&key!==prevGap.current){
+      prevGap.current=key;
+      track("Income Gap Calculated",{target_income:r100(desiredIncome),total_benefits:r100(totalInc),gap_amount:r100(gap),salary_needed:r100(sal*12)});
+    }
+  },[section,desiredIncome,totalInc,gap,sal]);
+
   return(
     <div className="fu">
       <div className="sh2"><h2>Planning Tools</h2><p>Explore taxes, cost of living, and income gap scenarios.</p></div>
@@ -2007,6 +2230,35 @@ function ProfileTab({state,set,isConfigured}){
   const [addR,setAddR]=useState(10);
   const [confirmReset,setConfirmReset]=useState(false);
   const derivedPay=usePayGrade?lookupPay(payGrade,yos):null;
+  const h3Prof=(usePayGrade&&derivedPay)?derivedPay:high3;
+  const pensionMo=pensionBySepType(separationType,retType,yos,h3Prof,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
+
+  // ── Analytics ──
+  const prevPension=useRef(null);
+  useEffect(()=>{
+    if(yos>0&&pensionMo>0&&pensionMo!==prevPension.current){
+      prevPension.current=pensionMo;
+      track("Pension Calculated",{years_of_service:yos,retirement_type:separationType==="veteran"?"none":retType,monthly_amount:r100(pensionMo)});
+    }
+  },[yos,retType,payGrade,separationType,high3,medDodPct,pensionMo]);
+
+  const prevVA=useRef(null);
+  useEffect(()=>{
+    if(vaRating>0&&vaRating!==prevVA.current){
+      prevVA.current=vaRating;
+      const vaAmt=(VA[vaRating]?.[dk(vaDeps)]||VA[vaRating]?.s)||0;
+      track("VA Rating Selected",{rating:vaRating,dependency_status:vaDeps,monthly_amount:r100(vaAmt)});
+    }
+  },[vaRating,vaDeps]);
+
+  const prevState=useRef(null);
+  useEffect(()=>{
+    if(selectedState&&selectedState!==prevState.current){
+      prevState.current=selectedState;
+      const si=STATES[selectedState]||{ok:true};
+      track("State Selected",{state:selectedState,taxes_military_retirement:!si.ok});
+    }
+  },[selectedState]);
 
   // Mark as visited on first render
   if(!state._hasVisitedMyInfo) setTimeout(()=>set("_hasVisitedMyInfo",true),0);
@@ -2455,10 +2707,16 @@ function loadTab(){
   }catch{return "dashboard";}
 }
 
+const LANDING_KEY="milcalc_entered";
+function hasEnteredApp(){try{return localStorage.getItem(LANDING_KEY)==="1";}catch{return false;}}
+
 export default function App(){
+  const [entered,setEntered]=useState(hasEnteredApp);
   const [tab,setTab]=useState(loadTab);
   const [infoMenu,setInfoMenu]=useState(false);
   const [screen,setScreen]=useState(null); // "support" | "privacy" | null
+
+  const enterApp=()=>{try{localStorage.setItem(LANDING_KEY,"1");}catch{}setEntered(true);};
 
   const defaults={
     separationType:"active",
@@ -2476,7 +2734,14 @@ export default function App(){
   };
   const [s,setS]=useState(()=>({...defaults,...(loadSaved()||{})}));
   const set=(k,v)=>setS(x=>{const n={...x,[k]:v};try{localStorage.setItem(STORAGE_KEY,JSON.stringify(n));}catch{}return n;});
-  const go=id=>{setTab(id);try{localStorage.setItem(TAB_KEY,id);}catch{}window.scrollTo(0,0);};
+  const tabRef=useRef(tab);
+  const go=id=>{
+    const TAB_NAMES={"myinfo":"My Info","dashboard":"Dashboard","benefits":"Benefits","planning":"Planning"};
+    track("Tab Changed",{from:TAB_NAMES[tabRef.current]||tabRef.current,to:TAB_NAMES[id]||id});
+    track("Page Viewed",{page:TAB_NAMES[id]||id});
+    tabRef.current=id;
+    setTab(id);try{localStorage.setItem(TAB_KEY,id);}catch{}window.scrollTo(0,0);
+  };
 
   // Derived values for status bar
   const derivedAppPay=s.usePayGrade?lookupPay(s.payGrade,s.yos):null;
@@ -2509,10 +2774,18 @@ export default function App(){
   const insuranceMo=Math.round(healthPrem2+(s.useVgli?vgliMonthly(s.vgliCoverage,s.vgliAge):0)+(s.otherLifePremium||0));
   const gap=s.desiredIncome-(total-insuranceMo);
 
+  if(!entered) return(<><style>{FONTS}</style><style>{CSS}</style><LandingPage onEnter={enterApp}/></>);
+
   return(
-    <>
+    <div className="has-badge">
       <style>{FONTS}</style>
       <style>{CSS}</style>
+
+      {/* ── DEBRIEFED BRAND BADGE ── */}
+      <div className="db-badge">
+        <div className="db-badge-d">D</div>
+        <div className="db-badge-txt">Part of <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer">Debriefed</a></div>
+      </div>
 
       {/* ── TOP STATUS BAR ── */}
       <div className="sb">
@@ -2575,7 +2848,7 @@ export default function App(){
           ))}
         </div>
       </nav>
-    </>
+    </div>
   );
 }
 
