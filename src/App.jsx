@@ -1268,62 +1268,63 @@ hr{border:none;border-top:1px solid var(--br);margin:16px 0}
 .ep-dismiss:active{color:var(--ink)}
 
 /* ── SHARE PAGE ── */
-.share-page{min-height:100vh;min-height:100dvh;background:var(--nv);color:#fff;
+.share-page{min-height:100vh;min-height:100dvh;background:#0A0E1A;color:#F0F4F8;
   display:flex;flex-direction:column;align-items:center;padding:0 16px 48px}
-.share-back{align-self:flex-start;padding:16px 0;font-size:14px;color:rgba(255,255,255,.6);
+.share-back{align-self:flex-start;padding:16px 0;font-size:14px;color:#7A8AA0;
   background:none;border:none;cursor:pointer;font-family:'Barlow',sans-serif;font-weight:600}
 .share-back:active{opacity:.7}
 .share-hero{text-align:center;max-width:480px;margin:32px auto 28px}
-.share-hero h1{font-family:'Libre Baskerville',serif;font-size:28px;color:#fff;
+.share-hero h1{font-family:'Libre Baskerville',serif;font-size:28px;color:#F0F4F8;
   margin:0 0 10px;line-height:1.2}
-.share-hero p{font-size:15px;color:rgba(255,255,255,.65);line-height:1.55;margin:0}
+.share-hero p{font-size:15px;color:#7A8AA0;line-height:1.55;margin:0}
 .share-flow{max-width:480px;width:100%}
-.share-input{width:100%;padding:14px 16px;border:2px solid rgba(255,255,255,.15);border-radius:10px;
-  background:rgba(255,255,255,.08);color:#fff;font-size:16px;font-family:'Barlow',sans-serif;
+.share-input{width:100%;padding:14px 16px;border:1px solid rgba(255,255,255,.08);border-radius:10px;
+  background:#1A2236;color:#F0F4F8;font-size:16px;font-family:'Barlow',sans-serif;
   outline:none;box-sizing:border-box;transition:border-color .15s}
-.share-input:focus{border-color:var(--gd)}
-.share-input::placeholder{color:rgba(255,255,255,.35)}
-.share-link-box{margin-top:20px;padding:16px;border:2px solid var(--gd);border-radius:12px;
-  background:rgba(255,255,255,.06);text-align:center}
-.share-link-url{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--gd);
+.share-input:focus{border-color:#C9913A}
+.share-input::placeholder{color:#7A8AA0}
+.share-link-box{margin-top:20px;padding:16px;border:1px solid rgba(255,255,255,.08);border-radius:12px;
+  background:#141C2E;text-align:center}
+.share-link-url{font-family:'IBM Plex Mono',monospace;font-size:13px;color:#C9913A;
   word-break:break-all;line-height:1.5;margin-bottom:14px}
 .share-copy-big{display:block;width:100%;padding:14px 0;border:none;border-radius:10px;
-  background:var(--gd);color:var(--nv);font-family:'Barlow Condensed',sans-serif;
+  background:#C9913A;color:#0A0E1A;font-family:'Barlow Condensed',sans-serif;
   font-size:16px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  cursor:pointer;transition:opacity .13s}
-.share-copy-big:active{opacity:.85}
+  cursor:pointer;transition:background .13s}
+.share-copy-big:active{background:#E4A94A}
 .share-qr{display:flex;justify-content:center;margin-top:24px;padding:16px;
-  background:#fff;border-radius:12px;width:fit-content;margin-left:auto;margin-right:auto}
+  background:#fff;border-radius:10px;width:fit-content;margin-left:auto;margin-right:auto;
+  outline:1px solid rgba(255,255,255,.08);outline-offset:6px}
 .share-btns{display:flex;gap:0;margin-top:28px;justify-content:center;
-  border:1px solid rgba(255,255,255,.15);border-radius:10px;overflow:hidden}
+  border:1px solid rgba(255,255,255,.08);border-radius:10px;overflow:hidden}
 .share-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
-  padding:12px 8px;border:none;border-right:1px solid rgba(255,255,255,.15);
-  background:rgba(255,255,255,.06);color:rgba(255,255,255,.85);font-family:'Barlow',sans-serif;
+  padding:12px 8px;border:none;border-right:1px solid rgba(255,255,255,.08);
+  background:#141C2E;color:#F0F4F8;font-family:'Barlow',sans-serif;
   font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;
   transition:background .13s;-webkit-tap-highlight-color:transparent}
 .share-btn:last-child{border-right:none}
-.share-btn:active,.share-btn:hover{background:rgba(255,255,255,.14)}
+.share-btn:active,.share-btn:hover{background:#1A2236}
 .share-org-toggle{margin-top:36px;display:flex;align-items:center;justify-content:center;
-  gap:6px;background:none;border:none;color:rgba(255,255,255,.45);font-family:'Barlow',sans-serif;
+  gap:6px;background:none;border:none;color:#7A8AA0;font-family:'Barlow',sans-serif;
   font-size:13px;font-weight:600;cursor:pointer;padding:8px 0;width:100%}
 .share-org-toggle:active{opacity:.7}
 .share-org-toggle svg{transition:transform .2s}
 .share-org-section{max-width:480px;width:100%;margin-top:16px;padding:20px;
-  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px}
-.share-org-section p{font-size:13px;color:rgba(255,255,255,.55);line-height:1.5;margin:0 0 14px}
+  background:#141C2E;border:1px solid rgba(255,255,255,.08);border-radius:12px}
+.share-org-section p{font-size:13px;color:#7A8AA0;line-height:1.5;margin:0 0 14px}
 .share-orgs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
-.share-org{padding:7px 14px;border:1px solid rgba(255,255,255,.2);border-radius:20px;
-  background:transparent;font-size:13px;color:rgba(255,255,255,.75);font-weight:500;
+.share-org{padding:7px 14px;border:1px solid rgba(255,255,255,.08);border-radius:20px;
+  background:transparent;font-size:13px;color:#7A8AA0;font-weight:500;
   cursor:pointer;transition:border-color .13s,background .13s;font-family:'Barlow',sans-serif;
   -webkit-tap-highlight-color:transparent}
-.share-org:active,.share-org.on{border-color:var(--gd);background:rgba(255,255,255,.1);color:#fff}
+.share-org:active,.share-org.on{border-color:#C9913A;background:rgba(201,145,58,.1);color:#F0F4F8}
 .share-org-url{margin-top:10px}
 .share-org-url .share-link-url{font-size:12px;margin-bottom:10px}
-.share-blurb{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;
-  padding:14px;font-size:13px;color:rgba(255,255,255,.65);line-height:1.6;font-style:italic;
+.share-blurb{background:#1A2236;border:1px solid rgba(255,255,255,.08);border-radius:10px;
+  padding:14px;font-size:13px;color:#7A8AA0;line-height:1.6;font-style:italic;
   margin-top:14px}
-.share-footer{margin-top:40px;text-align:center;font-size:12px;color:rgba(255,255,255,.3)}
-.share-footer a{color:rgba(255,255,255,.45);text-decoration:none}
+.share-footer{margin-top:40px;text-align:center;font-size:12px;color:#7A8AA0}
+.share-footer a{color:#C9913A;text-decoration:none}
 `;
 
 // ── DEBRIEFED CTA CARDS ───────────────────────────────────────────────
