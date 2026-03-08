@@ -1242,47 +1242,30 @@ hr{border:none;border-top:1px solid var(--br);margin:16px 0}
 .fb-submit:disabled{opacity:.4;cursor:default}
 .fb-success{text-align:center;padding:28px 16px;color:var(--gn);font-weight:600;font-size:15px}
 
-/* ── RATING BANNER ── */
-.rating-banner{position:fixed;bottom:calc(var(--tabh) + var(--safe-b) + 8px);
-  left:12px;right:12px;z-index:190;display:flex;align-items:center;
-  justify-content:space-between;gap:12px;padding:12px 16px;
-  background:var(--nvl);border:1px solid rgba(194,120,42,.3);
-  border-radius:12px;animation:fu .25s ease-out both;
-  box-shadow:0 4px 20px rgba(0,0,0,.3)}
-.rating-banner-txt{font-size:14px;color:var(--ink);font-weight:500;
-  cursor:pointer;flex:1;text-decoration:none}
-.rating-banner-txt:active{opacity:.7}
-.rating-banner-x{width:32px;height:32px;border:none;background:none;
-  color:var(--mut);font-size:18px;cursor:pointer;flex-shrink:0;
-  display:flex;align-items:center;justify-content:center;border-radius:50%}
-.rating-banner-x:active{background:rgba(255,255,255,.05)}
-@media(min-width:768px){.rating-banner{max-width:500px;left:50%;right:auto;
-  transform:translateX(-50%)}}
-
-/* ── PARTNERS SCREEN ── */
-.ptr-hero{margin-bottom:24px}
-.ptr-hero h2{font-family:'Libre Baskerville',serif;font-size:22px;color:var(--ink);
-  margin-bottom:6px}
-.ptr-hero p{font-size:14px;color:var(--mut);line-height:1.55}
-.ptr-blurb{background:var(--card);border:1px solid var(--br);border-radius:12px;
-  padding:16px;margin-bottom:20px;font-size:14px;color:var(--ink);line-height:1.6;
-  font-style:italic}
-.ptr-builder{background:var(--card);border:1px solid var(--br);border-radius:12px;
-  padding:20px 16px;margin-bottom:24px}
-.ptr-url{display:flex;gap:8px;margin-top:12px}
-.ptr-url-box{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--br);
-  border-radius:8px;background:var(--bg);color:var(--nvm);font-family:'IBM Plex Mono',monospace;
-  font-size:12px;word-break:break-all;line-height:1.4}
-.ptr-copy{flex-shrink:0;padding:10px 16px;border:none;border-radius:8px;
-  background:var(--nv);color:var(--ink);font-family:'Barlow Condensed',sans-serif;
-  font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  cursor:pointer;white-space:nowrap;transition:opacity .13s}
-.ptr-copy:active{opacity:.8}
-.ptr-orgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
-.ptr-org{padding:8px 14px;border:1px solid var(--br);border-radius:20px;
-  background:var(--card);font-size:13px;color:var(--ink);font-weight:500;
-  cursor:pointer;transition:border-color .13s;-webkit-tap-highlight-color:transparent}
-.ptr-org:active,.ptr-org.on{border-color:var(--nv);background:var(--nvl)}
+/* ── ENGAGEMENT POPUP ── */
+.ep-overlay{position:fixed;inset:0;z-index:700;display:flex;align-items:center;
+  justify-content:center;padding:20px;backdrop-filter:blur(6px);
+  -webkit-backdrop-filter:blur(6px);background:rgba(10,14,26,.65);
+  animation:ep-in .25s ease-out both}
+@keyframes ep-in{from{opacity:0}to{opacity:1}}
+.ep-modal{background:#1a2640;border:1px solid rgba(194,120,42,.35);
+  border-radius:18px;width:100%;max-width:380px;padding:32px 24px 24px;
+  box-shadow:0 12px 40px rgba(0,0,0,.5);animation:ep-slide .3s ease-out both}
+@keyframes ep-slide{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+.ep-title{font-family:'Libre Baskerville',serif;font-size:22px;color:var(--ink);
+  text-align:center;margin-bottom:20px;line-height:1.3}
+.ep-options{display:flex;flex-direction:column;gap:10px}
+.ep-opt{display:flex;align-items:center;gap:14px;width:100%;padding:16px;
+  border:1px solid var(--br);border-radius:12px;background:rgba(31,45,69,.6);
+  color:var(--ink);font-family:Barlow,sans-serif;font-size:15px;font-weight:600;
+  cursor:pointer;text-decoration:none;transition:border-color .15s,background .15s;
+  -webkit-tap-highlight-color:transparent}
+.ep-opt:hover,.ep-opt:active{border-color:var(--nv);background:var(--nvl)}
+.ep-opt-ico{font-size:22px;width:32px;text-align:center;flex-shrink:0}
+.ep-dismiss{display:block;width:100%;margin-top:18px;padding:10px;border:none;
+  background:transparent;color:var(--mut);font-family:Barlow,sans-serif;
+  font-size:13px;cursor:pointer;text-align:center}
+.ep-dismiss:active{color:var(--ink)}
 
 /* ── SHARE PAGE ── */
 .share-page{min-height:100vh;min-height:100dvh;background:var(--bg);color:var(--ink);
@@ -1322,6 +1305,16 @@ hr{border:none;border-top:1px solid var(--br);margin:16px 0}
 .share-btn:active,.share-btn:hover{border-color:var(--nv);background:var(--nvl)}
 .share-footer{margin-top:32px;text-align:center;font-size:12px;color:var(--mut)}
 .share-footer a{color:var(--nvm);text-decoration:none}
+.share-section-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;
+  font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);
+  margin-bottom:10px}
+.share-blurb{background:var(--card);border:1px solid var(--br);border-radius:12px;
+  padding:16px;font-size:14px;color:var(--ink);line-height:1.6;font-style:italic}
+.share-orgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.share-org{padding:8px 14px;border:1px solid var(--br);border-radius:20px;
+  background:var(--card);font-size:13px;color:var(--ink);font-weight:500;
+  cursor:pointer;transition:border-color .13s;-webkit-tap-highlight-color:transparent}
+.share-org:active,.share-org.on{border-color:var(--nv);background:var(--nvl)}
 `;
 
 // ── DEBRIEFED CTA CARDS ───────────────────────────────────────────────
@@ -3004,72 +2997,28 @@ function PrivacyScreen({onClose}){
   );
 }
 
-// ── PARTNERS SCREEN ──────────────────────────────────────────────────
-const PARTNER_ORGS=["VFW","DAV","AMVETS","American Legion","MOAA","Military OneSource","USO","r/MilitaryFinance"];
-function PartnersScreen({onClose}){
-  const [orgName,setOrgName]=useState("");
-  const [copied,setCopied]=useState(false);
-  const slug=orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"partner";
-  const url=`https://milcalc.app?utm_source=${slug}&utm_medium=website&utm_campaign=member-tools`;
-  const copyUrl=()=>{
-    navigator.clipboard.writeText(url).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>{});
-    track("Partner Link Copied",{org:orgName||slug});
-  };
-  return(
-    <div className="modal-screen">
-      <div className="modal-hdr">
-        <button className="modal-back" onClick={onClose} aria-label="Close">&larr;</button>
-        <div className="modal-htxt">Partners</div>
-      </div>
-      <div className="modal-body">
-        <div className="ptr-hero">
-          <h2>Share MilCalc with your community</h2>
-          <p>Help fellow veterans plan their retirement finances. MilCalc is free and always will be.</p>
-        </div>
-        <div className="ptr-blurb">
-          &ldquo;MilCalc is a free military retirement calculator covering pension, VA disability, CRDP/CRSC, state taxes, cost of living, and income gap analysis. No account required. No ads.&rdquo;
-        </div>
-        <div className="ptr-builder">
-          <div className="sup-contact-lbl">Create Your Tracking Link</div>
-          <label className="fb-label">Organization Name</label>
-          <input className="fb-input" value={orgName} onChange={e=>setOrgName(e.target.value)}
-            placeholder="e.g. VFW Post 1234"/>
-          <div className="ptr-url">
-            <div className="ptr-url-box">{url}</div>
-            <button className="ptr-copy" onClick={copyUrl}>{copied?"Copied!":"Copy"}</button>
-          </div>
-          <div style={{marginTop:20}}>
-            <div className="sup-contact-lbl">Suggested Organizations</div>
-            <div className="ptr-orgs">
-              {PARTNER_ORGS.map(o=>(
-                <button key={o} className={"ptr-org"+(orgName===o?" on":"")}
-                  onClick={()=>setOrgName(o)}>{o}</button>
-              ))}
-            </div>
-          </div>
-        </div>
-        <div className="modal-footer">
-          <p>MilCalc v{APP_VERSION}</p>
-          <p>Part of the <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer" style={{color:"var(--nvm)",textDecoration:"none"}}>Debriefed</a> product family.</p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ── SHARE PAGE ─────────────────────────────────────────────────────────
+// ── SHARE PAGE (unified: personal link + org builder + blurb + orgs) ──
+const SHARE_ORGS=["VFW","DAV","AMVETS","American Legion","MOAA","Military OneSource","USO","r/MilitaryFinance"];
 function SharePage(){
   const [name,setName]=useState("");
+  const [orgName,setOrgName]=useState("");
   const [copied,setCopied]=useState(false);
+  const [orgCopied,setOrgCopied]=useState(false);
   const [generated,setGenerated]=useState(false);
   const slug=name.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"friend";
   const url=`https://milcalc.app?utm_source=${slug}&utm_medium=share&utm_campaign=referral`;
+  const orgSlug=orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"partner";
+  const orgUrl=`https://milcalc.app?utm_source=${orgSlug}&utm_medium=website&utm_campaign=member-tools`;
   const emailSubject=encodeURIComponent("Free military retirement calculator");
   const emailBody=encodeURIComponent(`Hey \u2014 thought you'd find this useful. MilCalc is a free calculator that figures out your pension, VA disability, state taxes, and income gap all in one place. No account needed: ${url}`);
   const tweetText=encodeURIComponent(`Free military retirement calculator \u2014 pension, VA disability, state taxes, income gap, all in one place. No account needed.\n${url}`);
   const copyUrl=()=>{
     navigator.clipboard.writeText(url).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>{});
     if(!generated){setGenerated(true);track("Share Link Generated",{slug,medium:"share"});}
+  };
+  const copyOrgUrl=()=>{
+    navigator.clipboard.writeText(orgUrl).then(()=>{setOrgCopied(true);setTimeout(()=>setOrgCopied(false),2000);}).catch(()=>{});
+    track("Share Link Generated",{slug:orgSlug,medium:"share"});
   };
   const onGenerate=()=>{
     if(!generated){setGenerated(true);track("Share Link Generated",{slug,medium:"share"});}
@@ -3080,9 +3029,11 @@ function SharePage(){
       <style>{CSS}</style>
       <button className="share-back" onClick={()=>{window.history.pushState({},"","/");window.location.reload();}}>{"\u2190"} Back to MilCalc</button>
       <div className="share-hero">
-        <h1>Share MilCalc & track your impact</h1>
-        <p>Generate a personal link to share with fellow veterans. See how many people you've helped.</p>
+        <h1>Share MilCalc with a fellow veteran</h1>
+        <p>Generate a personal link, share it with your battle buddies, and help them plan their transition.</p>
       </div>
+
+      {/* ── Personal link generator ── */}
       <div className="share-card">
         <div className="share-label">Your name or handle</div>
         <input className="share-input" value={name} onChange={e=>{setName(e.target.value);setGenerated(false);setCopied(false);}}
@@ -3109,6 +3060,38 @@ function SharePage(){
           </div>
         </div>
       )}
+
+      {/* ── Copy/paste blurb ── */}
+      <div className="share-card">
+        <div className="share-label">Copy &amp; paste blurb</div>
+        <div className="share-blurb">
+          &ldquo;MilCalc is a free military retirement calculator covering pension, VA disability, CRDP/CRSC, state taxes, cost of living, and income gap analysis. No account required. No ads.&rdquo;
+        </div>
+      </div>
+
+      {/* ── Organization URL builder ── */}
+      <div className="share-card">
+        <div className="share-label">Organization link builder</div>
+        <p style={{fontSize:13,color:"var(--mut)",lineHeight:1.5,marginBottom:14}}>
+          Running a post, chapter, or online community? Create a tracked link for your organization.
+        </p>
+        <input className="share-input" value={orgName} onChange={e=>setOrgName(e.target.value)}
+          placeholder="e.g. VFW Post 1234"/>
+        <div className="share-url" style={{marginTop:10}}>
+          <div className="share-url-box">{orgUrl}</div>
+          <button className="share-copy" onClick={copyOrgUrl}>{orgCopied?"Copied!":"Copy"}</button>
+        </div>
+        <div style={{marginTop:16}}>
+          <div className="share-section-title">Suggested organizations</div>
+          <div className="share-orgs">
+            {SHARE_ORGS.map(o=>(
+              <button key={o} className={"share-org"+(orgName===o?" on":"")}
+                onClick={()=>setOrgName(o)}>{o}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
       <div className="share-footer">
         <p>MilCalc v{APP_VERSION}</p>
         <p>Part of the <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer">Debriefed</a> product family.</p>
@@ -3126,6 +3109,7 @@ const NAV=[
   {id:"dashboard",label:"Dashboard",ico:"\u2605"},
   {id:"benefits",label:"Benefits",ico:"\u{1FA96}"},
   {id:"planning",label:"Planning",ico:"\u{1F4CA}"},
+  {id:"share",label:"Share",ico:"\u{1F517}"},
 ];
 
 const STORAGE_KEY="milcalc_state";
@@ -3155,35 +3139,33 @@ export default function App(){
   const [entered,setEntered]=useState(hasEnteredApp);
   const [tab,setTab]=useState(loadTab);
   const [infoMenu,setInfoMenu]=useState(false);
-  const [screen,setScreen]=useState(null); // "support" | "privacy" | "partners" | null
+  const [screen,setScreen]=useState(null); // "support" | "privacy" | null
 
-  // ── Rating prompt state ──
-  const RATING_KEY="milcalc_rating_dismissed";
-  const [ratingDismissed,setRatingDismissed]=useState(()=>{try{return localStorage.getItem(RATING_KEY)==="1";}catch{return false;}});
-  const [showRating,setShowRating]=useState(false);
+  // ── Engagement popup state ──
+  const POPUP_DISMISSED_KEY="milcalc_popup_dismissed";
+  const POPUP_SESSION_KEY="milcalc_popup_shown";
+  const [showPopup,setShowPopup]=useState(false);
   const tabCountRef=useRef(0);
-  const ratingShownRef=useRef(false);
-  const triggerRating=()=>{
-    if(ratingDismissed||ratingShownRef.current) return;
-    ratingShownRef.current=true;
-    setShowRating(true);
-    track("Rating Prompt Shown");
+  const popupShownRef=useRef(false);
+  const isPopupBlocked=()=>{
+    try{return localStorage.getItem(POPUP_DISMISSED_KEY)==="1"||sessionStorage.getItem(POPUP_SESSION_KEY)==="1";}catch{return false;}
+  };
+  const triggerPopup=(trigger)=>{
+    if(isPopupBlocked()||popupShownRef.current) return;
+    popupShownRef.current=true;
+    try{sessionStorage.setItem(POPUP_SESSION_KEY,"1");}catch{}
+    setShowPopup(true);
+    track("Engagement Popup Shown",{trigger});
   };
   useEffect(()=>{
-    if(ratingDismissed) return;
-    const timer=setTimeout(triggerRating,120000); // 2 minutes
+    if(isPopupBlocked()) return;
+    const timer=setTimeout(()=>triggerPopup("time"),120000);
     return ()=>clearTimeout(timer);
-  },[ratingDismissed]);
-  const dismissRating=()=>{
-    setShowRating(false);
-    try{localStorage.setItem(RATING_KEY,"1");}catch{}
-    setRatingDismissed(true);
-    track("Rating Prompt Dismissed");
-  };
-  const clickRating=()=>{
-    track("Rating Prompt Clicked");
-    window.location.href="mailto:support@getdebriefed.co?subject=MilCalc%20Review&body=I%20wanted%20to%20share%20some%20feedback%20about%20MilCalc%3A%0D%0A%0D%0A";
-    dismissRating();
+  },[]);
+  const dismissPopup=()=>{
+    setShowPopup(false);
+    try{localStorage.setItem(POPUP_DISMISSED_KEY,"1");}catch{}
+    track("Engagement Popup Dismissed",{});
   };
 
   const enterApp=()=>{try{localStorage.setItem(LANDING_KEY,"1");}catch{}setEntered(true);};
@@ -3212,9 +3194,9 @@ export default function App(){
     track("Page Viewed",{page:TAB_NAMES[id]||id});
     tabRef.current=id;
     setTab(id);try{localStorage.setItem(TAB_KEY,id);}catch{}window.scrollTo(0,0);
-    // Rating prompt: trigger after 3 tab visits
+    // Engagement popup: trigger after 3 tab visits
     tabCountRef.current++;
-    if(tabCountRef.current>=3) triggerRating();
+    if(tabCountRef.current>=3) triggerPopup("tabs");
   };
 
   // Derived values for status bar
@@ -3248,7 +3230,8 @@ export default function App(){
   const insuranceMo=Math.round(healthPrem2+(s.useVgli?vgliMonthly(s.vgliCoverage,s.vgliAge):0)+(s.otherLifePremium||0));
   const gap=s.desiredIncome-(total-insuranceMo);
 
-  // ── /share standalone page ──
+  // ── /share standalone page (also redirect /partners) ──
+  if(window.location.pathname==="/partners"){window.history.replaceState({},"","/share");}
   if(window.location.pathname==="/share") return <SharePage/>;
 
   if(!entered) return(<><style>{FONTS}</style><style>{CSS}</style><LandingPage onEnter={enterApp}/></>);
@@ -3298,8 +3281,8 @@ export default function App(){
             <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);setScreen("privacy");}}>
               <span>{"\u{1F512}"}</span><span>Privacy Policy</span>
             </button>
-            <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);setScreen("partners");}}>
-              <span>{"\u{1F517}"}</span><span>Share / Partners</span>
+            <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);window.location.href="/share";}}>
+              <span>{"\u{1F517}"}</span><span>Share MilCalc</span>
             </button>
             <button className="info-sheet-cancel" onClick={()=>setInfoMenu(false)}>Cancel</button>
           </div>
@@ -3309,7 +3292,6 @@ export default function App(){
       {/* ── SUPPORT / PRIVACY / PARTNERS SCREENS ── */}
       {screen==="support"&&<SupportScreen onClose={()=>setScreen(null)}/>}
       {screen==="privacy"&&<PrivacyScreen onClose={()=>setScreen(null)}/>}
-      {screen==="partners"&&<PartnersScreen onClose={()=>setScreen(null)}/>}
 
       {/* ── MAIN CONTENT ── */}
       <main className="main">
@@ -3319,11 +3301,25 @@ export default function App(){
         {tab==="planning" &&<PlanningTab state={s} set={set} go={go}/>}
       </main>
 
-      {/* ── RATING BANNER ── */}
-      {showRating&&(
-        <div className="rating-banner">
-          <a className="rating-banner-txt" onClick={clickRating}>Finding MilCalc helpful? {"\u2B50"} Leave a review</a>
-          <button className="rating-banner-x" onClick={dismissRating} aria-label="Dismiss">{"\u00D7"}</button>
+      {/* ── ENGAGEMENT POPUP ── */}
+      {showPopup&&(
+        <div className="ep-overlay" onClick={dismissPopup}>
+          <div className="ep-modal" onClick={e=>e.stopPropagation()}>
+            <div className="ep-title">Enjoying MilCalc?</div>
+            <div className="ep-options">
+              <a className="ep-opt" href="mailto:support@getdebriefed.co?subject=MilCalc%20Review&body=I%20wanted%20to%20share%20feedback%20about%20MilCalc%3A"
+                onClick={()=>{track("Engagement Popup Review Clicked",{});dismissPopup();}}>
+                <span className="ep-opt-ico">{"\u2B50"}</span><span>Leave a review</span>
+              </a>
+              <button className="ep-opt" onClick={()=>{track("Engagement Popup Share Clicked",{});dismissPopup();window.location.href="/share";}}>
+                <span className="ep-opt-ico">{"\u{1F517}"}</span><span>Share with a fellow veteran</span>
+              </button>
+              <button className="ep-opt" onClick={()=>{track("Engagement Popup Feedback Clicked",{});dismissPopup();setScreen("support");}}>
+                <span className="ep-opt-ico">{"\u{1F4AC}"}</span><span>Send feedback</span>
+              </button>
+            </div>
+            <button className="ep-dismiss" onClick={dismissPopup}>Maybe later</button>
+          </div>
         </div>
       )}
 
@@ -3333,7 +3329,7 @@ export default function App(){
           {NAV.map(n=>(
             <button key={n.id} className={"btab"+(tab===n.id?" on":"")}
               style={{flex:"1 1 0",minWidth:0,width:"auto"}}
-              onClick={()=>go(n.id)}>
+              onClick={()=>{if(n.id==="share"){window.location.href="/share";return;}go(n.id);}}>
               <span className="btab-ico">{n.ico}</span>
               <span>{n.label}</span>
             </button>
