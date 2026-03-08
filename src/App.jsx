@@ -1762,18 +1762,18 @@ function DashboardTab({state,isConfigured,go}){
         ):(
           <>
             <DR label="Separation Type" value={separationType==="active"?"Active Duty":separationType==="medical"?"Medical (Ch. 61)":"Reserve/Guard"}/>
-            <DR label="Retirement System" value={retType}/>
+            <DR label="Retirement System" value={retType==="High-3"?"High-3 (High-36)":retType}/>
             {separationType==="reserve"?(
               <>
                 <DR label="Total Retirement Points" value={`${(reservePoints||0).toLocaleString()}`} sub={`Equiv. ${(reservePoints/360).toFixed(1)} YOS`}/>
-                <DR label="Pension Multiplier" value={`${p.toFixed(1)}%`} sub={`of High-3 ${fmt(h3)}/mo`}/>
+                <DR label="Pension Multiplier" value={`${p.toFixed(1)}%`} sub={`of High-36 avg ${fmt(h3)}/mo`}/>
                 <DR label={isReserveEligibleNow?"Gross Monthly":"Projected Gross Monthly"} value={fmt(isReserveEligibleNow?g:reserveCalc.pay)}/>
               </>
             ):(
               <>
                 <DR label="Years of Service" value={`${fmtYos(yos)} years`}/>
                 {separationType==="medical"&&<DR label="DoD Disability %" value={`${medDodPct}%${tdrl?" (TDRL)":""}`}/>}
-                <DR label="Pension Multiplier" value={`${p.toFixed(1)}%`} sub={`of High-3 ${fmt(h3)}/mo`}/>
+                <DR label="Pension Multiplier" value={`${p.toFixed(1)}%`} sub={`of High-36 avg ${fmt(h3)}/mo`}/>
                 <DR label="Gross Monthly" value={fmt(g)}/>
               </>
             )}
@@ -2006,6 +2006,22 @@ function DashboardTab({state,isConfigured,go}){
         dataRow("After-Tax Estimate",fmt(atP)+"/mo");
         dataRow("Annual Gross",fmt(grossPension*12));
         dataRow("CRDP/CRSC Status",elig?"Eligible":"Not eligible",{valueColor:elig?GOLD_B:MUT});
+        if(sbp&&grossPension>0){
+          const sbpBase=grossPension*(sbpCoverage/100);
+          const sbpPrem=sbpBase*0.065;
+          const sbpAnnuity=sbpBase*0.55;
+          const paidUpAge=Math.max(70,(state.sbpRetireAge||42)+30);
+          y+=4;
+          dataRow("SBP Coverage",sbpCoverage+"% of retired pay");
+          dataRow("SBP Base Amount",fmt(sbpBase)+"/mo");
+          dataRow("SBP Premium (6.5%)","-"+fmt(sbpPrem)+"/mo",{valueColor:[192,57,43]});
+          dataRow("Survivor Annuity (55%)",fmt(sbpAnnuity)+"/mo",{valueColor:GRN});
+          dataRow("Paid-Up Status","Age "+paidUpAge+" (30 yrs + age 70 rule)");
+          checkSpace(20);
+          doc.setFont("helvetica","italic");doc.setFontSize(7);setC(doc,MUT);
+          doc.text("SBP-DIC offset fully eliminated Jan 2023 — survivors receive both benefits.",M+8,y+10);
+          y+=16;
+        }
         y+=6;
       }
 
@@ -2205,7 +2221,7 @@ function BenefitsTab({state,isConfigured,go}){
           <div>
             <div style={{marginBottom:16}}>
               <BStat label="Gross Monthly Med. Retirement" value={fmt(g)} color="navy"
-                sub={`Multiplier: ${medicalPension(yos,h3,medDodPct,tdrl,retType).mult.toFixed(1)}% of High-3${tdrl?" (TDRL — min 50%)":""}`}/>
+                sub={`Multiplier: ${medicalPension(yos,h3,medDodPct,tdrl,retType).mult.toFixed(1)}% of High-36 avg${tdrl?" (TDRL — min 50%)":""}`}/>
             </div>
             <div style={{marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
@@ -2215,11 +2231,12 @@ function BenefitsTab({state,isConfigured,go}){
               <PBar value={medicalPension(yos,h3,medDodPct,tdrl,retType).mult} max={75} color="var(--nv)"/>
             </div>
             <div className="ib ib-nv" style={{fontSize:12,marginBottom:12}}>
-              Formula: max(DoD disability {medDodPct}%, YOS {fmtYos(yos)} × {retType==="BRS"?"2.0":"2.5"}%) = {medicalPension(yos,h3,medDodPct,tdrl,retType).mult.toFixed(1)}% × High-3, capped at 75%.
+              Formula: max(DoD disability {medDodPct}%, YOS {fmtYos(yos)} × {retType==="BRS"?"2.0":"2.5"}%) = {medicalPension(yos,h3,medDodPct,tdrl,retType).mult.toFixed(1)}% × High-36 avg, capped at 75%.
             </div>
             <hr/>
             <DR label="Gross Pension" value={fmt(g)}/>
-            {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}`} color="red" sub="6.5% of covered base amount"/>}
+            {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}`} color="red" sub="6.5% of covered base amount · pre-tax deduction"/>}
+            {sbp&&<DR label="Survivor Annuity" value={fmt(g*(sbpCoverage/100)*0.55)+"/mo"} color="green" sub="55% of base amount · paid to survivor for life"/>}
             <DR label="Net Monthly" value={fmt(net)} color="navy"/>
             <DR label="Net Annual" value={fmt(net*12)} color="navy"/>
             <hr/>
@@ -2227,12 +2244,13 @@ function BenefitsTab({state,isConfigured,go}){
               <MT label="Est. After-Tax /mo" value={fmt(bAfterTaxMo)} color="green" sub={`${(bEffRate*100).toFixed(1)}% effective rate`}/>
               <MT label="Annual After-Tax" value={fmt(bAfterTaxMo*12)} color="green" sub="Not FICA-taxed"/>
             </div>
+            {sbp&&<div className="ib ib-gn" style={{marginTop:10,fontSize:11}}>SBP-DIC offset eliminated Jan 2023 — survivor receives both SBP and VA DIC in full.</div>}
           </div>
         ):separationType==="reserve"?(
           <div>
             <div style={{marginBottom:16}}>
               <BStat label={isReserveEligibleNow?"Gross Monthly Reserve Pay":"Projected Reserve Pay"} value={fmt(reservePension(reservePoints,h3,retType).pay)} color={isReserveEligibleNow?"navy":"gold"}
-                sub={`${reservePoints} pts ÷ 360 = ${(reservePoints/360).toFixed(1)} equiv. yrs × ${retType==="BRS"?"2.0":"2.5"}% × High-3`}/>
+                sub={`${reservePoints} pts ÷ 360 = ${(reservePoints/360).toFixed(1)} equiv. yrs × ${retType==="BRS"?"2.0":"2.5"}% × High-36 avg`}/>
             </div>
             {!isReserveEligibleNow&&(
               <div className="ib ib-gd" style={{fontSize:13,marginBottom:12}}>
@@ -2240,7 +2258,7 @@ function BenefitsTab({state,isConfigured,go}){
               </div>
             )}
             <div className="ib ib-nv" style={{fontSize:12,marginBottom:12}}>
-              High-3 is calculated from the 36 months before pay starts (age {payStartAge}), using pay rates at that time — not when you stopped drilling.
+              High-36 average is calculated from the 36 months before pay starts (age {payStartAge}), using pay rates at that time — not when you stopped drilling.
             </div>
             <hr/>
             <DR label="Total Points" value={reservePoints.toLocaleString()}/>
@@ -2253,7 +2271,7 @@ function BenefitsTab({state,isConfigured,go}){
           <div>
             <div style={{marginBottom:16}}>
               <BStat label="Gross Monthly Pension" value={fmt(g)} color="navy"
-                sub={`${fmtYos(yos)} yrs x ${retType==="BRS"?"2.0":retType==="REDUX"?"varies":"2.5"}% = ${p.toFixed(1)}% of High-3`}/>
+                sub={`${fmtYos(yos)} yrs x ${retType==="BRS"?"2.0":retType==="REDUX"?"varies":"2.5"}% = ${p.toFixed(1)}% of High-36 avg`}/>
             </div>
             <div style={{marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
@@ -2263,7 +2281,8 @@ function BenefitsTab({state,isConfigured,go}){
             </div>
             <hr/>
             <DR label="Gross Pension" value={fmt(g)}/>
-            {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}`} color="red" sub="6.5% of covered base amount"/>}
+            {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}`} color="red" sub="6.5% of covered base amount · pre-tax deduction"/>}
+            {sbp&&<DR label="Survivor Annuity" value={fmt(g*(sbpCoverage/100)*0.55)+"/mo"} color="green" sub="55% of base amount · paid to survivor for life"/>}
             <DR label="Net Monthly" value={fmt(net)} color="navy"/>
             <DR label="Net Annual" value={fmt(net*12)} color="navy"/>
             <hr/>
@@ -2271,6 +2290,7 @@ function BenefitsTab({state,isConfigured,go}){
               <MT label="Est. After-Tax /mo" value={fmt(bAfterTaxMo)} color="green" sub={`${(bEffRate*100).toFixed(1)}% effective rate`}/>
               <MT label="Annual After-Tax" value={fmt(bAfterTaxMo*12)} color="green" sub="Not FICA-taxed"/>
             </div>
+            {sbp&&<div className="ib ib-gn" style={{marginTop:10,fontSize:11}}>SBP-DIC offset eliminated Jan 2023 — survivor receives both SBP and VA DIC in full.</div>}
             {usePayGrade&&derivedPay&&(
               <div className="ib ib-nv" style={{marginTop:12,fontSize:12}}>
                 <strong>2026 DFAS rate:</strong> {GRADE_LABELS[payGrade]} at {fmtYos(yos)} yrs = <strong>{fmt(derivedPay)}/mo</strong>
@@ -2952,23 +2972,23 @@ function ProfileTab({state,set,isConfigured}){
 
         {separationType==="medical"&&(
           <div className="ib ib-nv" style={{fontSize:13,marginBottom:12}}>
-            Medical retirement (PDRL/TDRL) is available at any YOS. Pay = higher of (DoD disability %) or (YOS × {retType==="BRS"?"2.0":"2.5"}%), capped at 75%.
+            Medical retirement (PDRL/TDRL) is available at any YOS. Pay = higher of (DoD disability %) or (YOS × {retType==="BRS"?"2.0":"2.5"}%) × High-36 avg, capped at 75%.
           </div>
         )}
 
         {separationType==="reserve"&&(
           <div className="ib ib-nv" style={{fontSize:13,marginBottom:12}}>
-            Reserve/Guard retirement needs 20 qualifying years (50+ points/year). Pay = (Total Points ÷ 360) × {retType==="BRS"?"2.0":"2.5"}% × High-3. Starts at age 60 (or earlier with qualifying active service).
+            Reserve/Guard retirement needs 20 qualifying years (50+ points/year). Pay = (Total Points ÷ 360) × {retType==="BRS"?"2.0":"2.5"}% × High-36 avg. Starts at age 60 (or earlier with qualifying active service).
           </div>
         )}
 
         {separationType!=="veteran"&&(
           <TG label="Retirement System" value={retType} onChange={v=>set("retType",v)}
-            options={separationType==="medical"?["High-3","BRS"]:["High-3","BRS","REDUX"]}
+            options={separationType==="medical"?[{v:"High-3",l:"High-3 (High-36)"},{v:"BRS",l:"BRS"}]:[{v:"High-3",l:"High-3 (High-36)"},{v:"BRS",l:"BRS"},{v:"REDUX",l:"REDUX"}]}
             hint={{
-              "High-3":"Legacy system — 2.5%/yr. Highest base pension at 20 years.",
-              "BRS":"Blended Retirement — 2.0%/yr + TSP matching up to 5%.",
-              "REDUX":"$30k CSB at 15 yrs. 40% at 20 yrs + 3.5%/yr thereafter.",
+              "High-3":"High-3 and High-36 are the same system \u2014 average of your highest 36 consecutive months of base pay. 2.5%/yr multiplier.",
+              "BRS":"Blended Retirement \u2014 2.0%/yr + TSP matching up to 5%. Applies to those who opted in or entered after Jan 1, 2018.",
+              "REDUX":"$30k CSB at 15 yrs. 40% at 20 yrs + 3.5%/yr thereafter. Rare \u2014 most members did not elect this.",
             }[retType]}/>
         )}
 
@@ -3007,9 +3027,9 @@ function ProfileTab({state,set,isConfigured}){
 
         {separationType!=="veteran"&&(
           <div className="field">
-            <label className="flbl">High-3 Monthly Base Pay</label>
+            <label className="flbl">High-3 / High-36 Monthly Base Pay</label>
             {separationType==="reserve"&&(
-              <div className="fhint" style={{marginBottom:8}}>High-3 is calculated from the 36 months before pay starts (age {payStartAge}), using pay rates at that time.</div>
+              <div className="fhint" style={{marginBottom:8}}>High-36 average is calculated from the 36 months before pay starts (age {payStartAge}), using pay rates at that time.</div>
             )}
             <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6,marginBottom:10}}>
               <button className={"tb"+((!usePayGrade)?" on":"")} onClick={()=>set("usePayGrade",false)}
@@ -3043,7 +3063,7 @@ function ProfileTab({state,set,isConfigured}){
               </>
             ):(
               <NF value={high3} onChange={v=>set("high3",v)} pre="$" min={0} max={20000} step={50}
-                hint="Average of your 3 highest-paid consecutive years (36 months)"
+                hint="Average of your highest 36 consecutive months (High-3 / High-36) of base pay"
                 warn={high3>20000?"Double-check \u2014 this seems high for monthly base pay":undefined}/>
             )}
           </div>
@@ -3053,13 +3073,27 @@ function ProfileTab({state,set,isConfigured}){
         {separationType!=="veteran"&&<div className="cttl" style={{marginTop:0}}>Survivor Benefit Plan (SBP)</div>}
         {separationType!=="veteran"&&(
           <>
-            <TG value={sbp?"y":"n"} onChange={v=>set("sbp",v==="y")}
+            <TG label="Elect SBP coverage?" value={sbp?"y":"n"} onChange={v=>{set("sbp",v==="y");if(v==="y")track("SBP Calculated",{elected:true,monthly_premium:r100(pensionMo*(sbpCoverage/100)*0.065),survivor_annuity:r100(pensionMo*(sbpCoverage/100)*0.55)});}}
               options={[{v:"n",l:"Not Enrolled"},{v:"y",l:"Enrolled"}]}/>
-            {sbp&&<div style={{marginTop:12}}>
-              <NF label="Coverage % of Base Amount" value={sbpCoverage} onChange={v=>set("sbpCoverage",v)} min={0} max={100} step={5} suf="%"
-                hint="Survivor receives 55% of covered amount"/>
-            </div>}
-            {!sbp&&<div className="ib ib-gd" style={{marginTop:10,fontSize:13}}>Without SBP, your pension ends at death — your surviving spouse receives nothing.</div>}
+            {sbp&&(
+              <div style={{marginTop:12}}>
+                <NF label="Coverage % of Retired Pay" value={sbpCoverage} onChange={v=>set("sbpCoverage",v)} min={0} max={100} step={5} suf="%"
+                  hint={`Base amount: ${fmt(pensionMo*(sbpCoverage/100))}/mo of your ${fmt(pensionMo)}/mo pension`}/>
+                {pensionMo>0&&(
+                  <div style={{background:"var(--sub)",borderRadius:10,padding:14,marginTop:10}}>
+                    <DR label="SBP Base Amount" value={fmt(pensionMo*(sbpCoverage/100))+"/mo"} sub={`${sbpCoverage}% of ${fmt(pensionMo)} gross pension`}/>
+                    <DR label="Monthly Premium (6.5%)" value={`-${fmt(pensionMo*(sbpCoverage/100)*0.065)}`} color="red" sub="Pre-tax deduction \u2014 reduces your taxable income"/>
+                    <DR label="Survivor Annuity (55%)" value={fmt(pensionMo*(sbpCoverage/100)*0.55)+"/mo"} color="green" sub="Paid to your survivor for life"/>
+                    <NF label="Retirement Age" value={state.sbpRetireAge||42} onChange={v=>set("sbpRetireAge",Math.round(v))} min={38} max={65} suf="yrs"
+                      hint={`Paid-up at age ${Math.max(70,(state.sbpRetireAge||42)+30)} (30 years of payments AND age 70)`}/>
+                  </div>
+                )}
+                <div className="ib ib-gn" style={{marginTop:10,fontSize:12}}>
+                  SBP-DIC offset fully eliminated Jan 2023 \u2014 your survivor receives both SBP and VA DIC in full.
+                </div>
+              </div>
+            )}
+            {!sbp&&<div className="ib ib-gd" style={{marginTop:10,fontSize:13}}>Without SBP, your pension ends at death \u2014 your surviving spouse receives nothing.</div>}
             {separationType==="reserve"&&(
               <div className="fhint" style={{marginTop:8}}>Reserve Component SBP (RCSBP) elections are made at retirement from the reserve, not when pay starts.</div>
             )}
@@ -3195,7 +3229,12 @@ function ProfileTab({state,set,isConfigured}){
               onChange={v=>set("tricareGroup",v)}
               options={[{v:"A",l:"Group A (pre-2018)"},{v:"B",l:"Group B (2018+)"}]}
               hint="Determines your enrollment fee tier."/>
-            <SF label="Plan" value={tricareplan} onChange={v=>set("tricareplan",v)}
+            <SF label="Plan" value={tricareplan} onChange={v=>{
+              set("tricareplan",v);
+              const p2=TRICARE_PLANS[v]||TRICARE_PLANS.prime;const gr2=p2[`group${tricareGroup||"A"}`]||p2.groupA;
+              const cost2=v==="tfl"?0:(gr2[tricareFamSize]||gr2.self);const medB2=v==="tfl"?(tricareFamSize==="family"?370:185):0;
+              track("TRICARE Plan Selected",{plan:v,coverage_type:tricareFamSize,monthly_cost:r100(cost2+medB2)});
+            }}
               options={PLAN_OPTS}
               hint={plan.note}/>
             {tricareplan!=="tfl"&&(
@@ -3207,6 +3246,22 @@ function ProfileTab({state,set,isConfigured}){
                 TRICARE For Life has no premium but requires Medicare Part B ($185/mo per person, 2026).
               </div>
             )}
+            {separationType==="medical"&&tricareplan==="prime"&&(
+              <div className="ib ib-gn" style={{marginTop:8,fontSize:12}}>
+                Medical retirees: your TRICARE Prime enrollment fee is frozen at the rate when classified as medically retired in DEERS. Maintain continuous enrollment to preserve this benefit.
+              </div>
+            )}
+            {(() => {
+              const grp=TRICARE_PLANS[tricareplan]||TRICARE_PLANS.prime;
+              const gr=grp[`group${tricareGroup||"A"}`]||grp.groupA;
+              const cost=tricareplan==="tfl"?0:(gr[tricareFamSize]||gr.self);
+              const medB=tricareplan==="tfl"?(tricareFamSize==="family"?370:185):0;
+              return cost+medB>0?(
+                <div style={{marginTop:8,fontSize:13,color:"var(--mut)"}}>
+                  Monthly premium: <strong style={{color:"var(--ink)"}}>{fmt(cost+medB)}/mo</strong> ({fmt((cost+medB)*12)}/yr)
+                </div>
+              ):null;
+            })()}
           </div>
         )}
       </div>
@@ -3556,7 +3611,7 @@ export default function App(){
   const defaults={
     userName:"",
     separationType:"active",
-    retType:"High-3",yos:0,high3:0,usePayGrade:true,payGrade:"E-7",sbp:false,sbpCoverage:55,
+    retType:"High-3",yos:0,high3:0,usePayGrade:true,payGrade:"E-7",sbp:false,sbpCoverage:55,sbpRetireAge:42,
     medDodPct:50,tdrl:false,
     reservePoints:3600,currentAge:45,payStartAge:60,reserveHealthType:"trs",
     vaRating:0,vaDeps:"Single",vaChildren:0,vaRatings:[],
