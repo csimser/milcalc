@@ -1268,53 +1268,62 @@ hr{border:none;border-top:1px solid var(--br);margin:16px 0}
 .ep-dismiss:active{color:var(--ink)}
 
 /* ── SHARE PAGE ── */
-.share-page{min-height:100vh;min-height:100dvh;background:var(--bg);color:var(--ink);
-  display:flex;flex-direction:column;align-items:center;padding:0 16px 40px}
-.share-back{align-self:flex-start;padding:16px 0;font-size:14px;color:var(--nvm);
+.share-page{min-height:100vh;min-height:100dvh;background:var(--nv);color:#fff;
+  display:flex;flex-direction:column;align-items:center;padding:0 16px 48px}
+.share-back{align-self:flex-start;padding:16px 0;font-size:14px;color:rgba(255,255,255,.6);
   background:none;border:none;cursor:pointer;font-family:'Barlow',sans-serif;font-weight:600}
 .share-back:active{opacity:.7}
-.share-hero{text-align:center;max-width:480px;margin:24px auto 32px}
-.share-hero h1{font-family:'Libre Baskerville',serif;font-size:26px;color:var(--ink);
+.share-hero{text-align:center;max-width:480px;margin:32px auto 28px}
+.share-hero h1{font-family:'Libre Baskerville',serif;font-size:28px;color:#fff;
   margin:0 0 10px;line-height:1.2}
-.share-hero p{font-size:15px;color:var(--mut);line-height:1.55;margin:0}
-.share-card{background:var(--card);border:1px solid var(--br);border-radius:14px;
-  padding:24px 20px;max-width:480px;width:100%;margin-bottom:24px}
-.share-label{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;
-  letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:10px}
-.share-input{width:100%;padding:12px 14px;border:1px solid var(--br);border-radius:8px;
-  background:var(--bg);color:var(--ink);font-size:15px;font-family:'Barlow',sans-serif;
+.share-hero p{font-size:15px;color:rgba(255,255,255,.65);line-height:1.55;margin:0}
+.share-flow{max-width:480px;width:100%}
+.share-input{width:100%;padding:14px 16px;border:2px solid rgba(255,255,255,.15);border-radius:10px;
+  background:rgba(255,255,255,.08);color:#fff;font-size:16px;font-family:'Barlow',sans-serif;
   outline:none;box-sizing:border-box;transition:border-color .15s}
-.share-input:focus{border-color:var(--nv)}
-.share-input::placeholder{color:var(--mut);opacity:.6}
-.share-url{display:flex;gap:8px;margin-top:14px}
-.share-url-box{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--br);
-  border-radius:8px;background:var(--bg);color:var(--nvm);font-family:'IBM Plex Mono',monospace;
-  font-size:12px;word-break:break-all;line-height:1.4}
-.share-copy{flex-shrink:0;padding:10px 20px;border:none;border-radius:8px;
-  background:var(--nv);color:var(--ink);font-family:'Barlow Condensed',sans-serif;
-  font-size:14px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
-  cursor:pointer;white-space:nowrap;transition:opacity .13s}
-.share-copy:active{opacity:.8}
-.share-qr{display:flex;justify-content:center;margin-top:20px;padding:16px;
-  background:#fff;border-radius:10px;width:fit-content;margin-left:auto;margin-right:auto}
-.share-btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;justify-content:center}
-.share-btn{display:flex;align-items:center;gap:6px;padding:10px 16px;border:1px solid var(--br);
-  border-radius:8px;background:var(--card);color:var(--ink);font-family:'Barlow',sans-serif;
-  font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;
-  transition:border-color .13s,background .13s;-webkit-tap-highlight-color:transparent}
-.share-btn:active,.share-btn:hover{border-color:var(--nv);background:var(--nvl)}
-.share-footer{margin-top:32px;text-align:center;font-size:12px;color:var(--mut)}
-.share-footer a{color:var(--nvm);text-decoration:none}
-.share-section-title{font-family:'Barlow Condensed',sans-serif;font-weight:700;
-  font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--mut);
-  margin-bottom:10px}
-.share-blurb{background:var(--card);border:1px solid var(--br);border-radius:12px;
-  padding:16px;font-size:14px;color:var(--ink);line-height:1.6;font-style:italic}
-.share-orgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
-.share-org{padding:8px 14px;border:1px solid var(--br);border-radius:20px;
-  background:var(--card);font-size:13px;color:var(--ink);font-weight:500;
-  cursor:pointer;transition:border-color .13s;-webkit-tap-highlight-color:transparent}
-.share-org:active,.share-org.on{border-color:var(--nv);background:var(--nvl)}
+.share-input:focus{border-color:var(--gd)}
+.share-input::placeholder{color:rgba(255,255,255,.35)}
+.share-link-box{margin-top:20px;padding:16px;border:2px solid var(--gd);border-radius:12px;
+  background:rgba(255,255,255,.06);text-align:center}
+.share-link-url{font-family:'IBM Plex Mono',monospace;font-size:13px;color:var(--gd);
+  word-break:break-all;line-height:1.5;margin-bottom:14px}
+.share-copy-big{display:block;width:100%;padding:14px 0;border:none;border-radius:10px;
+  background:var(--gd);color:var(--nv);font-family:'Barlow Condensed',sans-serif;
+  font-size:16px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  cursor:pointer;transition:opacity .13s}
+.share-copy-big:active{opacity:.85}
+.share-qr{display:flex;justify-content:center;margin-top:24px;padding:16px;
+  background:#fff;border-radius:12px;width:fit-content;margin-left:auto;margin-right:auto}
+.share-btns{display:flex;gap:0;margin-top:28px;justify-content:center;
+  border:1px solid rgba(255,255,255,.15);border-radius:10px;overflow:hidden}
+.share-btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px;
+  padding:12px 8px;border:none;border-right:1px solid rgba(255,255,255,.15);
+  background:rgba(255,255,255,.06);color:rgba(255,255,255,.85);font-family:'Barlow',sans-serif;
+  font-size:12px;font-weight:600;cursor:pointer;text-decoration:none;
+  transition:background .13s;-webkit-tap-highlight-color:transparent}
+.share-btn:last-child{border-right:none}
+.share-btn:active,.share-btn:hover{background:rgba(255,255,255,.14)}
+.share-org-toggle{margin-top:36px;display:flex;align-items:center;justify-content:center;
+  gap:6px;background:none;border:none;color:rgba(255,255,255,.45);font-family:'Barlow',sans-serif;
+  font-size:13px;font-weight:600;cursor:pointer;padding:8px 0;width:100%}
+.share-org-toggle:active{opacity:.7}
+.share-org-toggle svg{transition:transform .2s}
+.share-org-section{max-width:480px;width:100%;margin-top:16px;padding:20px;
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:12px}
+.share-org-section p{font-size:13px;color:rgba(255,255,255,.55);line-height:1.5;margin:0 0 14px}
+.share-orgs{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:14px}
+.share-org{padding:7px 14px;border:1px solid rgba(255,255,255,.2);border-radius:20px;
+  background:transparent;font-size:13px;color:rgba(255,255,255,.75);font-weight:500;
+  cursor:pointer;transition:border-color .13s,background .13s;font-family:'Barlow',sans-serif;
+  -webkit-tap-highlight-color:transparent}
+.share-org:active,.share-org.on{border-color:var(--gd);background:rgba(255,255,255,.1);color:#fff}
+.share-org-url{margin-top:10px}
+.share-org-url .share-link-url{font-size:12px;margin-bottom:10px}
+.share-blurb{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;
+  padding:14px;font-size:13px;color:rgba(255,255,255,.65);line-height:1.6;font-style:italic;
+  margin-top:14px}
+.share-footer{margin-top:40px;text-align:center;font-size:12px;color:rgba(255,255,255,.3)}
+.share-footer a{color:rgba(255,255,255,.45);text-decoration:none}
 `;
 
 // ── DEBRIEFED CTA CARDS ───────────────────────────────────────────────
@@ -3001,95 +3010,83 @@ function PrivacyScreen({onClose}){
 const SHARE_ORGS=["VFW","DAV","AMVETS","American Legion","MOAA","Military OneSource","USO","r/MilitaryFinance"];
 function SharePage(){
   const [name,setName]=useState("");
-  const [orgName,setOrgName]=useState("");
   const [copied,setCopied]=useState(false);
+  const [orgOpen,setOrgOpen]=useState(false);
+  const [orgName,setOrgName]=useState("");
   const [orgCopied,setOrgCopied]=useState(false);
-  const [generated,setGenerated]=useState(false);
-  const slug=name.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"friend";
-  const url=`https://milcalc.app?utm_source=${slug}&utm_medium=share&utm_campaign=referral`;
+  const slug=name.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"");
+  const hasName=slug.length>0;
+  const url=hasName?`https://milcalc.app?utm_source=${slug}&utm_medium=share&utm_campaign=referral`:"https://milcalc.app";
   const orgSlug=orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"partner";
   const orgUrl=`https://milcalc.app?utm_source=${orgSlug}&utm_medium=website&utm_campaign=member-tools`;
   const emailSubject=encodeURIComponent("Free military retirement calculator");
-  const emailBody=encodeURIComponent(`Hey \u2014 thought you'd find this useful. MilCalc is a free calculator that figures out your pension, VA disability, state taxes, and income gap all in one place. No account needed: ${url}`);
+  const emailBody=encodeURIComponent(`Thought you'd find this useful \u2014 MilCalc calculates your pension, VA disability, state taxes, and income gap all in one place. Free, no account needed: ${url}`);
   const tweetText=encodeURIComponent(`Free military retirement calculator \u2014 pension, VA disability, state taxes, income gap, all in one place. No account needed.\n${url}`);
   const copyUrl=()=>{
-    navigator.clipboard.writeText(url).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>{});
-    if(!generated){setGenerated(true);track("Share Link Generated",{slug,medium:"share"});}
+    navigator.clipboard.writeText(url).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2500);}).catch(()=>{});
+    track("Share Link Generated",{slug:slug||"direct",medium:"share"});
   };
   const copyOrgUrl=()=>{
-    navigator.clipboard.writeText(orgUrl).then(()=>{setOrgCopied(true);setTimeout(()=>setOrgCopied(false),2000);}).catch(()=>{});
-    track("Share Link Generated",{slug:orgSlug,medium:"share"});
-  };
-  const onGenerate=()=>{
-    if(!generated){setGenerated(true);track("Share Link Generated",{slug,medium:"share"});}
+    navigator.clipboard.writeText(orgUrl).then(()=>{setOrgCopied(true);setTimeout(()=>setOrgCopied(false),2500);}).catch(()=>{});
+    track("Share Link Generated",{slug:orgSlug,medium:"website"});
   };
   return(
     <div className="share-page">
       <style>{FONTS}</style>
       <style>{CSS}</style>
-      <button className="share-back" onClick={()=>{window.history.pushState({},"","/");window.location.reload();}}>{"\u2190"} Back to MilCalc</button>
+      <button className="share-back" onClick={()=>{window.history.pushState({},"","/");window.location.reload();}}>← Back to MilCalc</button>
       <div className="share-hero">
-        <h1>Share MilCalc with a fellow veteran</h1>
-        <p>Generate a personal link, share it with your battle buddies, and help them plan their transition.</p>
+        <h1>Share MilCalc</h1>
+        <p>Help a fellow veteran know exactly what they're worth. Generate your personal link below.</p>
       </div>
 
-      {/* ── Personal link generator ── */}
-      <div className="share-card">
-        <div className="share-label">Your name or handle</div>
-        <input className="share-input" value={name} onChange={e=>{setName(e.target.value);setGenerated(false);setCopied(false);}}
-          placeholder='e.g. "John", "SGM_Ret", "VFW Post 1234"'/>
-        <div className="share-url">
-          <div className="share-url-box">{url}</div>
-          <button className="share-copy" onClick={copyUrl}>{copied?"Copied!":"Copy Link"}</button>
+      <div className="share-flow">
+        <input className="share-input" value={name} onChange={e=>{setName(e.target.value);setCopied(false);}}
+          placeholder="Your name or handle (optional)"
+          aria-label="Your name or handle"/>
+
+        <div className="share-link-box">
+          <div className="share-link-url">{hasName?"Your personal link:":"Your link:"}<br/><strong>{url}</strong></div>
+          <button className="share-copy-big" onClick={copyUrl}>{copied?"\u2713 Copied!":"Copy Link"}</button>
         </div>
-        {name.trim()&&(
-          <div className="share-qr" onClick={onGenerate}>
-            <QRCodeSVG value={url} size={160} bgColor="#ffffff" fgColor="#151c2e" level="M"/>
+
+        <div className="share-qr">
+          <QRCodeSVG value={url} size={160} bgColor="#ffffff" fgColor="#151c2e" level="M"/>
+        </div>
+
+        <div className="share-btns">
+          <a className="share-btn" href={`mailto:?subject=${emailSubject}&body=${emailBody}`}>✉ Email</a>
+          <a className="share-btn" href={`https://twitter.com/intent/tweet?text=${tweetText}`} target="_blank" rel="noopener noreferrer">𝕏 Twitter</a>
+          <a className="share-btn" href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer">in LinkedIn</a>
+          <button className="share-btn" onClick={copyUrl}>{copied?"\u2713":"📋"} Copy</button>
+        </div>
+
+        <button className="share-org-toggle" onClick={()=>setOrgOpen(!orgOpen)}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" style={{transform:orgOpen?"rotate(90deg)":"rotate(0deg)"}}>
+            <path d="M4 2l4 4-4 4"/>
+          </svg>
+          Sharing with an organization?
+        </button>
+        {orgOpen&&(
+          <div className="share-org-section">
+            <p>Running a post, chapter, or online community? Pick one or type your own to create a tracked link.</p>
+            <div className="share-orgs">
+              {SHARE_ORGS.map(o=>(
+                <button key={o} className={"share-org"+(orgName===o?" on":"")}
+                  onClick={()=>setOrgName(o)}>{o}</button>
+              ))}
+            </div>
+            <input className="share-input" value={orgName} onChange={e=>setOrgName(e.target.value)}
+              placeholder="e.g. VFW Post 1234" style={{marginBottom:12}}/>
+            <div className="share-org-url">
+              <div className="share-link-url"><strong>{orgUrl}</strong></div>
+              <button className="share-copy-big" onClick={copyOrgUrl}>{orgCopied?"\u2713 Copied!":"Copy Organization Link"}</button>
+            </div>
+            <div className="share-blurb">
+              &ldquo;MilCalc is a free military retirement calculator covering pension, VA disability, CRDP/CRSC, state taxes, cost of living, and income gap analysis. No account required. No ads.&rdquo;
+            </div>
           </div>
         )}
-      </div>
-      {name.trim()&&(
-        <div className="share-card">
-          <div className="share-label">Quick share</div>
-          <div className="share-btns">
-            <button className="share-btn" onClick={copyUrl}>{copied?"\u2705":"\u{1F4CB}"} {copied?"Copied!":"Copy link"}</button>
-            <a className="share-btn" href={`mailto:?subject=${emailSubject}&body=${emailBody}`}>{"\u2709\uFE0F"} Email</a>
-            <a className="share-btn" href={`https://twitter.com/intent/tweet?text=${tweetText}`} target="_blank" rel="noopener noreferrer">{"X"} Twitter/X</a>
-            <a className="share-btn" href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer">{"\u{1F310}"} Facebook</a>
-            <a className="share-btn" href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer">{"\u{1F4BC}"} LinkedIn</a>
-          </div>
-        </div>
-      )}
-
-      {/* ── Copy/paste blurb ── */}
-      <div className="share-card">
-        <div className="share-label">Copy &amp; paste blurb</div>
-        <div className="share-blurb">
-          &ldquo;MilCalc is a free military retirement calculator covering pension, VA disability, CRDP/CRSC, state taxes, cost of living, and income gap analysis. No account required. No ads.&rdquo;
-        </div>
-      </div>
-
-      {/* ── Organization URL builder ── */}
-      <div className="share-card">
-        <div className="share-label">Organization link builder</div>
-        <p style={{fontSize:13,color:"var(--mut)",lineHeight:1.5,marginBottom:14}}>
-          Running a post, chapter, or online community? Create a tracked link for your organization.
-        </p>
-        <input className="share-input" value={orgName} onChange={e=>setOrgName(e.target.value)}
-          placeholder="e.g. VFW Post 1234"/>
-        <div className="share-url" style={{marginTop:10}}>
-          <div className="share-url-box">{orgUrl}</div>
-          <button className="share-copy" onClick={copyOrgUrl}>{orgCopied?"Copied!":"Copy"}</button>
-        </div>
-        <div style={{marginTop:16}}>
-          <div className="share-section-title">Suggested organizations</div>
-          <div className="share-orgs">
-            {SHARE_ORGS.map(o=>(
-              <button key={o} className={"share-org"+(orgName===o?" on":"")}
-                onClick={()=>setOrgName(o)}>{o}</button>
-            ))}
-          </div>
-        </div>
       </div>
 
       <div className="share-footer">
