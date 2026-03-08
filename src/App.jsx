@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { createPortal } from "react-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { track, r100 } from "./analytics.js";
 import { version as APP_VERSION } from "../package.json";
@@ -1829,13 +1830,13 @@ function DashboardTab({state,isConfigured,go}){
       )}
 
       {/* ── EXPORT OPTIONS MODAL ── */}
-      {showExportModal&&(<>
-        <div style={{position:"fixed",inset:0,zIndex:9998,background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)"}}
-          onClick={()=>setShowExportModal(false)}/>
-        <div style={{position:"fixed",top:"50%",left:"50%",transform:"translate(-50%,-50%)",zIndex:9999,
-            background:"var(--card)",borderRadius:16,padding:24,maxWidth:480,width:"90%",border:"1px solid var(--br)",
-            maxHeight:"90vh",overflowY:"auto",paddingBottom:40}}
-            onClick={e=>e.stopPropagation()}>
+      {showExportModal&&createPortal(
+        <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",
+            background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)"}}
+          onClick={()=>setShowExportModal(false)}>
+          <div style={{position:"relative",background:"var(--card)",borderRadius:16,padding:24,maxWidth:480,width:"90%",
+              border:"1px solid var(--br)",maxHeight:"85vh",overflowY:"auto",paddingBottom:40}}
+              onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:18,fontWeight:700,color:"var(--ink)",marginBottom:16}}>Export My Plan</div>
             <div style={{fontSize:13,color:"var(--mut)",marginBottom:16}}>Choose sections to include in your PDF:</div>
             {[
@@ -1862,8 +1863,9 @@ function DashboardTab({state,isConfigured,go}){
             <button onClick={()=>setShowExportModal(false)}
               style={{width:"100%",marginTop:8,padding:"10px",background:"none",border:"none",
                 color:"var(--mut)",fontSize:13,cursor:"pointer",fontFamily:"Barlow,sans-serif"}}>Cancel</button>
-        </div>
-      </>)}
+          </div>
+        </div>,document.body
+      )}
     </div>
   );
 
