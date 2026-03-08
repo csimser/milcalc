@@ -34,6 +34,9 @@ export function captureUtm() {
     keys.forEach(k => { const v = params.get(k); if (v) utm[k] = v; });
     if (Object.keys(utm).length === 0) return;
     localStorage.setItem("milcalc_utm", JSON.stringify(utm));
+    if (!import.meta.env.PROD) {
+      console.log("[MilCalc] UTM captured:", utm);
+    }
     if (!initialized) return;
     mixpanel.track("Referral Visit", utm);
     mixpanel.people.set_once({

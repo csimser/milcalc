@@ -44,7 +44,8 @@ class ErrorBoundary extends React.Component {
 }
 
 initAnalytics();
-captureUtm();
+// Delay UTM capture to next tick so Mixpanel is fully initialized
+setTimeout(captureUtm, 0);
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   React.createElement(React.StrictMode, null,
