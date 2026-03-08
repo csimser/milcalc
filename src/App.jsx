@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { track, r100 } from "./analytics.js";
+import { version as APP_VERSION } from "../package.json";
 
 // ── DFAS 2026 BASIC PAY TABLES (Effective January 1, 2026) ─────────────
 // Source: DFAS.mil — Page updated Jan/Feb 2026 (3.8% raise per FY2026 NDAA)
@@ -68,14 +69,14 @@ function lookupPay(grade, yos) {
 
 const VA = {
   10:{s:180.42}, 20:{s:356.66},
-  30:{s:552.47,sp:617.47,spc:666.47,c:596.47},
-  40:{s:795.84,sp:882.84,spc:947.84,c:853.84},
-  50:{s:1132.90,sp:1241.90,spc:1322.90,c:1205.90},
-  60:{s:1435.02,sp:1566.02,spc:1663.02,c:1523.02},
-  70:{s:1808.45,sp:1961.45,spc:2074.45,c:1910.45},
-  80:{s:2102.15,sp:2277.15,spc:2406.15,c:2219.15},
-  90:{s:2362.30,sp:2559.30,spc:2704.30,c:2494.30},
-  100:{s:3938.58,sp:4158.17,spc:4318.99,c:4085.43},
+  30:{s:552.47,sp:617.47,spc:666.47,c:596.47,ac:32.00},
+  40:{s:795.84,sp:882.84,spc:947.84,c:853.84,ac:43.00},
+  50:{s:1132.90,sp:1241.90,spc:1322.90,c:1205.90,ac:54.00},
+  60:{s:1435.02,sp:1566.02,spc:1663.02,c:1523.02,ac:65.00},
+  70:{s:1808.45,sp:1961.45,spc:2073.98,c:1910.45,ac:76.00},
+  80:{s:2102.15,sp:2277.15,spc:2406.15,c:2219.15,ac:87.00},
+  90:{s:2362.30,sp:2559.30,spc:2704.30,c:2494.30,ac:98.00},
+  100:{s:3938.58,sp:4158.17,spc:4318.99,c:4085.43,ac:109.11},
 };
 
 const STATES = {
@@ -587,7 +588,27 @@ const MHA_CITIES = {
 };
 
 const fmt = n => (n<0?"-$":"$") + Math.abs(Math.round(n)).toLocaleString("en-US");
+const fmtYos = y => y%1===0?`${y}`:`${y.toFixed(1)}`;
 const dk = dep => ({Single:"s",Spouse:"sp","Spouse + Child":"spc","Child Only":"c"}[dep]||"s");
+
+// Calculate total VA compensation including additional children under 18
+// children = total number of children under 18 (0 = none, 1 = included in base spc/c rate, 2+ = adds per-child amount)
+function calcVAComp(rating, depsKey, children) {
+  const entry = VA[rating];
+  if (!entry) return 0;
+  // 10% and 20% ratings: veteran-alone rate only (no dependent compensation)
+  if (rating <= 20) return entry.s || 0;
+  // Determine base rate from dependency status
+  let baseKey = depsKey;
+  // If they have children, use the child-inclusive base rate
+  if (children > 0 && baseKey === "s") baseKey = "c";        // single + children = child only
+  if (children > 0 && baseKey === "sp") baseKey = "spc";     // spouse + children = spouse + child
+  const base = entry[baseKey] || entry.s || 0;
+  // Additional children beyond the first
+  const extraChildren = Math.max(0, children - 1);
+  const perChild = entry.ac || 0;
+  return base + extraChildren * perChild;
+}
 
 function pension(rt, yos, h3) {
   if (rt==="REDUX") return h3 * Math.min(0.40+Math.max(0,yos-20)*0.035, 0.75);
@@ -1191,6 +1212,70 @@ hr{border:none;border-top:1px solid var(--br);margin:16px 0}
 .modal-footer{margin-top:32px;padding-top:20px;border-top:1px solid var(--br);
   text-align:center}
 .modal-footer p{font-size:12px;color:var(--fnt);line-height:1.6;margin-bottom:4px}
+
+/* ── FEEDBACK FORM ── */
+.fb-form{background:var(--card);border:1px solid var(--br);border-radius:12px;
+  padding:20px 16px;margin-bottom:28px}
+.fb-label{display:block;font-size:12px;font-weight:600;color:var(--ink);
+  margin-bottom:6px;margin-top:14px}
+.fb-label:first-child{margin-top:0}
+.fb-label .opt{font-weight:400;color:var(--mut);font-size:11px;margin-left:4px}
+.fb-select,.fb-input,.fb-textarea{display:block;width:100%;padding:12px;
+  border:1px solid var(--br);border-radius:8px;background:var(--bg);
+  color:var(--ink);font-family:Barlow,sans-serif;font-size:14px;
+  -webkit-appearance:none;appearance:none;transition:border-color .13s;box-sizing:border-box}
+.fb-select:focus,.fb-input:focus,.fb-textarea:focus{outline:none;border-color:var(--nv)}
+.fb-textarea{min-height:100px;resize:vertical;line-height:1.5}
+.fb-submit{display:block;width:100%;padding:14px;border:none;border-radius:10px;
+  background:var(--nv);color:var(--ink);font-family:'Barlow Condensed',sans-serif;
+  font-size:15px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  cursor:pointer;margin-top:18px;transition:opacity .13s;
+  -webkit-tap-highlight-color:transparent}
+.fb-submit:active{opacity:.8}
+.fb-submit:disabled{opacity:.4;cursor:default}
+.fb-success{text-align:center;padding:28px 16px;color:var(--gn);font-weight:600;font-size:15px}
+
+/* ── RATING BANNER ── */
+.rating-banner{position:fixed;bottom:calc(var(--tabh) + var(--safe-b) + 8px);
+  left:12px;right:12px;z-index:190;display:flex;align-items:center;
+  justify-content:space-between;gap:12px;padding:12px 16px;
+  background:var(--nvl);border:1px solid rgba(194,120,42,.3);
+  border-radius:12px;animation:fu .25s ease-out both;
+  box-shadow:0 4px 20px rgba(0,0,0,.3)}
+.rating-banner-txt{font-size:14px;color:var(--ink);font-weight:500;
+  cursor:pointer;flex:1;text-decoration:none}
+.rating-banner-txt:active{opacity:.7}
+.rating-banner-x{width:32px;height:32px;border:none;background:none;
+  color:var(--mut);font-size:18px;cursor:pointer;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;border-radius:50%}
+.rating-banner-x:active{background:rgba(255,255,255,.05)}
+@media(min-width:768px){.rating-banner{max-width:500px;left:50%;right:auto;
+  transform:translateX(-50%)}}
+
+/* ── PARTNERS SCREEN ── */
+.ptr-hero{margin-bottom:24px}
+.ptr-hero h2{font-family:'Libre Baskerville',serif;font-size:22px;color:var(--ink);
+  margin-bottom:6px}
+.ptr-hero p{font-size:14px;color:var(--mut);line-height:1.55}
+.ptr-blurb{background:var(--card);border:1px solid var(--br);border-radius:12px;
+  padding:16px;margin-bottom:20px;font-size:14px;color:var(--ink);line-height:1.6;
+  font-style:italic}
+.ptr-builder{background:var(--card);border:1px solid var(--br);border-radius:12px;
+  padding:20px 16px;margin-bottom:24px}
+.ptr-url{display:flex;gap:8px;margin-top:12px}
+.ptr-url-box{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--br);
+  border-radius:8px;background:var(--bg);color:var(--nvm);font-family:'IBM Plex Mono',monospace;
+  font-size:12px;word-break:break-all;line-height:1.4}
+.ptr-copy{flex-shrink:0;padding:10px 16px;border:none;border-radius:8px;
+  background:var(--nv);color:var(--ink);font-family:'Barlow Condensed',sans-serif;
+  font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  cursor:pointer;white-space:nowrap;transition:opacity .13s}
+.ptr-copy:active{opacity:.8}
+.ptr-orgs{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.ptr-org{padding:8px 14px;border:1px solid var(--br);border-radius:20px;
+  background:var(--card);font-size:13px;color:var(--ink);font-weight:500;
+  cursor:pointer;transition:border-color .13s;-webkit-tap-highlight-color:transparent}
+.ptr-org:active,.ptr-org.on{border-color:var(--nv);background:var(--nvl)}
 `;
 
 // ── DEBRIEFED CTA CARDS ───────────────────────────────────────────────
@@ -1466,7 +1551,7 @@ function UnconfiguredBanner({go}){
 }
 
 function DashboardTab({state,isConfigured,go}){
-  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,sbp,sbpCoverage,
+  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
          selectedState,desiredIncome,income,filingStatus,medDodPct,tdrl,reservePoints,currentAge,payStartAge,
          giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear}=state;
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
@@ -1475,7 +1560,7 @@ function DashboardTab({state,isConfigured,go}){
   const g=pensionBySepType(separationType,retType,yos,h3,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
   const sbpC=sbp?g*(sbpCoverage/100)*0.065:0;
   const netP=g-sbpC;
-  const vaM=(VA[vaRating]?.[key]||VA[vaRating]?.s)||0;
+  const vaM=calcVAComp(vaRating,key,vaChildren||0);
   const si=STATES[selectedState]||{ok:true};
   const taxableAnnual=netP*12+(income||0);
   const {monthlyTax:fedTax,effectiveRate:fedEffRate}=calcFederalTax(taxableAnnual,filingStatus||"single");
@@ -1514,7 +1599,7 @@ function DashboardTab({state,isConfigured,go}){
     <div className="fu">
       {!isConfigured&&<UnconfiguredBanner go={go}/>}
       <div className="sh2"><h2>Your Financial Dashboard</h2>
-        <p>{separationType==="veteran"?"Veteran":separationType==="medical"?"Medical Retiree":separationType==="reserve"?"Reserve/Guard":"Active Duty"} / {retType} / {yos} YOS / {selectedState}</p>
+        <p>{separationType==="veteran"?"Veteran":separationType==="medical"?"Medical Retiree":separationType==="reserve"?"Reserve/Guard":"Active Duty"} / {retType} / {fmtYos(yos)} YOS / {selectedState}</p>
       </div>
 
       <div className="dash-grid">
@@ -1588,7 +1673,7 @@ function DashboardTab({state,isConfigured,go}){
             {separationType==="reserve"?(
               <DR label="Equiv. YOS (points)" value={`${(reservePoints/360).toFixed(1)} yrs`} sub={`${reservePoints} total points`}/>
             ):(
-              <DR label="Years of Service" value={`${yos} years`}/>
+              <DR label="Years of Service" value={`${fmtYos(yos)} years`}/>
             )}
             {separationType==="medical"&&<DR label="DoD Disability %" value={`${medDodPct}%${tdrl?" (TDRL)":""}`}/>}
             <DR label="Pension Multiplier" value={`${p.toFixed(1)}%`} sub={`of High-3 ${fmt(h3)}/mo`}/>
@@ -1624,7 +1709,7 @@ function DashboardTab({state,isConfigured,go}){
       </div>
       {/* ── FOOTER CREDIT ── */}
       <div style={{textAlign:"center",marginTop:16,marginBottom:8}}>
-        <span style={{fontSize:11,color:"var(--mut)"}}>MilCalc · By the maker of Debriefed · <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer" style={{color:"var(--mut)",textDecoration:"none"}}>getdebriefed.co</a></span>
+        <span style={{fontSize:11,color:"var(--mut)"}}>MilCalc v{APP_VERSION} · By the maker of Debriefed · <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer" style={{color:"var(--mut)",textDecoration:"none"}}>getdebriefed.co</a></span>
       </div>
 
       {showFullDisclaimer&&(
@@ -1649,20 +1734,23 @@ function DashboardTab({state,isConfigured,go}){
 
 // ── TAB 2: BENEFITS (output-only detail views) ───────────────────────
 function BenefitsTab({state,isConfigured,go}){
-  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaRatings,sbp,sbpCoverage,
+  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,vaRatings,sbp,sbpCoverage,
          selectedState,medDodPct,tdrl,reservePoints,currentAge,payStartAge,
          giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear}=state;
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
   const derivedPay=usePayGrade?lookupPay(payGrade,yos):null;
   const key=dk(vaDeps);
+  const nKids=vaChildren||0;
   const isReserveEligibleNow=separationType==="reserve"&&currentAge>=payStartAge;
   const g=pensionBySepType(separationType,retType,yos,h3,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
   const p=separationType==="active"?pct(retType,yos):separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType).mult:separationType==="reserve"?reservePension(reservePoints,h3,retType).multPct*(reservePoints/360):0;
   const sbpC=sbp?g*(sbpCoverage/100)*0.065:0;
   const net=g-sbpC;
-  const vaM=(VA[vaRating]?.[key]||VA[vaRating]?.s)||0;
+  const vaM=calcVAComp(vaRating,key,nKids);
+  const vaBase=calcVAComp(vaRating,key,Math.min(nKids,1)); // base rate (includes first child)
+  const vaExtra=nKids>1?(VA[vaRating]?.ac||0)*(nKids-1):0;
   const comb=combinedVA(vaRatings);
-  const combMo=(VA[comb]?.[key]||VA[comb]?.s)||0;
+  const combMo=calcVAComp(comb,key,nKids);
   const isAnyRetiree=separationType==="active"||(separationType==="medical"&&yos>=20)||(separationType==="reserve"&&isReserveEligibleNow);
   const elig=isAnyRetiree&&vaRating>=50;
   const [crdpOpen,setCrdpOpen]=useState(false);
@@ -1716,13 +1804,13 @@ function BenefitsTab({state,isConfigured,go}){
             </div>
             <div style={{marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
-                <span>YOS leg: {yos} yrs × {retType==="BRS"?"2.0":"2.5"}% = {medicalPension(yos,h3,medDodPct,tdrl,retType).yosMult.toFixed(1)}%</span>
+                <span>YOS leg: {fmtYos(yos)} yrs × {retType==="BRS"?"2.0":"2.5"}% = {medicalPension(yos,h3,medDodPct,tdrl,retType).yosMult.toFixed(1)}%</span>
                 <span>DoD: {medicalPension(yos,h3,medDodPct,tdrl,retType).disabMult}%</span>
               </div>
               <PBar value={medicalPension(yos,h3,medDodPct,tdrl,retType).mult} max={75} color="var(--nv)"/>
             </div>
             <div className="ib ib-nv" style={{fontSize:12,marginBottom:12}}>
-              Formula: max(DoD disability {medDodPct}%, YOS {yos} × {retType==="BRS"?"2.0":"2.5"}%) = {medicalPension(yos,h3,medDodPct,tdrl,retType).mult.toFixed(1)}% × High-3, capped at 75%.
+              Formula: max(DoD disability {medDodPct}%, YOS {fmtYos(yos)} × {retType==="BRS"?"2.0":"2.5"}%) = {medicalPension(yos,h3,medDodPct,tdrl,retType).mult.toFixed(1)}% × High-3, capped at 75%.
             </div>
             <hr/>
             <DR label="Gross Pension" value={fmt(g)}/>
@@ -1760,7 +1848,7 @@ function BenefitsTab({state,isConfigured,go}){
           <div>
             <div style={{marginBottom:16}}>
               <BStat label="Gross Monthly Pension" value={fmt(g)} color="navy"
-                sub={`${yos} yrs x ${retType==="BRS"?"2.0":retType==="REDUX"?"varies":"2.5"}% = ${p.toFixed(1)}% of High-3`}/>
+                sub={`${fmtYos(yos)} yrs x ${retType==="BRS"?"2.0":retType==="REDUX"?"varies":"2.5"}% = ${p.toFixed(1)}% of High-3`}/>
             </div>
             <div style={{marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
@@ -1780,7 +1868,7 @@ function BenefitsTab({state,isConfigured,go}){
             </div>
             {usePayGrade&&derivedPay&&(
               <div className="ib ib-nv" style={{marginTop:12,fontSize:12}}>
-                <strong>2026 DFAS rate:</strong> {GRADE_LABELS[payGrade]} at {yos} yrs = <strong>{fmt(derivedPay)}/mo</strong>
+                <strong>2026 DFAS rate:</strong> {GRADE_LABELS[payGrade]} at {fmtYos(yos)} yrs = <strong>{fmt(derivedPay)}/mo</strong>
               </div>
             )}
           </div>
@@ -1821,8 +1909,13 @@ function BenefitsTab({state,isConfigured,go}){
         <div className="cttl">VA Disability Compensation</div>
         <div style={{marginBottom:16}}>
           <BStat label="Monthly VA Compensation" value={fmt(vaM)} color="green"
-            sub={`${vaRating}% rating · ${vaDeps} · 100% tax-free`}/>
+            sub={`${vaRating}% rating · ${vaDeps}${nKids>0?` · ${nKids} child${nKids>1?"ren":""}`:""}  · 100% tax-free`}/>
         </div>
+        {nKids>1&&vaRating>=30&&(
+          <div style={{fontSize:13,color:"var(--mut)",marginBottom:12,lineHeight:1.55}}>
+            Base rate ({vaDeps==="Spouse + Child"||vaDeps==="Child Only"?vaDeps.toLowerCase():"with 1 child"}): <strong style={{color:"var(--ink)",fontFamily:"'IBM Plex Mono',monospace"}}>{fmt(vaBase)}</strong> + {nKids-1} additional {nKids-1===1?"child":"children"}: <strong style={{color:"var(--gn)",fontFamily:"'IBM Plex Mono',monospace"}}>+{fmt(vaExtra)}/mo</strong>
+          </div>
+        )}
         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:12}}>
           <MT label="Annual" value={fmt(vaM*12)} color="green"/>
           <MT label="Tax-Equiv. Value" value={`${fmt(bEffRate<1?vaM/(1-bEffRate):vaM)}/mo`} color="navy" sub={`At ${(bEffRate*100).toFixed(1)}% effective rate`}/>
@@ -1874,7 +1967,7 @@ function BenefitsTab({state,isConfigured,go}){
               :separationType==="veteran"
                 ?`Veterans without retirement pay are not eligible for CRDP. See CRSC below if you have combat-related injuries.`
                 :separationType==="medical"&&yos<20
-                  ?`Chapter 61 medical retirees with fewer than 20 years of service do not qualify for CRDP. You may qualify for CRSC if your disability is combat-related. Current YOS: ${yos}.`
+                  ?`Chapter 61 medical retirees with fewer than 20 years of service do not qualify for CRDP. You may qualify for CRSC if your disability is combat-related. Current YOS: ${fmtYos(yos)}.`
                   :separationType==="reserve"&&!isReserveEligibleNow
                     ?`CRDP eligibility begins when Reserve retirement pay starts at age ${payStartAge}.`
                     :`To qualify: must be a retiree with 50%+ VA rating. Current rating: ${vaRating}%.`}
@@ -2014,20 +2107,44 @@ function EditInMyInfo({label,value,go}){
   );
 }
 
+// Map states to a default "current city" in COL table
+const STATE_DEFAULT_CITY={
+  "Alabama":"Birmingham, AL","Alaska":"Anchorage, AK","Arizona":"Phoenix, AZ",
+  "Arkansas":"Little Rock, AR","California":"San Diego, CA","Colorado":"Colorado Springs, CO",
+  "Connecticut":"Hartford, CT","Delaware":"Dover, DE","Florida":"Jacksonville, FL",
+  "Georgia":"Atlanta, GA","Hawaii":"Oahu, HI","Idaho":"Boise, ID",
+  "Illinois":"Chicago, IL","Indiana":"Indianapolis, IN","Iowa":"Des Moines, IA",
+  "Kansas":"Junction City/Fort Riley, KS","Kentucky":"Louisville, KY","Louisiana":"Baton Rouge, LA",
+  "Maine":"Portland, ME","Maryland":"Baltimore, MD","Massachusetts":"Boston, MA",
+  "Michigan":"Detroit, MI","Minnesota":"Minneapolis-St. Paul, MN","Mississippi":"Biloxi/Keesler, MS",
+  "Missouri":"St. Louis, MO","Montana":"Billings, MT","Nebraska":"Offutt/Omaha, NE",
+  "Nevada":"Las Vegas, NV","New Hampshire":"Manchester, NH","New Jersey":"Newark, NJ",
+  "New Mexico":"Albuquerque, NM","New York":"New York, NY","North Carolina":"Fayetteville/Fort Liberty, NC",
+  "North Dakota":"Fargo, ND","Ohio":"Columbus, OH","Oklahoma":"Oklahoma City, OK",
+  "Oregon":"Portland, OR","Pennsylvania":"Philadelphia, PA","Rhode Island":"Providence, RI",
+  "South Carolina":"Charleston, SC","South Dakota":"Sioux Falls, SD","Tennessee":"Nashville, TN",
+  "Texas":"San Antonio, TX","Utah":"Salt Lake City, UT","Vermont":"Burlington, VT",
+  "Virginia":"Hampton Roads/Norfolk, VA","Washington":"Seattle, WA","West Virginia":"Charleston, WV",
+  "Wisconsin":"Milwaukee, WI","Wyoming":"Cheyenne, WY",
+};
+
+// Popular military retirement destinations
+const POPULAR_RETIRE_CITIES=["San Antonio, TX","Tampa, FL","Colorado Springs, CO","Virginia Beach, VA","Jacksonville, FL","Clarksville/Fort Campbell, TN","Fayetteville/Fort Liberty, NC","Killeen/Fort Cavazos, TX","Pensacola, FL","Huntsville, AL","El Paso/Fort Bliss, TX","Savannah, GA"];
+
 function PlanningTab({state,set,go}){
-  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,sbp,sbpCoverage,
+  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
          selectedState,income,desiredIncome,colFrom,colTo,monthlyIncome,filingStatus,
          medDodPct,tdrl,reservePoints,currentAge,payStartAge,
          giUsing,giEligPct,giSchoolCity,giEnroll,giOnline}=state;
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
   const key=dk(vaDeps);
-  const isReserveEligibleNow=separationType==="reserve"&&currentAge>=payStartAge;
+  const nKids=vaChildren||0;
   const g=pensionBySepType(separationType,retType,yos,h3,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
   const sbpC=sbp?g*(sbpCoverage/100)*0.065:0;
   const netP=g-sbpC;
   const annP=netP*12;
-  const annVA=(VA[vaRating]?.[key]||VA[vaRating]?.s||0)*12;
-  const vaM=(VA[vaRating]?.[key]||VA[vaRating]?.s)||0;
+  const vaM=calcVAComp(vaRating,key,nKids);
+  const annVA=vaM*12;
   const si=STATES[selectedState]||{ok:true,note:""};
   const stTax=si.ok?0:annP*((si.rate||0)/100);
   const taxableAnnualP=annP+(income||0);
@@ -2035,28 +2152,35 @@ function PlanningTab({state,set,go}){
   const take=annP+annVA+income-fedTaxAnn-stTax;
   const friendly=["Texas","Florida","Nevada","Wyoming","South Dakota","Washington","Tennessee","Mississippi","Illinois","Alabama","Hawaii"];
 
-  // COL
-  const fi=COL[colFrom]||100,ti=COL[colTo]||100;
-  const adj=monthlyIncome*(ti/fi),diff=adj-monthlyIncome;
-  const cats=[
-    {n:"Housing",w:.33,v:1.6},{n:"Groceries",w:.13,v:.6},{n:"Utilities",w:.07,v:.5},
-    {n:"Transportation",w:.10,v:.7},{n:"Healthcare",w:.08,v:.6},{n:"Misc.",w:.10,v:.5},
-  ];
-
-  // Gap
+  // COL — auto-derive "from" city based on state if user hasn't changed it
+  const autoFrom=STATE_DEFAULT_CITY[selectedState]||colFrom;
+  const effectiveFrom=COL[colFrom]?colFrom:autoFrom;
+  const fi=COL[effectiveFrom]||100,ti=COL[colTo]||100;
+  // Use the user's computed total monthly income as the default if they haven't touched monthlyIncome
   const {monthlyTax:pFedTaxMo}=calcFederalTax(taxableAnnualP,filingStatus||"single");
   const stTaxMo=si.ok?0:netP*((si.rate||0)/100);
   const atP=netP-pFedTaxMo-stTaxMo;
   const mhaBase=giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[giSchoolCity]||0);
   const mhaMo=giUsing?Math.round(mhaBase*(giEligPct/100)*giEnroll):0;
   const otherMo=Math.round((income||0)/12);
+  const autoMonthly=Math.round(atP+vaM+otherMo+mhaMo);
+  const effectiveMonthly=monthlyIncome>0?monthlyIncome:(autoMonthly>0?autoMonthly:5000);
+  const adj=effectiveMonthly*(ti/fi),diff=adj-effectiveMonthly;
+  const diffAnn=(adj-effectiveMonthly)*12;
+  const cats=[
+    {n:"Housing",w:.33,v:1.6},{n:"Groceries",w:.13,v:.6},{n:"Utilities",w:.07,v:.5},
+    {n:"Transportation",w:.10,v:.7},{n:"Healthcare",w:.08,v:.6},{n:"Misc.",w:.10,v:.5},
+  ];
+
+  // Gap — compute from My Info data automatically
   const totalBase=atP+vaM+otherMo;
   const totalIncRaw=totalBase+mhaMo;
   const totalInc=Math.max(0,totalIncRaw);
   const gap=desiredIncome-totalInc;
   const sal=gap>0?gap/0.75:0;
   const hr=sal*12/2080;
-  const cov=Math.min(100,(totalInc/desiredIncome)*100);
+  const hrPT=sal*12/1040;
+  const cov=desiredIncome>0?Math.min(100,(totalInc/desiredIncome)*100):0;
   const gs=[
     {g:"GS-9",r:"$56,111-$72,940",lo:56111},{g:"GS-11",r:"$68,405-$88,926",lo:68405},
     {g:"GS-12",r:"$81,966-$106,549",lo:81966},{g:"GS-13",r:"$97,376-$126,585",lo:97376},
@@ -2064,25 +2188,37 @@ function PlanningTab({state,set,go}){
   ];
 
   const [section,setSection]=useState("taxes");
+  const [colNudgeDismissed,setColNudgeDismissed]=useState(false);
+  const [gapNudgeDismissed,setGapNudgeDismissed]=useState(false);
 
   // ── Analytics ──
   const prevCOL=useRef(null);
   useEffect(()=>{
-    const key=colFrom+"|"+colTo;
-    if(section==="col"&&colFrom!==colTo&&key!==prevCOL.current){
-      prevCOL.current=key;
-      track("COL City Compared",{city_from:colFrom,city_to:colTo,index_difference:ti-fi});
+    const k2=effectiveFrom+"|"+colTo;
+    if(section==="col"&&effectiveFrom!==colTo&&k2!==prevCOL.current){
+      prevCOL.current=k2;
+      track("COL City Compared",{city_from:effectiveFrom,city_to:colTo,index_difference:ti-fi});
     }
-  },[section,colFrom,colTo,fi,ti]);
+  },[section,effectiveFrom,colTo,fi,ti]);
 
   const prevGap=useRef(null);
   useEffect(()=>{
-    const key=desiredIncome+"|"+totalInc;
-    if(section==="gap"&&desiredIncome>0&&key!==prevGap.current){
-      prevGap.current=key;
+    const k2=desiredIncome+"|"+totalInc;
+    if(section==="gap"&&desiredIncome>0&&k2!==prevGap.current){
+      prevGap.current=k2;
       track("Income Gap Calculated",{target_income:r100(desiredIncome),total_benefits:r100(totalInc),gap_amount:r100(gap),salary_needed:r100(sal*12)});
     }
   },[section,desiredIncome,totalInc,gap,sal]);
+
+  // Auto-sync colFrom to state when state changes
+  const prevSt=useRef(selectedState);
+  useEffect(()=>{
+    if(selectedState!==prevSt.current){
+      prevSt.current=selectedState;
+      const mapped=STATE_DEFAULT_CITY[selectedState];
+      if(mapped&&COL[mapped]) set("colFrom",mapped);
+    }
+  },[selectedState]);
 
   return(
     <div className="fu">
@@ -2092,10 +2228,22 @@ function PlanningTab({state,set,go}){
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:6,marginBottom:18}}>
         {[{id:"taxes",l:"Taxes"},{id:"col",l:"Cost of Living"},{id:"gap",l:"Income Gap"}].map(s=>(
           <button key={s.id} className={"tb"+(section===s.id?" on":"")}
-            style={{width:"100%",fontSize:14,padding:"12px 8px"}}
-            onClick={()=>setSection(s.id)}>{s.l}</button>
+            style={{width:"100%",fontSize:14,padding:"12px 8px",position:"relative"}}
+            onClick={()=>setSection(s.id)}>
+            {s.l}
+            {s.id==="col"&&!colNudgeDismissed&&section!=="col"&&<span style={{position:"absolute",top:4,right:8,width:6,height:6,borderRadius:"50%",background:"var(--gn)"}}/>}
+            {s.id==="gap"&&!gapNudgeDismissed&&section!=="gap"&&<span style={{position:"absolute",top:4,right:8,width:6,height:6,borderRadius:"50%",background:"var(--gn)"}}/>}
+          </button>
         ))}
       </div>
+
+      {/* Nudge banner for COL/Gap when on Taxes tab */}
+      {section==="taxes"&&!colNudgeDismissed&&!gapNudgeDismissed&&(
+        <div style={{background:"var(--gnb)",border:"1px solid rgba(90,158,111,.25)",borderRadius:10,padding:"10px 14px",marginBottom:14,display:"flex",alignItems:"center",justifyContent:"space-between",gap:10}}>
+          <span style={{fontSize:13,color:"var(--gn)",lineHeight:1.4}}>Try <strong style={{cursor:"pointer"}} onClick={()=>{setSection("col");setColNudgeDismissed(true);}}>Cost of Living</strong> and <strong style={{cursor:"pointer"}} onClick={()=>{setSection("gap");setGapNudgeDismissed(true);}}>Income Gap</strong> — they use your My Info data automatically.</span>
+          <button onClick={()=>{setColNudgeDismissed(true);setGapNudgeDismissed(true);}} style={{background:"none",border:"none",color:"var(--gn)",fontSize:16,cursor:"pointer",flexShrink:0,padding:4}}>&#10005;</button>
+        </div>
+      )}
 
       {/* ── TAXES ── */}
       {section==="taxes"&&(
@@ -2135,91 +2283,148 @@ function PlanningTab({state,set,go}){
       {/* ── COST OF LIVING ── */}
       {section==="col"&&(
         <div>
+          {/* Hero summary card — shows result immediately */}
+          <div className="card" style={{borderLeft:diff>0?"3px solid var(--rd)":"3px solid var(--gn)"}}>
+            <div style={{fontSize:15,color:"var(--ink)",lineHeight:1.6,fontWeight:500}}>
+              {effectiveFrom===colTo?(
+                <span>Select two different cities to compare cost of living.</span>
+              ):diff>0?(
+                <span>Your <strong style={{fontFamily:"'IBM Plex Mono',monospace"}}>{fmt(effectiveMonthly)}/mo</strong> goes <strong style={{color:"var(--rd)"}}>{Math.abs(((ti-fi)/fi)*100).toFixed(0)}% less far</strong> in {colTo.split(",")[0]} than {effectiveFrom.split(",")[0]}. You'd need <strong style={{fontFamily:"'IBM Plex Mono',monospace",color:"var(--rd)"}}>{fmt(Math.abs(diff))}/mo more</strong> to maintain your lifestyle.</span>
+              ):(
+                <span>Your <strong style={{fontFamily:"'IBM Plex Mono',monospace"}}>{fmt(effectiveMonthly)}/mo</strong> goes <strong style={{color:"var(--gn)"}}>{Math.abs(((ti-fi)/fi)*100).toFixed(0)}% further</strong> in {colTo.split(",")[0]} than {effectiveFrom.split(",")[0]}. You'd save <strong style={{fontFamily:"'IBM Plex Mono',monospace",color:"var(--gn)"}}>{fmt(Math.abs(diff))}/mo</strong>.</span>
+              )}
+            </div>
+            {effectiveFrom!==colTo&&(
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginTop:14}}>
+                <MT label="Monthly Difference" value={(diff>0?"+":"")+fmt(diff)} color={diff>0?"red":"green"} sub="per month"/>
+                <MT label="Annual Impact" value={(diffAnn>0?"+":"")+fmt(diffAnn)} color={diffAnn>0?"red":"green"} sub="per year"/>
+              </div>
+            )}
+          </div>
+
           <div className="card">
             <div className="cttl">Compare Cities</div>
-            <SF label="From" value={colFrom} onChange={v=>set("colFrom",v)} options={Object.keys(COL).sort()}/>
-            <SF label="To" value={colTo} onChange={v=>set("colTo",v)} options={Object.keys(COL).sort()}/>
-            <NF label="Current Monthly Income" value={monthlyIncome} onChange={v=>set("monthlyIncome",v)} pre="$" step={100}/>
-            <hr/>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <MT label={colFrom.split(",")[0]} value={fi.toString()} sub="COL index"/>
-              <MT label={colTo.split(",")[0]} value={ti.toString()} color={ti>fi?"red":"green"} sub="COL index"/>
+            <SF label="Where You Are Now" value={effectiveFrom} onChange={v=>set("colFrom",v)} options={Object.keys(COL).sort()}
+              hint={`Auto-set from your state (${selectedState}). Change anytime.`}/>
+            <SF label="Where You're Considering" value={colTo} onChange={v=>set("colTo",v)} options={Object.keys(COL).sort()}/>
+            <NF label="Your Monthly Income" value={effectiveMonthly}
+              onChange={v=>set("monthlyIncome",v)} pre="$" step={100}
+              hint={autoMonthly>0?`Auto-filled from your benefits (${fmt(autoMonthly)}/mo). Adjust if needed.`:"Enter your expected monthly income."}/>
+
+            {/* Popular cities quick-picks */}
+            <div style={{marginTop:14}}>
+              <div style={{fontSize:11,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",color:"var(--fnt)",marginBottom:8}}>Popular Retirement Cities</div>
+              <div style={{display:"flex",flexWrap:"wrap",gap:4}}>
+                {POPULAR_RETIRE_CITIES.filter(c=>c!==effectiveFrom).slice(0,8).map(c=>(
+                  <span key={c} className={"chip"+(c===colTo?" g":"")} onClick={()=>set("colTo",c)}>{c.split(",")[0]}</span>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="card">
-            <div className="cttl">Purchasing Power</div>
-            <div style={{marginBottom:16}}>
-              <BStat label="Equivalent Income Needed" value={fmt(adj)} color={diff>0?"red":"green"}
-                sub={`${Math.abs(((ti-fi)/fi)*100).toFixed(1)}% ${diff>0?"more expensive":"cheaper"} than ${colFrom.split(",")[0]}`}/>
-            </div>
-            <div className={"ib "+(diff>0?"ib-gd":"ib-gn")} style={{marginBottom:16}}>
-              {diff>0
-                ?`Your ${fmt(monthlyIncome)}/mo has the buying power of ${fmt(adj)} in ${colTo.split(",")[0]}. You need ${fmt(diff)}/mo more.`
-                :`Your money goes further — ${fmt(monthlyIncome)}/mo in ${colFrom.split(",")[0]} equals ${fmt(adj)} in ${colTo.split(",")[0]}. You save ${fmt(Math.abs(diff))}/mo.`}
-            </div>
-            <div className="cttl">Breakdown by Category</div>
-            {cats.map(({n,w,v})=>{
-              const d=((ti-fi)/fi)*v*monthlyIncome*w;
-              return(
-                <div key={n} style={{marginBottom:11}}>
-                  <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}>
-                    <span style={{color:"var(--mut)"}}>{n}</span>
-                    <span style={{fontFamily:"'IBM Plex Mono',monospace",color:d>0?"var(--rd)":"var(--gn)",fontWeight:500}}>{d>0?"+":""}{fmt(d)}/mo</span>
+
+          {effectiveFrom!==colTo&&(
+            <div className="card">
+              <div className="cttl">Breakdown by Category</div>
+              {cats.map(({n,w,v})=>{
+                const d=((ti-fi)/fi)*v*effectiveMonthly*w;
+                return(
+                  <div key={n} style={{marginBottom:11}}>
+                    <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}>
+                      <span style={{color:"var(--mut)"}}>{n}</span>
+                      <span style={{fontFamily:"'IBM Plex Mono',monospace",color:d>0?"var(--rd)":"var(--gn)",fontWeight:500}}>{d>0?"+":""}{fmt(d)}/mo</span>
+                    </div>
+                    <PBar value={Math.abs(d)} max={500} color={d>0?"var(--rd)":"var(--gn)"}/>
                   </div>
-                  <PBar value={Math.abs(d)} max={500} color={d>0?"var(--rd)":"var(--gn)"}/>
-                </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
+          )}
         </div>
       )}
 
       {/* ── INCOME GAP ── */}
       {section==="gap"&&(
         <div>
+          {/* Hero result — the answer first */}
+          {desiredIncome>0&&(
+            <div className="card" style={{borderLeft:gap<=0?"3px solid var(--gn)":"3px solid var(--gd)"}}>
+              {gap<=0?(
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",color:"var(--gn)",marginBottom:8}}>You're Fully Covered</div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:32,fontWeight:600,color:"var(--gn)",lineHeight:1}}>+{fmt(Math.abs(gap))}<span style={{fontSize:16,fontWeight:500}}>/mo</span></div>
+                  <div style={{fontSize:14,color:"var(--mut)",marginTop:8,lineHeight:1.5}}>
+                    Your benefits exceed your target by <strong style={{color:"var(--gn)"}}>{fmt(Math.abs(gap))}/mo</strong> ({fmt(Math.abs(gap)*12)}/yr). You're in great shape.
+                  </div>
+                </div>
+              ):(
+                <div>
+                  <div style={{fontSize:13,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",color:"var(--gd)",marginBottom:8}}>Additional Income Needed</div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:32,fontWeight:600,color:"var(--ink)",lineHeight:1}}>{fmt(gap*12)}<span style={{fontSize:16,fontWeight:500,color:"var(--mut)"}}>/year</span></div>
+                  <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:18,color:"var(--mut)",marginTop:4}}>{fmt(gap)}/month</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginTop:14}}>
+                    <div style={{background:"var(--sub)",borderRadius:8,padding:"10px 8px",textAlign:"center"}}>
+                      <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"var(--fnt)",marginBottom:4}}>Full-Time</div>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:14,fontWeight:600,color:"var(--ink)"}}>{fmt(sal*12)}/yr</div>
+                      <div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>${hr.toFixed(0)}/hr</div>
+                    </div>
+                    <div style={{background:"var(--sub)",borderRadius:8,padding:"10px 8px",textAlign:"center"}}>
+                      <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"var(--fnt)",marginBottom:4}}>Part-Time</div>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:14,fontWeight:600,color:"var(--ink)"}}>{fmt(sal*12)}/yr</div>
+                      <div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>${hrPT.toFixed(0)}/hr</div>
+                    </div>
+                    <div style={{background:"var(--sub)",borderRadius:8,padding:"10px 8px",textAlign:"center"}}>
+                      <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"var(--fnt)",marginBottom:4}}>Gross Salary</div>
+                      <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:14,fontWeight:600,color:"var(--ink)"}}>{fmt(sal*12)}</div>
+                      <div style={{fontSize:11,color:"var(--mut)",marginTop:2}}>est. 25% tax</div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Coverage bar — prominent */}
           <div className="card">
-            <div className="cttl">Income Target</div>
-            <EditInMyInfo label="Desired Monthly Take-Home" value={fmt(desiredIncome)} go={go}/>
-            <div style={{height:8}}/>
-            <div className="cttl" style={{marginTop:0}}>Your Benefits (after tax)</div>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:6}}>
+              <span style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Benefits Coverage</span>
+              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:20,fontWeight:600,color:gap<=0?"var(--gn)":cov>70?"var(--gd)":"var(--nv)"}}>{cov.toFixed(0)}%</span>
+            </div>
+            <div style={{height:12,background:"var(--sub)",borderRadius:100,overflow:"hidden",marginBottom:8}}>
+              <div style={{height:"100%",borderRadius:100,transition:"width .45s ease-out",width:`${cov}%`,background:gap<=0?"var(--gn)":cov>70?"var(--gd)":"var(--nv)"}}/>
+            </div>
+            <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)"}}>
+              <span>{fmt(totalInc)}/mo from benefits</span>
+              <span>Target: {fmt(desiredIncome)}/mo</span>
+            </div>
+          </div>
+
+          {/* Benefit breakdown */}
+          <div className="card">
+            <div className="cttl">Your Benefits (after tax)</div>
             <DR label="Pension (after taxes & SBP)" value={fmt(atP)} color="navy"/>
             <DR label="VA Compensation" value={fmt(vaM)} color="green" sub="Tax-free"/>
-            {mhaMo>0&&<DR label="GI Bill MHA" value={fmt(mhaMo)} color="green" sub="School months · tax-free"/>}
-            {otherMo>0&&<DR label="Other Income / Salary" value={fmt(otherMo)} color="ink" sub="Monthly average"/>}
+            {mhaMo>0&&<DR label="GI Bill MHA" value={fmt(mhaMo)} color="green" sub="School months only"/>}
+            {otherMo>0&&<DR label="Other Income" value={fmt(otherMo)} color="ink" sub="Monthly average"/>}
             <hr/>
-            <DR label="Total Monthly Income" value={fmt(totalInc)} color="navy" sub={mhaMo>0?`Break months: ${fmt(totalBase)}`:""}/>
-          </div>
-          <div className="card">
-            <div className="cttl">Coverage</div>
-            <div style={{marginBottom:16}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
-                <span>Benefits cover {cov.toFixed(0)}% of your target</span>
-                <span>{fmt(totalInc)} of {fmt(desiredIncome)}</span>
-              </div>
-              <PBar value={totalInc} max={desiredIncome} color={gap<=0?"var(--gn)":cov>70?"var(--gd)":"var(--nv)"}/>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0"}}>
+              <span style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Total Monthly</span>
+              <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:18,fontWeight:600,color:"var(--nvm)"}}>{fmt(totalInc)}</span>
             </div>
-            {gap<=0?(
-              <div className="ib ib-gn"><strong>Fully covered.</strong> Surplus of {fmt(Math.abs(gap))}/mo ({fmt(Math.abs(gap)*12)}/yr).</div>
-            ):(
-              <>
-                <div className="ib ib-gd" style={{marginBottom:16}}><strong>Gap: {fmt(gap)}/month.</strong> You need {fmt(gap*12)}/year in additional income.</div>
-                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:16}}>
-                  <MT label="Annual Salary Needed" value={fmt(sal*12)} color="navy" sub="gross, est. 25% tax"/>
-                  <MT label="Hourly Rate (FT)" value={`$${hr.toFixed(2)}`} color="navy" sub={`$${(hr*2).toFixed(2)}/hr part-time`}/>
-                </div>
-                <Reveal label="Show GS Pay Reference">
-                  <table className="dt">
-                    <thead><tr><th>Grade</th><th>Salary Range</th></tr></thead>
-                    <tbody>{gs.map(({g,r,lo})=>(
-                      <tr key={g} className={sal*12>=lo&&sal*12<lo*1.38?"hi":""}>
-                        <td style={{color:"var(--nv)",fontWeight:600}}>{g}</td><td>{r}</td>
-                      </tr>
-                    ))}</tbody>
-                  </table>
-                </Reveal>
-              </>
-            )}
+            <EditInMyInfo label="Target Take-Home" value={fmt(desiredIncome)} go={go}/>
           </div>
+
+          {gap>0&&(
+            <Reveal label="Show GS Pay Reference">
+              <table className="dt">
+                <thead><tr><th>Grade</th><th>Salary Range</th></tr></thead>
+                <tbody>{gs.map(({g,r,lo})=>(
+                  <tr key={g} className={sal*12>=lo&&sal*12<lo*1.38?"hi":""}>
+                    <td style={{color:"var(--nv)",fontWeight:600}}>{g}</td><td>{r}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </Reveal>
+          )}
           {gap>0&&<DebriefedGapCard gap={gap}/>}
         </div>
       )}
@@ -2231,7 +2436,7 @@ function PlanningTab({state,set,go}){
 function ProfileTab({state,set,isConfigured}){
   const {separationType,retType,yos,high3,usePayGrade,payGrade,sbp,sbpCoverage,
          medDodPct,tdrl,reservePoints,currentAge,payStartAge,reserveHealthType,
-         vaRating,vaDeps,vaRatings,selectedState,income,desiredIncome,
+         vaRating,vaDeps,vaChildren,vaRatings,selectedState,income,desiredIncome,
          giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear,
          tricareplan,tricareFamSize,tricareGroup,useVgli,vgliCoverage,vgliAge,otherLifePremium}=state;
   const [addR,setAddR]=useState(10);
@@ -2249,14 +2454,25 @@ function ProfileTab({state,set,isConfigured}){
     }
   },[yos,retType,payGrade,separationType,high3,medDodPct,pensionMo]);
 
+  const nKids=vaChildren||0;
+
   const prevVA=useRef(null);
   useEffect(()=>{
     if(vaRating>0&&vaRating!==prevVA.current){
       prevVA.current=vaRating;
-      const vaAmt=(VA[vaRating]?.[dk(vaDeps)]||VA[vaRating]?.s)||0;
-      track("VA Rating Selected",{rating:vaRating,dependency_status:vaDeps,monthly_amount:r100(vaAmt)});
+      const vaAmt=calcVAComp(vaRating,dk(vaDeps),nKids);
+      track("VA Rating Selected",{rating:vaRating,dependency_status:vaDeps,children:nKids,monthly_amount:r100(vaAmt)});
     }
-  },[vaRating,vaDeps]);
+  },[vaRating,vaDeps,nKids]);
+
+  const prevChildren=useRef(null);
+  useEffect(()=>{
+    if(vaRating>=30&&nKids>0&&nKids!==prevChildren.current){
+      prevChildren.current=nKids;
+      const extra=nKids>1?(VA[vaRating]?.ac||0)*(nKids-1):0;
+      track("Additional Children Updated",{count:nKids,rating:vaRating,additional_monthly_amount:r100(extra)});
+    }
+  },[vaRating,nKids]);
 
   const prevState=useRef(null);
   useEffect(()=>{
@@ -2331,8 +2547,8 @@ function ProfileTab({state,set,isConfigured}){
         )}
 
         {(separationType==="active"||separationType==="medical")&&(
-          <NF label={separationType==="medical"?"Years of Service at Separation":"Years of Service"} value={yos} onChange={v=>set("yos",v)} min={0} max={40} suf="yrs"
-            hint={separationType==="medical"?"YOS at time of medical separation — any amount qualifies":"Minimum 20 years for retirement eligibility"}/>
+          <NF label={separationType==="medical"?"Years of Service at Separation":"Years of Service"} value={yos} onChange={v=>set("yos",Math.round(v*2)/2)} min={0} max={40} step={0.5} suf="yrs"
+            hint={separationType==="medical"?"YOS at time of medical separation — any amount qualifies":"Minimum 20 years for retirement eligibility. Half-year increments supported (e.g. 20.5)."}/>
         )}
 
         {separationType==="medical"&&(
@@ -2352,8 +2568,8 @@ function ProfileTab({state,set,isConfigured}){
             <NF label="Current Age" value={currentAge} onChange={v=>set("currentAge",v)} min={35} max={80} suf="yrs"/>
             <NF label="Pay Start Age" value={payStartAge} onChange={v=>set("payStartAge",v)} min={50} max={60} suf="yrs"
               hint="Default 60. Reduces by 3 months per 90 days of qualifying active duty after Jan 28, 2008. Cannot go below 50."/>
-            <NF label="Years of Service (for CRDP)" value={yos} onChange={v=>set("yos",v)} min={0} max={40} suf="yrs"
-              hint="Total creditable years — used for CRDP eligibility (20+ required)"/>
+            <NF label="Years of Service (for CRDP)" value={yos} onChange={v=>set("yos",Math.round(v*2)/2)} min={0} max={40} step={0.5} suf="yrs"
+              hint="Total creditable years — used for CRDP eligibility (20+ required). Half-year increments supported."/>
           </>
         )}
 
@@ -2387,10 +2603,10 @@ function ProfileTab({state,set,isConfigured}){
                 </div>
                 {derivedPay?(
                   <div className="ib ib-nv" style={{fontSize:12}}>
-                    <strong>2026 DFAS rate:</strong> {GRADE_LABELS[payGrade]} at {yos} yrs = <strong>{fmt(derivedPay)}/mo</strong> basic pay.
+                    <strong>2026 DFAS rate:</strong> {GRADE_LABELS[payGrade]} at {fmtYos(yos)} yrs = <strong>{fmt(derivedPay)}/mo</strong> basic pay.
                   </div>
                 ):(
-                  <div className="ib ib-gd" style={{fontSize:12}}>This grade is not available at {yos} years of service.</div>
+                  <div className="ib ib-gd" style={{fontSize:12}}>This grade is not available at {fmtYos(yos)} years of service.</div>
                 )}
               </>
             ):(
@@ -2423,8 +2639,24 @@ function ProfileTab({state,set,isConfigured}){
         <div className="cttl">VA Disability</div>
         <SF label="Disability Rating" value={vaRating} onChange={v=>set("vaRating",Number(v))}
           options={[{v:0,l:"None / Not yet rated"},...[10,20,30,40,50,60,70,80,90,100].map(v=>({v,l:`${v}%`}))]}/>
-        <TG label="Dependent Status" value={vaDeps} onChange={v=>set("vaDeps",v)}
-          options={["Single","Spouse","Spouse + Child","Child Only"]}/>
+        <TG label="Dependent Status" value={vaDeps} onChange={v=>{set("vaDeps",v);if(v==="Single"&&nKids>0)set("vaChildren",0);}}
+          options={["Single","Spouse","Spouse + Child","Child Only"]}
+          hint={vaRating>0&&vaRating<=20?"Dependent compensation not available at this rating":undefined}/>
+        <NF label="Children Under 18" value={nKids} onChange={v=>{
+          set("vaChildren",v);
+          // Auto-adjust dependent status when adding children
+          if(v>0&&vaDeps==="Single")set("vaDeps","Child Only");
+          if(v>0&&vaDeps==="Spouse")set("vaDeps","Spouse + Child");
+          if(v===0&&vaDeps==="Child Only")set("vaDeps","Single");
+          if(v===0&&vaDeps==="Spouse + Child")set("vaDeps","Spouse");
+        }} min={0} max={10}
+          hint={vaRating>=30&&nKids>1
+            ?`Base rate includes 1 child. ${nKids-1} additional ${nKids-1===1?"child adds":"children add"} ${fmt(VA[vaRating]?.ac||0)}/mo each.`
+            :vaRating>0&&vaRating<=20
+            ?"Dependent compensation not available at this rating"
+            :vaRating>=30&&nKids===1
+            ?"Included in base rate"
+            :undefined}/>
 
         <hr/>
         <div className="cttl" style={{marginTop:0}}>Combined Rating Calculator (VA Math)</div>
@@ -2446,7 +2678,7 @@ function ProfileTab({state,set,isConfigured}){
         {vaRatings.length>0&&(
           <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
             <MT label="Combined Rating" value={`${combinedVA(vaRatings)}%`} color="navy"/>
-            <MT label="Monthly Comp." value={fmt((VA[combinedVA(vaRatings)]?.[dk(vaDeps)]||VA[combinedVA(vaRatings)]?.s)||0)} color="green"/>
+            <MT label="Monthly Comp." value={fmt(calcVAComp(combinedVA(vaRatings),dk(vaDeps),nKids))} color="green"/>
           </div>
         )}
       </div>
@@ -2604,6 +2836,19 @@ const FAQ_ITEMS=[
 
 function SupportScreen({onClose}){
   const [open,setOpen]=useState(null);
+  const [fbCat,setFbCat]=useState("General Feedback");
+  const [fbMsg,setFbMsg]=useState("");
+  const [fbName,setFbName]=useState("");
+  const [fbEmail,setFbEmail]=useState("");
+  const [fbSent,setFbSent]=useState(false);
+  const submitFeedback=()=>{
+    if(!fbMsg.trim()) return;
+    const subject=encodeURIComponent(`MilCalc Feedback \u2014 ${fbCat}`);
+    const body=encodeURIComponent(`Category: ${fbCat}\r\nMessage: ${fbMsg}\r\nName: ${fbName||"Not provided"}\r\nEmail: ${fbEmail||"Not provided"}`);
+    window.location.href=`mailto:support@getdebriefed.co?subject=${subject}&body=${body}`;
+    track("Feedback Submitted",{category:fbCat,has_email:!!fbEmail.trim()});
+    setFbSent(true);
+  };
   return(
     <div className="modal-screen">
       <div className="modal-hdr">
@@ -2615,8 +2860,37 @@ function SupportScreen({onClose}){
           <h2>Support</h2>
           <p>Questions about your calculations? We&rsquo;ve got you.</p>
         </div>
+
+        {/* ── FEEDBACK FORM ── */}
+        <div className="fb-form">
+          <div className="sup-contact-lbl">Send Feedback</div>
+          {fbSent?(
+            <div className="fb-success">Thanks &mdash; we read every submission.</div>
+          ):(
+            <>
+              <label className="fb-label">Category</label>
+              <select className="fb-select" value={fbCat} onChange={e=>setFbCat(e.target.value)}>
+                <option>Bug Report</option>
+                <option>Feature Request</option>
+                <option>Data Correction</option>
+                <option>General Feedback</option>
+              </select>
+              <label className="fb-label">Message</label>
+              <textarea className="fb-textarea" value={fbMsg} onChange={e=>setFbMsg(e.target.value)}
+                placeholder="Tell us what's on your mind..." required/>
+              <label className="fb-label">Name<span className="opt">(optional)</span></label>
+              <input className="fb-input" value={fbName} onChange={e=>setFbName(e.target.value)}
+                placeholder="Your name"/>
+              <label className="fb-label">Email<span className="opt">(optional)</span></label>
+              <input className="fb-input" type="email" value={fbEmail} onChange={e=>setFbEmail(e.target.value)}
+                placeholder="your@email.com"/>
+              <button className="fb-submit" onClick={submitFeedback} disabled={!fbMsg.trim()}>Submit Feedback</button>
+            </>
+          )}
+        </div>
+
         <div className="sup-contact">
-          <div className="sup-contact-lbl">Email Support</div>
+          <div className="sup-contact-lbl">Email Support Directly</div>
           <div className="sup-contact-email">support@getdebriefed.co</div>
           <div className="sup-contact-note">Typically respond within 1&ndash;2 business days</div>
           <a className="sup-contact-btn" href="mailto:support@getdebriefed.co?subject=MilCalc%20Support">Send Email</a>
@@ -2632,7 +2906,7 @@ function SupportScreen({onClose}){
           </div>
         ))}
         <div className="modal-footer">
-          <p>&copy; 2026 MilCalc</p>
+          <p>MilCalc v{APP_VERSION}</p>
           <p>Not affiliated with the U.S. Department of Defense, DFAS, or the Department of Veterans Affairs.</p>
         </div>
       </div>
@@ -2675,8 +2949,61 @@ function PrivacyScreen({onClose}){
           <p style={{fontSize:12,color:"#8a9ab5"}}>Effective date: March 1, 2026 &middot; Last updated: March 2026</p>
         </div>
         <div className="modal-footer">
-          <p>&copy; 2026 MilCalc</p>
+          <p>MilCalc v{APP_VERSION}</p>
           <p>Not affiliated with the U.S. Department of Defense, DFAS, or the Department of Veterans Affairs.</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── PARTNERS SCREEN ──────────────────────────────────────────────────
+const PARTNER_ORGS=["VFW","DAV","AMVETS","American Legion","MOAA","Military OneSource","USO","r/MilitaryFinance"];
+function PartnersScreen({onClose}){
+  const [orgName,setOrgName]=useState("");
+  const [copied,setCopied]=useState(false);
+  const slug=orgName.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"partner";
+  const url=`https://milcalc.app?utm_source=${slug}&utm_medium=website&utm_campaign=member-tools`;
+  const copyUrl=()=>{
+    navigator.clipboard.writeText(url).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>{});
+    track("Partner Link Copied",{org:orgName||slug});
+  };
+  return(
+    <div className="modal-screen">
+      <div className="modal-hdr">
+        <button className="modal-back" onClick={onClose} aria-label="Close">&larr;</button>
+        <div className="modal-htxt">Partners</div>
+      </div>
+      <div className="modal-body">
+        <div className="ptr-hero">
+          <h2>Share MilCalc with your community</h2>
+          <p>Help fellow veterans plan their retirement finances. MilCalc is free and always will be.</p>
+        </div>
+        <div className="ptr-blurb">
+          &ldquo;MilCalc is a free military retirement calculator covering pension, VA disability, CRDP/CRSC, state taxes, cost of living, and income gap analysis. No account required. No ads.&rdquo;
+        </div>
+        <div className="ptr-builder">
+          <div className="sup-contact-lbl">Create Your Tracking Link</div>
+          <label className="fb-label">Organization Name</label>
+          <input className="fb-input" value={orgName} onChange={e=>setOrgName(e.target.value)}
+            placeholder="e.g. VFW Post 1234"/>
+          <div className="ptr-url">
+            <div className="ptr-url-box">{url}</div>
+            <button className="ptr-copy" onClick={copyUrl}>{copied?"Copied!":"Copy"}</button>
+          </div>
+          <div style={{marginTop:20}}>
+            <div className="sup-contact-lbl">Suggested Organizations</div>
+            <div className="ptr-orgs">
+              {PARTNER_ORGS.map(o=>(
+                <button key={o} className={"ptr-org"+(orgName===o?" on":"")}
+                  onClick={()=>setOrgName(o)}>{o}</button>
+              ))}
+            </div>
+          </div>
+        </div>
+        <div className="modal-footer">
+          <p>MilCalc v{APP_VERSION}</p>
+          <p>Part of the <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer" style={{color:"var(--nvm)",textDecoration:"none"}}>Debriefed</a> product family.</p>
         </div>
       </div>
     </div>
@@ -2721,7 +3048,36 @@ export default function App(){
   const [entered,setEntered]=useState(hasEnteredApp);
   const [tab,setTab]=useState(loadTab);
   const [infoMenu,setInfoMenu]=useState(false);
-  const [screen,setScreen]=useState(null); // "support" | "privacy" | null
+  const [screen,setScreen]=useState(null); // "support" | "privacy" | "partners" | null
+
+  // ── Rating prompt state ──
+  const RATING_KEY="milcalc_rating_dismissed";
+  const [ratingDismissed,setRatingDismissed]=useState(()=>{try{return localStorage.getItem(RATING_KEY)==="1";}catch{return false;}});
+  const [showRating,setShowRating]=useState(false);
+  const tabCountRef=useRef(0);
+  const ratingShownRef=useRef(false);
+  const triggerRating=()=>{
+    if(ratingDismissed||ratingShownRef.current) return;
+    ratingShownRef.current=true;
+    setShowRating(true);
+    track("Rating Prompt Shown");
+  };
+  useEffect(()=>{
+    if(ratingDismissed) return;
+    const timer=setTimeout(triggerRating,120000); // 2 minutes
+    return ()=>clearTimeout(timer);
+  },[ratingDismissed]);
+  const dismissRating=()=>{
+    setShowRating(false);
+    try{localStorage.setItem(RATING_KEY,"1");}catch{}
+    setRatingDismissed(true);
+    track("Rating Prompt Dismissed");
+  };
+  const clickRating=()=>{
+    track("Rating Prompt Clicked");
+    window.location.href="mailto:support@getdebriefed.co?subject=MilCalc%20Review&body=I%20wanted%20to%20share%20some%20feedback%20about%20MilCalc%3A%0D%0A%0D%0A";
+    dismissRating();
+  };
 
   const enterApp=()=>{try{localStorage.setItem(LANDING_KEY,"1");}catch{}setEntered(true);};
   const exitApp=()=>{try{localStorage.removeItem(LANDING_KEY);}catch{}setEntered(false);};
@@ -2731,7 +3087,7 @@ export default function App(){
     retType:"High-3",yos:0,high3:0,usePayGrade:true,payGrade:"E-7",sbp:false,sbpCoverage:55,
     medDodPct:50,tdrl:false,
     reservePoints:3600,currentAge:45,payStartAge:60,reserveHealthType:"trs",
-    vaRating:0,vaDeps:"Single",vaRatings:[],
+    vaRating:0,vaDeps:"Single",vaChildren:0,vaRatings:[],
     selectedState:"Texas",income:0,filingStatus:"single",
     colFrom:"Fayetteville, NC",colTo:"Austin, TX",monthlyIncome:5000,
     desiredIncome:6000,
@@ -2749,6 +3105,9 @@ export default function App(){
     track("Page Viewed",{page:TAB_NAMES[id]||id});
     tabRef.current=id;
     setTab(id);try{localStorage.setItem(TAB_KEY,id);}catch{}window.scrollTo(0,0);
+    // Rating prompt: trigger after 3 tab visits
+    tabCountRef.current++;
+    if(tabCountRef.current>=3) triggerRating();
   };
 
   // Derived values for status bar
@@ -2763,7 +3122,7 @@ export default function App(){
   const {monthlyTax:appFedTax}=calcFederalTax(appTaxableAnn,s.filingStatus||"single");
   const stTax=si.ok?0:netP*((si.rate||0)/100);
   const atP=netP-appFedTax-stTax;
-  const vaM=(VA[s.vaRating]?.[dk(s.vaDeps)]||VA[s.vaRating]?.s)||0;
+  const vaM=calcVAComp(s.vaRating,dk(s.vaDeps),s.vaChildren||0);
   const mhaBase=s.giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[s.giSchoolCity]||0);
   const mhaMo=s.giUsing?Math.round(mhaBase*(s.giEligPct/100)*s.giEnroll):0;
   const otherMo=Math.round((s.income||0)/12);
@@ -2803,7 +3162,7 @@ export default function App(){
         <div className="sb-left">
           <div className="sb-title">Monthly Total</div>
           <div className="sb-total">{s._hasVisitedMyInfo?fmt(total):"\u2014"}</div>
-          <div className="sb-sub">{s._hasVisitedMyInfo?`${s.separationType==="veteran"?"Veteran":s.separationType==="medical"?"Med. Ret.":s.separationType==="reserve"?"Reserve":s.retType} / ${s.yos} YOS`:"Set up My Info to see your numbers"}</div>
+          <div className="sb-sub">{s._hasVisitedMyInfo?`${s.separationType==="veteran"?"Veteran":s.separationType==="medical"?"Med. Ret.":s.separationType==="reserve"?"Reserve":s.retType} / ${fmtYos(s.yos)} YOS`:"Set up My Info to see your numbers"}</div>
         </div>
         <div className="sb-right">
           <div className="sb-pill">
@@ -2829,14 +3188,18 @@ export default function App(){
             <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);setScreen("privacy");}}>
               <span>{"\u{1F512}"}</span><span>Privacy Policy</span>
             </button>
+            <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);setScreen("partners");}}>
+              <span>{"\u{1F517}"}</span><span>Share / Partners</span>
+            </button>
             <button className="info-sheet-cancel" onClick={()=>setInfoMenu(false)}>Cancel</button>
           </div>
         </div>
       )}
 
-      {/* ── SUPPORT / PRIVACY SCREENS ── */}
+      {/* ── SUPPORT / PRIVACY / PARTNERS SCREENS ── */}
       {screen==="support"&&<SupportScreen onClose={()=>setScreen(null)}/>}
       {screen==="privacy"&&<PrivacyScreen onClose={()=>setScreen(null)}/>}
+      {screen==="partners"&&<PartnersScreen onClose={()=>setScreen(null)}/>}
 
       {/* ── MAIN CONTENT ── */}
       <main className="main">
@@ -2845,6 +3208,14 @@ export default function App(){
         {tab==="benefits" &&<BenefitsTab state={s} isConfigured={s._hasVisitedMyInfo} go={go}/>}
         {tab==="planning" &&<PlanningTab state={s} set={set} go={go}/>}
       </main>
+
+      {/* ── RATING BANNER ── */}
+      {showRating&&(
+        <div className="rating-banner">
+          <a className="rating-banner-txt" onClick={clickRating}>Finding MilCalc helpful? {"\u2B50"} Leave a review</a>
+          <button className="rating-banner-x" onClick={dismissRating} aria-label="Dismiss">{"\u00D7"}</button>
+        </div>
+      )}
 
       {/* ── BOTTOM TAB BAR ── */}
       <nav className="btabs">

@@ -1,7 +1,7 @@
 import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'
-import { initAnalytics, track } from './analytics.js'
+import { initAnalytics, captureUtm, track } from './analytics.js'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -44,6 +44,7 @@ class ErrorBoundary extends React.Component {
 }
 
 initAnalytics();
+captureUtm();
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   React.createElement(React.StrictMode, null,
