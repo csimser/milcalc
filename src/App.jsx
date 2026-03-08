@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { track, r100 } from "./analytics.js";
 import { version as APP_VERSION } from "../package.json";
+import { jsPDF } from "jspdf";
 
 // ── DFAS 2026 BASIC PAY TABLES (Effective January 1, 2026) ─────────────
 // Source: DFAS.mil — Page updated Jan/Feb 2026 (3.8% raise per FY2026 NDAA)
@@ -594,7 +595,7 @@ const MHA_CITIES = {
   "Cheyenne/F.E. Warren, WY":       1653,
 };
 
-const fmt = n => (n<0?"-$":"$") + Math.abs(Math.round(n)).toLocaleString("en-US");
+const fmt = n => {const v=Number(n);if(!isFinite(v)||isNaN(v))return "$0";return (v<0?"-$":"$")+Math.abs(Math.round(v)).toLocaleString("en-US");};
 const fmtYos = y => y%1===0?`${y}`:`${y.toFixed(1)}`;
 const dk = dep => ({Single:"s",Spouse:"sp","Spouse + Child":"spc","Child Only":"c"}[dep]||"s");
 
@@ -618,12 +619,14 @@ function calcVAComp(rating, depsKey, children) {
 }
 
 function pension(rt, yos, h3) {
-  if (rt==="REDUX") return h3 * Math.min(0.40+Math.max(0,yos-20)*0.035, 0.75);
-  return h3 * (rt==="BRS"?0.020:0.025) * Math.min(yos,40);
+  if (!h3 || h3 <= 0 || !yos || yos <= 0) return 0;
+  if (rt==="REDUX") return Math.max(0, h3 * Math.min(0.40+Math.max(0,yos-20)*0.035, 0.75));
+  return Math.max(0, h3 * (rt==="BRS"?0.020:0.025) * Math.min(yos,40));
 }
 function pct(rt, yos) {
-  if (rt==="REDUX") return Math.min(40+Math.max(0,yos-20)*3.5,75);
-  return Math.min(yos*(rt==="BRS"?2.0:2.5),100);
+  const y = yos || 0;
+  if (rt==="REDUX") return Math.min(40+Math.max(0,y-20)*3.5,75);
+  return Math.min(y*(rt==="BRS"?2.0:2.5),100);
 }
 function combinedVA(ratings) {
   if (!ratings.length) return 0;
@@ -649,18 +652,27 @@ function medicalPension(yos, h3, dodPct, tdrl, retType) {
 // Source: 10 USC § 12733; militarypay.defense.gov/Pay/Retirement/Reserve.aspx
 // Formula: (totalPoints ÷ 360) × multiplier × High-3
 // BRS: 2.0% multiplier. High-3/Final Pay: 2.5% multiplier.
+// Verified: 3200 pts, $6000 High-3, High-3 system → (3200/360)×0.025×6000 = $1,333/mo ✓
 function reservePension(points, h3, rt) {
+  if (!points || points <= 0 || !h3 || h3 <= 0) return { pay: 0, equivYOS: 0, multPct: 0 };
   const equivYOS = points / 360;
   const mult = rt === "BRS" ? 0.020 : 0.025;
-  return { pay: h3 * mult * equivYOS, equivYOS, multPct: mult * 100 };
+  const pay = Math.max(0, h3 * mult * equivYOS);
+  return { pay, equivYOS, multPct: mult * 100 };
 }
 
-// Helper: compute pension by separation type
+// Helper: compute pension by separation type — always returns >= 0
 function pensionBySepType(separationType, retType, yos, h3, medDodPct, tdrl, reservePoints, currentAge, payStartAge) {
-  if (separationType === "active") return pension(retType, yos, h3);
-  if (separationType === "medical") return medicalPension(yos, h3, medDodPct, tdrl, retType).pay;
-  if (separationType === "reserve") return (currentAge >= payStartAge) ? reservePension(reservePoints, h3, retType).pay : 0;
-  return 0; // veteran
+  let result = 0;
+  if (separationType === "active") result = pension(retType, yos || 0, h3 || 0);
+  else if (separationType === "medical") result = medicalPension(yos || 0, h3 || 0, medDodPct || 0, tdrl, retType).pay;
+  else if (separationType === "reserve") result = (currentAge >= payStartAge) ? reservePension(reservePoints || 0, h3 || 0, retType).pay : 0;
+  return Math.max(0, result || 0);
+}
+
+// Helper: compute reserve pension amount regardless of age eligibility (for display/export)
+function reservePensionAmount(reservePoints, h3, retType) {
+  return Math.max(0, reservePension(reservePoints || 0, h3 || 0, retType).pay || 0);
 }
 
 // ── 2026 FEDERAL INCOME TAX — Progressive Brackets ───────────────────
@@ -693,8 +705,10 @@ const STANDARD_DEDUCTION_2026 = { single: 15000, mfj: 30000 };
 // taxableAnnualGross = all taxable income (pension + other) — VA comp excluded
 // filingStatus = "single" | "mfj"
 function calcFederalTax(taxableAnnualGross, filingStatus) {
+  const gross = Number(taxableAnnualGross) || 0;
+  if (gross <= 0) return { annualTax: 0, monthlyTax: 0, effectiveRate: 0 };
   const deduction = STANDARD_DEDUCTION_2026[filingStatus] ?? 15000;
-  const taxableIncome = Math.max(0, taxableAnnualGross - deduction);
+  const taxableIncome = Math.max(0, gross - deduction);
   const brackets = TAX_BRACKETS_2026[filingStatus] ?? TAX_BRACKETS_2026.single;
 
   let annualTax = 0;
@@ -704,8 +718,8 @@ function calcFederalTax(taxableAnnualGross, filingStatus) {
     annualTax += taxableInBracket * bracket.rate;
   }
 
-  const effectiveRate = taxableAnnualGross > 0
-    ? annualTax / taxableAnnualGross
+  const effectiveRate = gross > 0
+    ? annualTax / gross
     : 0;
 
   return {
@@ -1480,9 +1494,18 @@ function LandingPage({onEnter}){
 // ── ATOMS ──────────────────────────────────────────────────────────────
 const C={green:"var(--gn)",red:"var(--rd)",navy:"var(--nvm)",gold:"var(--nvm)",ink:"var(--ink)"};
 
-function NF({label,value,onChange,min,max,step=1,pre,suf,hint}){
-  const dec=()=>{const n=value-step;onChange(min!=null?Math.max(min,n):n);};
-  const inc=()=>{const n=value+step;onChange(max!=null?Math.min(max,n):n);};
+function NF({label,value,onChange,min,max,step=1,pre,suf,hint,warn}){
+  const [local,setLocal]=useState(String(value));
+  const [focused,setFocused]=useState(false);
+  const prevVal=useRef(value);
+  // Sync local display when value changes externally (e.g. +/- buttons, reset)
+  useEffect(()=>{if(!focused&&value!==prevVal.current){setLocal(String(value));prevVal.current=value;}},[value,focused]);
+  const parse=s=>{const v=String(s).replace(/[$,\s]/g,"");if(v===""||v==="-"||v===".") return null;const n=Number(v);return isNaN(n)||!isFinite(n)?null:n;};
+  const clamp=n=>{let c=n;if(min!=null)c=Math.max(min,c);if(max!=null)c=Math.min(max,c);return c;};
+  const commit=s=>{const n=parse(s);if(n===null){const fallback=min!=null?Math.max(min,0):0;onChange(fallback);setLocal(String(fallback));return;}
+    const c=clamp(n);onChange(c);setLocal(String(c));};
+  const dec=()=>{const n=clamp((parse(local)??value)-step);onChange(n);setLocal(String(n));};
+  const inc=()=>{const n=clamp((parse(local)??value)+step);onChange(n);setLocal(String(n));};
   const btnS={flex:"0 0 48px",height:48,border:"1.5px solid var(--br)",background:"var(--bg)",
     color:"var(--nvm)",fontSize:22,fontWeight:600,fontFamily:"Barlow,sans-serif",
     cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"center",
@@ -1495,18 +1518,21 @@ function NF({label,value,onChange,min,max,step=1,pre,suf,hint}){
           aria-label="Decrease">-</button>
         <div className="iwrap" style={{flex:1,minWidth:0}}>
           {pre&&<span className="ipre">{pre}</span>}
-          <input type="text" inputMode={step%1!==0?"decimal":"numeric"} value={value}
+          <input type="text" inputMode={step%1!==0?"decimal":"numeric"}
+            value={focused?local:(pre==="$"?Math.round(value).toLocaleString("en-US"):String(value))}
             className={"nf"+(pre?" pre":"")+(suf?" suf":"")}
             style={{borderRadius:0,textAlign:"center"}}
-            onFocus={e=>e.target.select()}
-            onChange={e=>{const v=e.target.value;if(v===""||v==="-"){onChange(min!=null?Math.max(min,0):0);return;}
-              const n=Number(v);if(!isNaN(n)){let clamped=n;if(min!=null)clamped=Math.max(min,clamped);if(max!=null)clamped=Math.min(max,clamped);onChange(clamped);}}}/>
+            onFocus={e=>{setFocused(true);setLocal(String(value));setTimeout(()=>e.target.select(),0);}}
+            onChange={e=>setLocal(e.target.value)}
+            onBlur={e=>{setFocused(false);commit(e.target.value);}}
+            onKeyDown={e=>{if(e.key==="Enter"){e.target.blur();}}}/>
           {suf&&<span className="isuf">{suf}</span>}
         </div>
         <button type="button" onClick={inc} style={{...btnS,borderRadius:"0 10px 10px 0",borderLeft:"none"}}
           aria-label="Increase">+</button>
       </div>
       {hint&&<div className="fhint">{hint}</div>}
+      {warn&&<div className="fhint" style={{color:"var(--gd)"}}>{warn}</div>}
     </div>
   );
 }
@@ -1570,7 +1596,8 @@ function DR({label,value,sub,color}){
 }
 
 function PBar({value,max,color="var(--nv)"}){
-  return <div className="pb"><div className="pbf" style={{width:`${Math.min(100,(value/max)*100)}%`,background:color}}/></div>;
+  const pct2=max>0?Math.min(100,Math.max(0,(value/(max||1))*100)):0;
+  return <div className="pb"><div className="pbf" style={{width:`${pct2}%`,background:color}}/></div>;
 }
 
 // ── COLLAPSIBLE DETAIL TOGGLE ──────────────────────────────────────────
@@ -1601,9 +1628,13 @@ function UnconfiguredBanner({go}){
 }
 
 function DashboardTab({state,isConfigured,go}){
-  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
+  const {userName,separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
          selectedState,desiredIncome,income,filingStatus,medDodPct,tdrl,reservePoints,currentAge,payStartAge,
+         colFrom,colTo,monthlyIncome,
          giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear}=state;
+  const [showExportModal,setShowExportModal]=useState(false);
+  const [exportSections,setExportSections]=useState({dashboard:true,pension:true,va:true,tax:true,col:true,gap:true});
+  const [exporting,setExporting]=useState(false);
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
   const key=dk(vaDeps);
   const isReserveEligibleNow=separationType==="reserve"&&currentAge>=payStartAge;
@@ -1640,25 +1671,37 @@ function DashboardTab({state,isConfigured,go}){
   const gap=desiredIncome-totalAfterIns;
   const isAnyRetiree=separationType==="active"||(separationType==="medical"&&yos>=20)||(separationType==="reserve"&&isReserveEligibleNow);
   const elig=isAnyRetiree&&vaRating>=50;
-  const p=separationType==="active"?pct(retType,yos):separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType).mult:0;
+  const reserveCalc=separationType==="reserve"?reservePension(reservePoints||0,h3||0,retType):{pay:0,equivYOS:0,multPct:0};
+  const p=separationType==="active"?pct(retType,yos):separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType).mult:separationType==="reserve"?Math.min(reserveCalc.equivYOS*reserveCalc.multPct,100):0;
   const pensionLabel=separationType==="active"?"Pension / mo":separationType==="medical"?"Med. Ret. / mo":separationType==="reserve"?(isReserveEligibleNow?"Reserve Pay / mo":`Reserve (Age ${payStartAge})`):"No Pension";
+  const reserveProjected=separationType==="reserve"&&!isReserveEligibleNow?reserveCalc.pay:0;
 
   const [showFullDisclaimer,setShowFullDisclaimer]=useState(false);
 
   return(
     <div className="fu">
       {!isConfigured&&<UnconfiguredBanner go={go}/>}
+      {userName&&<div style={{fontSize:14,color:"var(--mut)",marginBottom:4}}>Here's your picture, {userName}.</div>}
       <div className="sh2"><h2>Your Financial Dashboard</h2>
-        <p>{separationType==="veteran"?"Veteran":separationType==="medical"?"Medical Retiree":separationType==="reserve"?"Reserve/Guard":"Active Duty"} / {retType} / {fmtYos(yos)} YOS / {selectedState}</p>
+        <p>{separationType==="veteran"?"Veteran":separationType==="medical"?"Medical Retiree":separationType==="reserve"?"Reserve/Guard":"Active Duty"} / {retType} / {separationType==="reserve"?`${(reservePoints/360).toFixed(1)} equiv. YOS`:fmtYos(yos)+" YOS"} / {selectedState}</p>
       </div>
+
+      {/* ── EXPORT BUTTON ── */}
+      <button onClick={()=>setShowExportModal(true)}
+        style={{width:"100%",padding:"14px 20px",marginBottom:16,background:"linear-gradient(135deg,#c2782a,#e09448)",
+          color:"#0A0E1A",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:"pointer",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+          fontFamily:"Barlow,sans-serif",boxShadow:"0 2px 12px rgba(194,120,42,.3)"}}>
+        <span style={{fontSize:20}}>{"\u2B07"}</span> Export My Plan
+      </button>
 
       <div className="dash-grid">
       {/* Hero stat cards — 2 wide */}
       <div className="dash-full" style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10,marginBottom:14}}>
         <div className="card" style={{textAlign:"center",padding:"16px 10px",marginBottom:0}}>
           <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"var(--fnt)",marginBottom:6}}>{pensionLabel}</div>
-          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:600,color:separationType==="veteran"?"var(--mut)":"var(--nv)",lineHeight:1}}>{separationType==="veteran"?"\u2014":fmt(atP)}</div>
-          <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>{separationType==="veteran"?"N/A":separationType==="reserve"&&!isReserveEligibleNow?"projected":"after tax"}</div>
+          <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:22,fontWeight:600,color:separationType==="veteran"?"var(--mut)":"var(--nv)",lineHeight:1}}>{separationType==="veteran"?"\u2014":separationType==="reserve"&&!isReserveEligibleNow?fmt(reserveProjected):fmt(atP)}</div>
+          <div style={{fontSize:11,color:"var(--mut)",marginTop:4}}>{separationType==="veteran"?"N/A":separationType==="reserve"&&!isReserveEligibleNow?"projected gross":"after tax"}</div>
         </div>
         <div className="card" style={{textAlign:"center",padding:"16px 10px",marginBottom:0}}>
           <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".09em",color:"var(--fnt)",marginBottom:6}}>VA Comp / mo</div>
@@ -1691,7 +1734,7 @@ function DashboardTab({state,isConfigured,go}){
       <div className="card dash-full" style={{marginBottom:14}}>
         <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
           <span>Benefits vs. target ({fmt(desiredIncome)}/mo)</span>
-          <span>{Math.min(100,(totalAfterIns/desiredIncome)*100).toFixed(0)}%</span>
+          <span>{desiredIncome>0?Math.min(100,(totalAfterIns/desiredIncome)*100).toFixed(0):"0"}%</span>
         </div>
         <PBar value={totalAfterIns} max={desiredIncome} color={gap<=0?"var(--gn)":totalAfterIns/desiredIncome>.7?"var(--gd)":"var(--nv)"}/>
         <div style={{marginTop:10}}>
@@ -1721,13 +1764,19 @@ function DashboardTab({state,isConfigured,go}){
             <DR label="Separation Type" value={separationType==="active"?"Active Duty":separationType==="medical"?"Medical (Ch. 61)":"Reserve/Guard"}/>
             <DR label="Retirement System" value={retType}/>
             {separationType==="reserve"?(
-              <DR label="Equiv. YOS (points)" value={`${(reservePoints/360).toFixed(1)} yrs`} sub={`${reservePoints} total points`}/>
+              <>
+                <DR label="Total Retirement Points" value={`${(reservePoints||0).toLocaleString()}`} sub={`Equiv. ${(reservePoints/360).toFixed(1)} YOS`}/>
+                <DR label="Pension Multiplier" value={`${p.toFixed(1)}%`} sub={`of High-3 ${fmt(h3)}/mo`}/>
+                <DR label={isReserveEligibleNow?"Gross Monthly":"Projected Gross Monthly"} value={fmt(isReserveEligibleNow?g:reserveCalc.pay)}/>
+              </>
             ):(
-              <DR label="Years of Service" value={`${fmtYos(yos)} years`}/>
+              <>
+                <DR label="Years of Service" value={`${fmtYos(yos)} years`}/>
+                {separationType==="medical"&&<DR label="DoD Disability %" value={`${medDodPct}%${tdrl?" (TDRL)":""}`}/>}
+                <DR label="Pension Multiplier" value={`${p.toFixed(1)}%`} sub={`of High-3 ${fmt(h3)}/mo`}/>
+                <DR label="Gross Monthly" value={fmt(g)}/>
+              </>
             )}
-            {separationType==="medical"&&<DR label="DoD Disability %" value={`${medDodPct}%${tdrl?" (TDRL)":""}`}/>}
-            <DR label="Pension Multiplier" value={`${p.toFixed(1)}%`} sub={`of High-3 ${fmt(h3)}/mo`}/>
-            <DR label="Gross Monthly" value={fmt(g)}/>
             {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}/mo`} color="red"/>}
             <DR label="Federal Tax (est.)" value={`-${fmt(fedTax)}/mo`} color="red" sub={`${(fedEffRate*100).toFixed(1)}% effective · ${(filingStatus||"single")==="mfj"?"MFJ":"Single"}`}/>
             <DR label={`State Tax — ${selectedState}`} value={si.ok?"Exempt":`-${fmt(stTax)}/mo`} color={si.ok?"green":"red"}/>
@@ -1778,8 +1827,314 @@ function DashboardTab({state,isConfigured,go}){
             Combined disability ratings and compensation amounts are calculated using the VA's standard whole-person method but are estimates only. Your actual rating and payment are determined solely by the Department of Veterans Affairs.</div>
         </div>
       )}
+
+      {/* ── EXPORT OPTIONS MODAL ── */}
+      {showExportModal&&(
+        <div style={{position:"fixed",inset:0,zIndex:9999,background:"rgba(0,0,0,.7)",display:"flex",alignItems:"center",justifyContent:"center",padding:20}}
+          onClick={()=>setShowExportModal(false)}>
+          <div style={{background:"var(--card)",borderRadius:16,padding:24,maxWidth:400,width:"100%",border:"1px solid var(--br)"}}
+            onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:18,fontWeight:700,color:"var(--ink)",marginBottom:16}}>Export My Plan</div>
+            <div style={{fontSize:13,color:"var(--mut)",marginBottom:16}}>Choose sections to include in your PDF:</div>
+            {[
+              {key:"dashboard",label:"Dashboard Summary",locked:true},
+              {key:"pension",label:"Pension Breakdown"},
+              {key:"va",label:"VA Disability Details"},
+              {key:"tax",label:"Tax Analysis"},
+              {key:"col",label:"Cost of Living Comparison"},
+              {key:"gap",label:"Income Gap Analysis"},
+            ].map(s=>(
+              <label key={s.key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",cursor:s.locked?"default":"pointer",borderBottom:"1px solid var(--sub)"}}>
+                <input type="checkbox" checked={exportSections[s.key]} disabled={s.locked}
+                  onChange={e=>setExportSections(p=>({...p,[s.key]:e.target.checked}))}
+                  style={{width:18,height:18,accentColor:"var(--nv)"}}/>
+                <span style={{fontSize:14,color:s.locked?"var(--mut)":"var(--ink)"}}>{s.label}{s.locked?" (always included)":""}</span>
+              </label>
+            ))}
+            <button onClick={()=>{generatePDF();}} disabled={exporting}
+              style={{width:"100%",marginTop:20,padding:"14px 20px",background:exporting?"var(--sub)":"linear-gradient(135deg,#c2782a,#e09448)",
+                color:exporting?"var(--mut)":"#0A0E1A",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:exporting?"wait":"pointer",
+                fontFamily:"Barlow,sans-serif"}}>
+              {exporting?"Generating...":"Generate PDF"}
+            </button>
+            <button onClick={()=>setShowExportModal(false)}
+              style={{width:"100%",marginTop:8,padding:"10px",background:"none",border:"none",
+                color:"var(--mut)",fontSize:13,cursor:"pointer",fontFamily:"Barlow,sans-serif"}}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
+
+  // ── PDF GENERATION ──
+  function generatePDF(){
+    setExporting(true);
+    try{
+      const doc=new jsPDF({orientation:"portrait",unit:"pt",format:"letter"});
+      const W=612,H=792,M=40;
+      const cw=W-M*2; // content width
+      const date=new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"});
+      const COL_DATA=COL||{};
+      const si2=STATES[selectedState]||{ok:true,note:""};
+
+      // Colors
+      const BG=[10,14,26],CARD=[20,28,46],CARD2=[26,36,64];
+      const GOLD=[201,145,58],GOLD_B=[228,169,74],GOLD_D=[107,80,32];
+      const TXT=[240,244,248],MUT=[122,138,160],GRN=[42,122,75];
+
+      let pageNum=1,totalPages=0; // we'll fix page numbers at end
+      let y=0;
+
+      const rgb=(c)=>c;
+      const setC=(doc,c)=>doc.setTextColor(c[0],c[1],c[2]);
+      const setF=(doc,c)=>doc.setFillColor(c[0],c[1],c[2]);
+      const setD=(doc,c)=>doc.setDrawColor(c[0],c[1],c[2]);
+
+      // Background
+      const drawBg=()=>{setF(doc,BG);doc.rect(0,0,W,H,"F");};
+
+      // Header
+      const drawHeader=()=>{
+        setF(doc,GOLD_B);doc.rect(0,0,W,4,"F");
+        setF(doc,CARD);doc.rect(0,4,W,36,"F");
+        doc.setFont("helvetica","bold");doc.setFontSize(14);setC(doc,GOLD_B);
+        doc.text("MILCALC",M,27);
+        doc.setFont("helvetica","normal");doc.setFontSize(8);setC(doc,MUT);
+        doc.text("Military Retirement Financial Summary",M+70,27);
+        doc.text(`Generated ${date}`,W-M,20,{align:"right"});
+      };
+
+      // Footer
+      const drawFooter=()=>{
+        const fy=H-30;
+        setF(doc,GOLD_D);doc.rect(M,fy-6,cw,1,"F");
+        setF(doc,CARD);doc.rect(0,fy-5,W,35,"F");
+        doc.setFontSize(6.5);setC(doc,MUT);doc.setFont("helvetica","normal");
+        doc.text("Generated by MilCalc (milcalc.app) \u00B7 For informational purposes only \u2014 not financial or legal advice.",M,fy+8);
+        doc.text("Part of the Debriefed family \u00B7 getdebriefed.co",M,fy+18);
+      };
+
+      // New page helper
+      const newPage=()=>{doc.addPage();pageNum++;drawBg();drawHeader();drawFooter();y=56;};
+      const checkSpace=(needed)=>{if(y+needed>H-50)newPage();};
+
+      // Section header
+      const sectionHead=(title)=>{
+        checkSpace(30);
+        setF(doc,CARD);doc.rect(M,y,cw,22,"F");
+        setF(doc,GOLD_B);doc.rect(M,y,4,22,"F");
+        doc.setFont("helvetica","bold");doc.setFontSize(10);setC(doc,GOLD_B);
+        doc.text(title,M+14,y+15);
+        y+=28;
+      };
+
+      // Data row
+      const dataRow=(label,value,opts={})=>{
+        checkSpace(20);
+        if(opts.highlight){setF(doc,CARD2);doc.rect(M,y-2,cw,18,"F");}
+        doc.setFont("helvetica","normal");doc.setFontSize(8.5);
+        setC(doc,opts.labelColor||MUT);doc.text(label,M+8,y+10);
+        doc.setFont("helvetica","bold");
+        setC(doc,opts.valueColor||TXT);doc.text(String(value),W-M-8,y+10,{align:"right"});
+        y+=18;
+      };
+
+      // Stat box
+      const statBox=(x,w,label,value)=>{
+        setF(doc,CARD);doc.rect(x,y,w,50,"F");
+        setF(doc,GOLD_B);doc.rect(x,y,w,3,"F");
+        doc.setFont("helvetica","normal");doc.setFontSize(7);setC(doc,MUT);
+        doc.text(label,x+w/2,y+18,{align:"center"});
+        doc.setFont("helvetica","bold");doc.setFontSize(14);setC(doc,GOLD_B);
+        doc.text(String(value),x+w/2,y+38,{align:"center"});
+      };
+
+      // Progress bar
+      const progressBar=(x,w,pct,color)=>{
+        checkSpace(14);
+        setF(doc,CARD);doc.rect(x,y,w,8,"F");
+        const fillW=Math.min(1,Math.max(0,pct/100))*w;
+        setF(doc,color||GRN);doc.rect(x,y,fillW,8,"F");
+        doc.setFont("helvetica","bold");doc.setFontSize(7);setC(doc,TXT);
+        doc.text(`${Math.round(pct)}%`,x+w+6,y+7);
+        y+=14;
+      };
+
+      // ── PAGE 1 ──
+      drawBg();drawHeader();drawFooter();
+      y=56;
+
+      // Name and rank info
+      const displayName=userName||"";
+      if(displayName){
+        doc.setFont("helvetica","bold");doc.setFontSize(16);setC(doc,TXT);
+        doc.text(displayName,M,y+14);
+        y+=10;
+      }
+      const rankInfo=[
+        separationType==="reserve"?"Reserve/Guard":separationType==="medical"?"Medical Retiree":separationType==="veteran"?"Veteran":usePayGrade?GRADE_LABELS[payGrade]||payGrade:"",
+        separationType==="reserve"?`${(reservePoints/360).toFixed(1)} equiv. YOS`:`${fmtYos(yos)} YOS`,
+        retType
+      ].filter(Boolean).join(" \u00B7 ");
+      if(rankInfo){
+        doc.setFont("helvetica","normal");doc.setFontSize(9);setC(doc,MUT);
+        doc.text(rankInfo,displayName?W-M:M,y+14,displayName?{align:"right"}:{});
+      }
+      y+=28;
+
+      // Four stat boxes
+      const bw=(cw-18)/4;
+      const grossPension=separationType==="reserve"?reserveCalc.pay:g;
+      statBox(M,bw,"PENSION (GROSS)",separationType==="veteran"?"N/A":fmt(grossPension));
+      statBox(M+bw+6,bw,"VA DISABILITY",fmt(vaM));
+      statBox(M+(bw+6)*2,bw,"TOTAL MONTHLY",fmt(totalSchool));
+      statBox(M+(bw+6)*3,bw,"ANNUAL INCOME",fmt(totalSchool*12));
+      y+=60;
+
+      // PENSION section
+      if(exportSections.pension&&separationType!=="veteran"){
+        sectionHead("PENSION BREAKDOWN");
+        dataRow("Retirement System",retType);
+        if(separationType==="reserve"){
+          dataRow("Total Retirement Points",(reservePoints||0).toLocaleString());
+          dataRow("Equivalent YOS",`${(reservePoints/360).toFixed(1)} years`);
+        }else{
+          dataRow("High-3 Base Pay",fmt(h3)+"/mo");
+          dataRow("Years of Service",fmtYos(yos)+" years");
+        }
+        dataRow(separationType==="reserve"&&!isReserveEligibleNow?"Projected Monthly Gross":"Monthly Gross Pension",fmt(grossPension),{highlight:true,valueColor:GOLD_B});
+        dataRow("After-Tax Estimate",fmt(atP)+"/mo");
+        dataRow("Annual Gross",fmt(grossPension*12));
+        dataRow("CRDP/CRSC Status",elig?"Eligible":"Not eligible",{valueColor:elig?GOLD_B:MUT});
+        y+=6;
+      }
+
+      // VA section
+      if(exportSections.va){
+        sectionHead("VA DISABILITY");
+        dataRow("Combined Rating",vaRating>0?vaRating+"%":"Not rated");
+        dataRow("Dependency Status",vaDeps);
+        dataRow("Monthly Tax-Free Amount",fmt(vaM),{highlight:true,valueColor:GOLD_B});
+        dataRow("Annual Tax-Free",fmt(vaM*12));
+        const taxEquiv=vaM>0&&fedEffRate>0?fmt(vaM/(1-fedEffRate)):"N/A";
+        dataRow("Tax-Equivalent Value",taxEquiv,{valueColor:GOLD_B});
+        y+=6;
+      }
+
+      // TAX section
+      if(exportSections.tax){
+        sectionHead("TAX ANALYSIS");
+        dataRow("State",selectedState);
+        dataRow("State Tax Treatment",si2.ok?"Exempt":"Taxed",{valueColor:si2.ok?GRN:MUT});
+        dataRow("Federal Effective Rate",(fedEffRate*100).toFixed(1)+"%");
+        dataRow("Estimated Federal Tax","-"+fmt(fedTax*12)+"/yr",{valueColor:[192,57,43]});
+        if(!si2.ok) dataRow("Estimated State Tax","-"+fmt(stTax*12)+"/yr",{valueColor:[192,57,43]});
+        y+=6;
+      }
+
+      // PAGE 2 — COL & Gap
+      if(exportSections.col||exportSections.gap){
+        newPage();
+
+        if(exportSections.col){
+          const effectiveFrom2=COL_DATA[colFrom]?colFrom:(STATE_DEFAULT_CITY[selectedState]||colFrom);
+          const fi2=COL_DATA[effectiveFrom2]||100,ti2=COL_DATA[colTo]||100;
+          const autoMo2=Math.round(atP+vaM+Math.round((income||0)/12));
+          const effMonthly2=(monthlyIncome||0)>0?monthlyIncome:(autoMo2>0?autoMo2:5000);
+          const adj2=effMonthly2*(ti2/(fi2||1));
+          const diff2=adj2-effMonthly2;
+          sectionHead("COST OF LIVING COMPARISON");
+          dataRow("Moving From",effectiveFrom2+` (Index: ${fi2})`);
+          dataRow("Moving To",colTo+` (Index: ${ti2})`);
+          dataRow("Monthly Savings",(diff2<=0?"+":"")+fmt(Math.abs(diff2))+"/mo",{highlight:true,valueColor:diff2<=0?GRN:[192,57,43]});
+          dataRow("Purchasing Power Equivalent",fmt(adj2)+"/mo");
+
+          // Visual bar chart
+          checkSpace(40);
+          const maxIdx=Math.max(fi2,ti2,120);
+          const barW=cw-120;
+          doc.setFont("helvetica","normal");doc.setFontSize(7);
+          setC(doc,MUT);doc.text(effectiveFrom2.split(",")[0],M+8,y+10);
+          setF(doc,GOLD_B);doc.rect(M+110,y+2,barW*(fi2/(maxIdx||1)),10,"F");
+          doc.setFont("helvetica","bold");setC(doc,TXT);doc.text(String(fi2),M+114+barW*(fi2/(maxIdx||1)),y+10);
+          y+=16;
+          setC(doc,MUT);doc.setFont("helvetica","normal");doc.text(colTo.split(",")[0],M+8,y+10);
+          setF(doc,diff2<=0?GRN:[192,57,43]);doc.rect(M+110,y+2,barW*(ti2/(maxIdx||1)),10,"F");
+          doc.setFont("helvetica","bold");setC(doc,TXT);doc.text(String(ti2),M+114+barW*(ti2/(maxIdx||1)),y+10);
+          y+=24;
+        }
+
+        if(exportSections.gap){
+          const totalForGap2=totalAfterIns;
+          const gap2=desiredIncome-totalForGap2;
+          const sal2=gap2>0?(gap2/0.75):0;
+          const cov2=desiredIncome>0?Math.min(100,(totalForGap2/(desiredIncome||1))*100):0;
+          sectionHead("INCOME GAP ANALYSIS");
+          dataRow("Target Income",fmt(desiredIncome)+"/mo");
+          dataRow("Total Benefits",fmt(totalForGap2)+"/mo");
+          dataRow("Monthly Gap",gap2>0?fmt(gap2)+"/mo":"Fully covered!",{highlight:true,valueColor:gap2>0?GOLD_B:GRN});
+          if(gap2>0){
+            dataRow("Gross Salary Needed",fmt(sal2*12)+"/yr",{valueColor:GOLD_B});
+            dataRow("Part-Time Equivalent","$"+(sal2*12/1040).toFixed(0)+"/hr",{valueColor:GOLD_B});
+          }
+          // Coverage bar
+          checkSpace(24);
+          doc.setFont("helvetica","normal");doc.setFontSize(7.5);setC(doc,MUT);
+          doc.text("Benefits Coverage",M+8,y+8);
+          progressBar(M+100,cw-160,cov2,gap2<=0?GRN:GOLD_B);
+          y+=6;
+        }
+      }
+
+      // NEXT STEPS
+      checkSpace(140);
+      sectionHead("NEXT STEPS");
+      const steps=[
+        "File for VA disability if not already rated",
+        "Confirm High-3 with final LES before separation",
+        "Update VA dependent records for all children under 18",
+        "Consult a fee-only financial advisor",
+        "Re-run MilCalc annually \u2014 VA rates update each December",
+      ];
+      steps.forEach((s,i)=>{
+        checkSpace(16);
+        doc.setFont("helvetica","normal");doc.setFontSize(8);setC(doc,MUT);
+        doc.text(`${i+1}.`,M+8,y+10);
+        setC(doc,TXT);doc.text(s,M+22,y+10);
+        y+=16;
+      });
+
+      // CTA box
+      checkSpace(36);
+      y+=8;
+      setF(doc,CARD2);doc.rect(M,y,cw,28,"F");
+      setF(doc,GOLD_B);doc.rect(M,y,cw,2,"F");
+      doc.setFont("helvetica","bold");doc.setFontSize(9);setC(doc,GOLD_B);
+      doc.text("Update your numbers anytime at milcalc.app",W/2,y+18,{align:"center"});
+
+      // Add page numbers
+      totalPages=doc.getNumberOfPages();
+      for(let i=1;i<=totalPages;i++){
+        doc.setPage(i);
+        doc.setFont("helvetica","normal");doc.setFontSize(7);doc.setTextColor(MUT[0],MUT[1],MUT[2]);
+        doc.text(`Page ${i} of ${totalPages}`,W-M,28,{align:"right"});
+      }
+
+      // Save
+      const dateStr=new Date().toISOString().slice(0,10);
+      doc.save(`MilCalc_RetirementPlan_${dateStr}.pdf`);
+
+      // Track
+      const included=Object.entries(exportSections).filter(([,v])=>v).map(([k])=>k);
+      track("Plan Exported",{sections_included:included,section_count:included.length});
+
+      setShowExportModal(false);
+    }catch(err){
+      console.error("PDF export error:",err);
+    }finally{
+      setExporting(false);
+    }
+  }
 }
 
 // ── TAB 2: BENEFITS (output-only detail views) ───────────────────────
@@ -2215,7 +2570,7 @@ function PlanningTab({state,set,go}){
   const otherMo=Math.round((income||0)/12);
   const autoMonthly=Math.round(atP+vaM+otherMo+mhaMo);
   const effectiveMonthly=monthlyIncome>0?monthlyIncome:(autoMonthly>0?autoMonthly:5000);
-  const adj=effectiveMonthly*(ti/fi),diff=adj-effectiveMonthly;
+  const adj=effectiveMonthly*(ti/(fi||1)),diff=adj-effectiveMonthly;
   const diffAnn=(adj-effectiveMonthly)*12;
   const cats=[
     {n:"Housing",w:.33,v:1.6},{n:"Groceries",w:.13,v:.6},{n:"Utilities",w:.07,v:.5},
@@ -2376,7 +2731,7 @@ function PlanningTab({state,set,go}){
             <div className="card">
               <div className="cttl">Breakdown by Category</div>
               {cats.map(({n,w,v})=>{
-                const d=((ti-fi)/fi)*v*effectiveMonthly*w;
+                const d=fi>0?((ti-fi)/fi)*v*effectiveMonthly*w:0;
                 return(
                   <div key={n} style={{marginBottom:11}}>
                     <div style={{display:"flex",justifyContent:"space-between",fontSize:13,marginBottom:4}}>
@@ -2484,11 +2839,12 @@ function PlanningTab({state,set,go}){
 
 // ── TAB 4: PROFILE (all inputs consolidated) ─────────────────────────
 function ProfileTab({state,set,isConfigured}){
-  const {separationType,retType,yos,high3,usePayGrade,payGrade,sbp,sbpCoverage,
+  const {userName,separationType,retType,yos,high3,usePayGrade,payGrade,sbp,sbpCoverage,
          medDodPct,tdrl,reservePoints,currentAge,payStartAge,reserveHealthType,
          vaRating,vaDeps,vaChildren,vaRatings,selectedState,income,desiredIncome,
          giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear,
          tricareplan,tricareFamSize,tricareGroup,useVgli,vgliCoverage,vgliAge,otherLifePremium}=state;
+  const [nameWarn,setNameWarn]=useState("");
   const [addR,setAddR]=useState(10);
   const [confirmReset,setConfirmReset]=useState(false);
   const derivedPay=usePayGrade?lookupPay(payGrade,yos):null;
@@ -2553,6 +2909,26 @@ function ProfileTab({state,set,isConfigured}){
       )}
       <div className="sh2"><h2>My Info</h2><p>Set up once — all numbers update everywhere automatically.</p></div>
 
+      {/* ── NAME (optional) ── */}
+      <div className="card">
+        <div className="field">
+          <label className="flbl">Your Name (optional)</label>
+          <input type="text" value={userName||""} maxLength={60}
+            placeholder="e.g. John Smith, MSG Ret."
+            className="nf"
+            style={{fontSize:16,minHeight:48,borderRadius:10,textAlign:"left",padding:"0 14px"}}
+            onChange={e=>{
+              const v=e.target.value;
+              if(v.length>60) return;
+              if(v&&!/^[A-Za-z\s\-.']+$/.test(v)){setNameWarn("Letters, spaces, hyphens, periods, and apostrophes only");return;}
+              setNameWarn("");
+              set("userName",v);
+            }}
+            onBlur={e=>{const v=(e.target.value||"").trim();set("userName",v);setNameWarn("");}}/>
+          {nameWarn&&<div className="fhint" style={{color:"var(--gd)"}}>{nameWarn}</div>}
+        </div>
+      </div>
+
       {/* ── SERVICE PROFILE ── */}
       <div className="card">
         <div className="cttl">Service Profile</div>
@@ -2613,10 +2989,16 @@ function ProfileTab({state,set,isConfigured}){
 
         {separationType==="reserve"&&(
           <>
-            <NF label="Total Career Retirement Points" value={reservePoints} onChange={v=>set("reservePoints",v)} min={1000} max={14600} step={50} suf="pts"
-              hint="Sum of all career retirement points. Min 1,000 (20 qualifying years × 50 pts/yr). Max ~365/yr for full AD years — 30-yr careers with deployments often reach 8,000–11,000+. Check your branch's personnel portal for your exact total."/>
-            <NF label="Current Age" value={currentAge} onChange={v=>set("currentAge",v)} min={35} max={80} suf="yrs"/>
-            <NF label="Pay Start Age" value={payStartAge} onChange={v=>set("payStartAge",v)} min={50} max={60} suf="yrs"
+            <NF label="Total Career Retirement Points" value={reservePoints} onChange={v=>set("reservePoints",Math.round(v))} min={50} max={14400} step={50} suf="pts"
+              hint="Find your total points on your RPAS or NGB/ARPC statement. Typical: 48–96 drill pts/yr + 15 membership pts/yr + active duty days."
+              warn={reservePoints<4320?"Minimum 4,320 points typically required for reserve retirement (20 qualifying years)":undefined}/>
+            {reservePoints>0&&h3Prof>0&&(
+              <div className="ib ib-nv" style={{fontSize:12,marginTop:-4,marginBottom:8}}>
+                <strong>Equivalent YOS:</strong> {(reservePoints/360).toFixed(1)} years · <strong>Projected pension:</strong> {fmt(reservePensionAmount(reservePoints,h3Prof,retType))}/mo
+              </div>
+            )}
+            <NF label="Current Age" value={currentAge} onChange={v=>set("currentAge",Math.round(v))} min={35} max={80} suf="yrs"/>
+            <NF label="Pay Start Age" value={payStartAge} onChange={v=>set("payStartAge",Math.round(v))} min={50} max={60} suf="yrs"
               hint="Default 60. Reduces by 3 months per 90 days of qualifying active duty after Jan 28, 2008. Cannot go below 50."/>
             <NF label="Years of Service (for CRDP)" value={yos} onChange={v=>set("yos",Math.round(v*2)/2)} min={0} max={40} step={0.5} suf="yrs"
               hint="Total creditable years — used for CRDP eligibility (20+ required). Half-year increments supported."/>
@@ -2660,8 +3042,9 @@ function ProfileTab({state,set,isConfigured}){
                 )}
               </>
             ):(
-              <NF value={high3} onChange={v=>set("high3",v)} pre="$" min={0} step={50}
-                hint="Average of your 3 highest-paid consecutive years (36 months)"/>
+              <NF value={high3} onChange={v=>set("high3",v)} pre="$" min={0} max={20000} step={50}
+                hint="Average of your 3 highest-paid consecutive years (36 months)"
+                warn={high3>20000?"Double-check \u2014 this seems high for monthly base pay":undefined}/>
             )}
           </div>
         )}
@@ -2688,25 +3071,26 @@ function ProfileTab({state,set,isConfigured}){
       <div className="card">
         <div className="cttl">VA Disability</div>
         <SF label="Disability Rating" value={vaRating} onChange={v=>set("vaRating",Number(v))}
-          options={[{v:0,l:"None / Not yet rated"},...[10,20,30,40,50,60,70,80,90,100].map(v=>({v,l:`${v}%`}))]}/>
+          options={[{v:0,l:"None / Not yet rated"},...[10,20,30,40,50,60,70,80,90,100].map(v=>({v,l:`${v}%`}))]}
+          hint={vaRating===0&&vaDeps!=="Single"?"0% rating doesn't include dependent compensation":undefined}/>
         <TG label="Dependent Status" value={vaDeps} onChange={v=>{set("vaDeps",v);if(v==="Single"&&nKids>0)set("vaChildren",0);}}
           options={["Single","Spouse","Spouse + Child","Child Only"]}
-          hint={vaRating>0&&vaRating<=20?"Dependent compensation not available at this rating":undefined}/>
+          hint={vaRating>0&&vaRating<=20?"Dependent compensation not available at this rating":vaRating===0&&vaDeps!=="Single"?"0% rating doesn't include dependent compensation":undefined}/>
         <NF label="Children Under 18" value={nKids} onChange={v=>{
-          set("vaChildren",v);
+          const intV=Math.round(Math.max(0,Math.min(10,v)));
+          set("vaChildren",intV);
           // Auto-adjust dependent status when adding children
-          if(v>0&&vaDeps==="Single")set("vaDeps","Child Only");
-          if(v>0&&vaDeps==="Spouse")set("vaDeps","Spouse + Child");
-          if(v===0&&vaDeps==="Child Only")set("vaDeps","Single");
-          if(v===0&&vaDeps==="Spouse + Child")set("vaDeps","Spouse");
-        }} min={0} max={10}
+          if(intV>0&&vaDeps==="Single")set("vaDeps","Child Only");
+          if(intV>0&&vaDeps==="Spouse")set("vaDeps","Spouse + Child");
+          if(intV===0&&vaDeps==="Child Only")set("vaDeps","Single");
+          if(intV===0&&vaDeps==="Spouse + Child")set("vaDeps","Spouse");
+        }} min={0} max={10} step={1}
           hint={vaRating>=30&&nKids>1
             ?`Base rate includes 1 child. ${nKids-1} additional ${nKids-1===1?"child adds":"children add"} ${fmt(VA[vaRating]?.ac||0)}/mo each.`
-            :vaRating>0&&vaRating<=20
-            ?"Dependent compensation not available at this rating"
             :vaRating>=30&&nKids===1
             ?"Included in base rate"
-            :undefined}/>
+            :undefined}
+          warn={vaRating>0&&vaRating<=20&&nKids>0?"Dependent compensation not available at 10-20% rating":undefined}/>
 
         <hr/>
         <div className="cttl" style={{marginTop:0}}>Combined Rating Calculator (VA Math)</div>
@@ -2740,9 +3124,9 @@ function ProfileTab({state,set,isConfigured}){
         <TG label="Filing Status" value={state.filingStatus||"single"} onChange={v=>set("filingStatus",v)}
           options={[{v:"single",l:"Single"},{v:"mfj",l:"Married Filing Jointly"}]}
           hint="Affects standard deduction and tax brackets"/>
-        <NF label="Other Annual Income" value={income} onChange={v=>set("income",v)} pre="$" step={1000}
+        <NF label="Other Annual Income" value={income} onChange={v=>set("income",v)} pre="$" min={0} max={600000} step={1000}
           hint="Employment, TSP withdrawals, or other taxable income"/>
-        <NF label="Desired Monthly Take-Home" value={desiredIncome} onChange={v=>set("desiredIncome",v)} pre="$" step={100}
+        <NF label="Desired Monthly Take-Home" value={desiredIncome} onChange={v=>set("desiredIncome",v)} pre="$" min={0} max={50000} step={100}
           hint="After-tax income target for gap analysis"/>
       </div>
 
@@ -3170,6 +3554,7 @@ export default function App(){
   const exitApp=()=>{try{localStorage.removeItem(LANDING_KEY);}catch{}setEntered(false);};
 
   const defaults={
+    userName:"",
     separationType:"active",
     retType:"High-3",yos:0,high3:0,usePayGrade:true,payGrade:"E-7",sbp:false,sbpCoverage:55,
     medDodPct:50,tdrl:false,
