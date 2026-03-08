@@ -1660,6 +1660,7 @@ function DashboardTab({state,isConfigured,go}){
       const rr=state.reserveHealthType==="trs"?TRICARE_RS:state.reserveHealthType==="trr"?TRICARE_TRR:null;
       return rr?(state.tricareFamSize==="family"?rr.family:rr.individual):0;
     }
+    if(separationType==="medical"&&state.tricareplan==="select") return 0;
     const tp=TRICARE_PLANS[state.tricareplan]||TRICARE_PLANS.prime;
     const gr=tp[`group${state.tricareGroup||"A"}`]||tp.groupA;
     const mp=state.tricareplan==="tfl"?(state.tricareFamSize==="family"?370:185):0;
@@ -2200,6 +2201,7 @@ function BenefitsTab({state,isConfigured,go}){
       const rr=state.reserveHealthType==="trs"?TRICARE_RS:state.reserveHealthType==="trr"?TRICARE_TRR:null;
       return rr?(state.tricareFamSize==="family"?rr.family:rr.individual):0;
     }
+    if(separationType==="medical"&&state.tricareplan==="select") return 0;
     return stdTricarePremium+medicarePremium;
   })();
   const vgliMo=state.useVgli?vgliMonthly(state.vgliCoverage,state.vgliAge):0;
@@ -3251,7 +3253,12 @@ function ProfileTab({state,set,isConfigured}){
             )}
             {separationType==="medical"&&tricareplan==="prime"&&(
               <div className="ib ib-gn" style={{marginTop:8,fontSize:12}}>
-                Medical retirees: your TRICARE Prime enrollment fee is frozen at the rate when classified as medically retired in DEERS. Maintain continuous enrollment to preserve this benefit.
+                Your enrollment fee is frozen at the rate when you were classified medically retired in DEERS. Maintain continuous enrollment to preserve this benefit.
+              </div>
+            )}
+            {separationType==="medical"&&tricareplan==="select"&&(
+              <div className="ib ib-gn" style={{marginTop:8,fontSize:12}}>
+                As a medical retiree, your TRICARE Select enrollment fee is waived ($0). Chapter 61 retirees are exempt per NDAA FY2017 §731.
               </div>
             )}
             {(() => {
@@ -3663,6 +3670,7 @@ export default function App(){
       const rr=s.reserveHealthType==="trs"?TRICARE_RS:s.reserveHealthType==="trr"?TRICARE_TRR:null;
       return rr?(s.tricareFamSize==="family"?rr.family:rr.individual):0;
     }
+    if(s.separationType==="medical"&&s.tricareplan==="select") return 0;
     const tp2=TRICARE_PLANS[s.tricareplan]||TRICARE_PLANS.prime;
     const gr2=tp2[`group${s.tricareGroup||"A"}`]||tp2.groupA;
     const mp2=s.tricareplan==="tfl"?(s.tricareFamSize==="family"?370:185):0;
