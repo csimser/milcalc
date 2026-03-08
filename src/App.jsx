@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import { track, r100 } from "./analytics.js";
 import { version as APP_VERSION } from "../package.json";
 
@@ -1282,6 +1283,45 @@ hr{border:none;border-top:1px solid var(--br);margin:16px 0}
   background:var(--card);font-size:13px;color:var(--ink);font-weight:500;
   cursor:pointer;transition:border-color .13s;-webkit-tap-highlight-color:transparent}
 .ptr-org:active,.ptr-org.on{border-color:var(--nv);background:var(--nvl)}
+
+/* ── SHARE PAGE ── */
+.share-page{min-height:100vh;min-height:100dvh;background:var(--bg);color:var(--ink);
+  display:flex;flex-direction:column;align-items:center;padding:0 16px 40px}
+.share-back{align-self:flex-start;padding:16px 0;font-size:14px;color:var(--nvm);
+  background:none;border:none;cursor:pointer;font-family:'Barlow',sans-serif;font-weight:600}
+.share-back:active{opacity:.7}
+.share-hero{text-align:center;max-width:480px;margin:24px auto 32px}
+.share-hero h1{font-family:'Libre Baskerville',serif;font-size:26px;color:var(--ink);
+  margin:0 0 10px;line-height:1.2}
+.share-hero p{font-size:15px;color:var(--mut);line-height:1.55;margin:0}
+.share-card{background:var(--card);border:1px solid var(--br);border-radius:14px;
+  padding:24px 20px;max-width:480px;width:100%;margin-bottom:24px}
+.share-label{font-family:'Barlow Condensed',sans-serif;font-weight:700;font-size:12px;
+  letter-spacing:.08em;text-transform:uppercase;color:var(--mut);margin-bottom:10px}
+.share-input{width:100%;padding:12px 14px;border:1px solid var(--br);border-radius:8px;
+  background:var(--bg);color:var(--ink);font-size:15px;font-family:'Barlow',sans-serif;
+  outline:none;box-sizing:border-box;transition:border-color .15s}
+.share-input:focus{border-color:var(--nv)}
+.share-input::placeholder{color:var(--mut);opacity:.6}
+.share-url{display:flex;gap:8px;margin-top:14px}
+.share-url-box{flex:1;min-width:0;padding:10px 12px;border:1px solid var(--br);
+  border-radius:8px;background:var(--bg);color:var(--nvm);font-family:'IBM Plex Mono',monospace;
+  font-size:12px;word-break:break-all;line-height:1.4}
+.share-copy{flex-shrink:0;padding:10px 20px;border:none;border-radius:8px;
+  background:var(--nv);color:var(--ink);font-family:'Barlow Condensed',sans-serif;
+  font-size:14px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  cursor:pointer;white-space:nowrap;transition:opacity .13s}
+.share-copy:active{opacity:.8}
+.share-qr{display:flex;justify-content:center;margin-top:20px;padding:16px;
+  background:#fff;border-radius:10px;width:fit-content;margin-left:auto;margin-right:auto}
+.share-btns{display:flex;flex-wrap:wrap;gap:10px;margin-top:16px;justify-content:center}
+.share-btn{display:flex;align-items:center;gap:6px;padding:10px 16px;border:1px solid var(--br);
+  border-radius:8px;background:var(--card);color:var(--ink);font-family:'Barlow',sans-serif;
+  font-size:13px;font-weight:600;cursor:pointer;text-decoration:none;
+  transition:border-color .13s,background .13s;-webkit-tap-highlight-color:transparent}
+.share-btn:active,.share-btn:hover{border-color:var(--nv);background:var(--nvl)}
+.share-footer{margin-top:32px;text-align:center;font-size:12px;color:var(--mut)}
+.share-footer a{color:var(--nvm);text-decoration:none}
 `;
 
 // ── DEBRIEFED CTA CARDS ───────────────────────────────────────────────
@@ -1426,7 +1466,8 @@ function LandingPage({onEnter}){
       )}
 
       <footer className="lp-footer">
-        <p>Part of the <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer">Debriefed</a> product family.  Built by veterans, for veterans.</p>
+        <p><a href="/share">Share MilCalc</a></p>
+        <p style={{marginTop:8}}>Part of the <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer">Debriefed</a> product family.  Built by veterans, for veterans.</p>
         <p style={{marginTop:8}}>Not affiliated with DoD, DFAS, VA, or any government agency. All calculations are estimates.</p>
       </footer>
     </div>
@@ -3016,6 +3057,66 @@ function PartnersScreen({onClose}){
   );
 }
 
+// ── SHARE PAGE ─────────────────────────────────────────────────────────
+function SharePage(){
+  const [name,setName]=useState("");
+  const [copied,setCopied]=useState(false);
+  const [generated,setGenerated]=useState(false);
+  const slug=name.trim().toLowerCase().replace(/[^a-z0-9]+/g,"-").replace(/^-|-$/g,"")||"friend";
+  const url=`https://milcalc.app?utm_source=${slug}&utm_medium=share&utm_campaign=referral`;
+  const emailSubject=encodeURIComponent("Free military retirement calculator");
+  const emailBody=encodeURIComponent(`Hey \u2014 thought you'd find this useful. MilCalc is a free calculator that figures out your pension, VA disability, state taxes, and income gap all in one place. No account needed: ${url}`);
+  const tweetText=encodeURIComponent(`Free military retirement calculator \u2014 pension, VA disability, state taxes, income gap, all in one place. No account needed.\n${url}`);
+  const copyUrl=()=>{
+    navigator.clipboard.writeText(url).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2000);}).catch(()=>{});
+    if(!generated){setGenerated(true);track("Share Link Generated",{slug,medium:"share"});}
+  };
+  const onGenerate=()=>{
+    if(!generated){setGenerated(true);track("Share Link Generated",{slug,medium:"share"});}
+  };
+  return(
+    <div className="share-page">
+      <style>{FONTS}</style>
+      <style>{CSS}</style>
+      <button className="share-back" onClick={()=>{window.history.pushState({},"","/");window.location.reload();}}>{"\u2190"} Back to MilCalc</button>
+      <div className="share-hero">
+        <h1>Share MilCalc & track your impact</h1>
+        <p>Generate a personal link to share with fellow veterans. See how many people you've helped.</p>
+      </div>
+      <div className="share-card">
+        <div className="share-label">Your name or handle</div>
+        <input className="share-input" value={name} onChange={e=>{setName(e.target.value);setGenerated(false);setCopied(false);}}
+          placeholder='e.g. "John", "SGM_Ret", "VFW Post 1234"'/>
+        <div className="share-url">
+          <div className="share-url-box">{url}</div>
+          <button className="share-copy" onClick={copyUrl}>{copied?"Copied!":"Copy Link"}</button>
+        </div>
+        {name.trim()&&(
+          <div className="share-qr" onClick={onGenerate}>
+            <QRCodeSVG value={url} size={160} bgColor="#ffffff" fgColor="#151c2e" level="M"/>
+          </div>
+        )}
+      </div>
+      {name.trim()&&(
+        <div className="share-card">
+          <div className="share-label">Quick share</div>
+          <div className="share-btns">
+            <button className="share-btn" onClick={copyUrl}>{copied?"\u2705":"\u{1F4CB}"} {copied?"Copied!":"Copy link"}</button>
+            <a className="share-btn" href={`mailto:?subject=${emailSubject}&body=${emailBody}`}>{"\u2709\uFE0F"} Email</a>
+            <a className="share-btn" href={`https://twitter.com/intent/tweet?text=${tweetText}`} target="_blank" rel="noopener noreferrer">{"X"} Twitter/X</a>
+            <a className="share-btn" href={`https://www.facebook.com/sharer/sharer.php?u=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer">{"\u{1F310}"} Facebook</a>
+            <a className="share-btn" href={`https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(url)}`} target="_blank" rel="noopener noreferrer">{"\u{1F4BC}"} LinkedIn</a>
+          </div>
+        </div>
+      )}
+      <div className="share-footer">
+        <p>MilCalc v{APP_VERSION}</p>
+        <p>Part of the <a href="https://getdebriefed.co" target="_blank" rel="noopener noreferrer">Debriefed</a> product family.</p>
+      </div>
+    </div>
+  );
+}
+
 // ── APP ────────────────────────────────────────────────────────────────
 // ── GI BILL MHA DATA ───────────────────────────────────────────────────
 // (data constants end here — section components replaced by 4-tab architecture above)
@@ -3146,6 +3247,9 @@ export default function App(){
   })();
   const insuranceMo=Math.round(healthPrem2+(s.useVgli?vgliMonthly(s.vgliCoverage,s.vgliAge):0)+(s.otherLifePremium||0));
   const gap=s.desiredIncome-(total-insuranceMo);
+
+  // ── /share standalone page ──
+  if(window.location.pathname==="/share") return <SharePage/>;
 
   if(!entered) return(<><style>{FONTS}</style><style>{CSS}</style><LandingPage onEnter={enterApp}/></>);
 
