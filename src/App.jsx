@@ -2224,8 +2224,19 @@ function DashboardTab({state,isConfigured,go}){
       doc.save(`MilCalc_RetirementPlan_${dateStr}.pdf`);
 
       // Track
-      const included=Object.entries(exportSections).filter(([,v])=>v).map(([k])=>k);
-      track("Plan Exported",{sections_included:included,section_count:included.length});
+      const sectionLabels={dashboard:"Dashboard Summary",pension:"Pension Breakdown",va:"VA Disability Details",tax:"Tax Analysis",col:"Cost of Living Comparison",gap:"Income Gap Analysis"};
+      const included=Object.entries(exportSections).filter(([,v])=>v).map(([k])=>sectionLabels[k]||k);
+      track("PDF Exported",{
+        sections_included:included,
+        section_count:included.length,
+        retirement_type:separationType==="medical"?"Medical":separationType==="reserve"?"Reserve":"Active",
+        has_va:(vaRating||0)>0,
+        has_sbp:!!sbp,
+        has_tricare:!!(state.tricareplan&&state.tricareplan!=="none"),
+        state:selectedState||"",
+        yos:yos||0,
+        pay_grade:usePayGrade?payGrade:"",
+      });
 
       setShowExportModal(false);
     }catch(err){
