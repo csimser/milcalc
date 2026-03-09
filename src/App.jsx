@@ -1816,6 +1816,12 @@ function DashboardTab({state,set,isConfigured,go}){
   return(
     <div className="fu">
       {!isConfigured&&<UnconfiguredBanner go={go}/>}
+      {isConfigured&&separationType!=="veteran"&&(state.bah||0)===0&&(
+        <div onClick={()=>go("myinfo")} style={{background:"linear-gradient(135deg,rgba(194,120,42,.12),rgba(194,120,42,.06))",border:"1px solid rgba(194,120,42,.25)",borderRadius:10,padding:"12px 16px",marginBottom:16,cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+          <span style={{fontSize:13,color:"var(--ink)",lineHeight:1.4}}>{"\uD83D\uDCCB"} <strong>Add your current pay</strong> for a true gap calculation</span>
+          <span style={{fontSize:16,color:"var(--nvm)"}}>&#8594;</span>
+        </div>
+      )}
       {userName&&<div style={{fontSize:14,color:"var(--mut)",marginBottom:4}}>Here's your picture, {userName}.</div>}
       <div className="sh2"><h2>Your Financial Dashboard</h2>
         <p>{separationType==="veteran"?"Veteran":separationType==="medical"?"Medical Retiree":separationType==="reserve"?"Reserve/Guard":"Active Duty"} / {retType} / {separationType==="reserve"?`${(reservePoints/360).toFixed(1)} equiv. YOS`:fmtYos(yos)+" YOS"} / {selectedState}</p>
@@ -3135,67 +3141,13 @@ function PlanningTab({state,set,go}){
                     <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:18,fontWeight:600,color:"var(--gn)"}}>{fmt(postRetTotal)}</span>
                   </div>
 
-                  {/* Editable inputs — BAH, BAS, Special Pays */}
-                  <Reveal label="Edit pre-retirement pay details">
-                    <div style={{marginTop:8}}>
-                      <NF label="BAH (Monthly)" value={state.bah||0} onChange={v=>set("bah",v)} pre="$" min={0} max={6000} step={50}
-                        hint={suggestedBAH>0?`E-5 w/deps BAH for ${autoCity}: ${fmt(suggestedBAH)}. Enter your actual rate.`:"Enter your current monthly BAH"}/>
-                      <NF label="BAS (Monthly)" value={effectiveBAS} onChange={v=>set("bas",v)} pre="$" min={0} max={1000} step={10}
-                        hint={`Auto-filled: ${isEnlisted?"Enlisted":"Officer"} 2026 rate. Adjust if needed.`}/>
-
-                      <div style={{marginTop:16,marginBottom:8}}>
-                        <div style={{fontSize:12,fontWeight:700,letterSpacing:".06em",textTransform:"uppercase",color:"var(--mut)",marginBottom:4}}>Special & Incentive Pay</div>
-                        <div style={{fontSize:12,color:"var(--fnt)",lineHeight:1.5}}>Add special pays to improve gap accuracy. All special pays are tax-free and NOT included in pension calculations.</div>
-                      </div>
-
-                      {SPECIAL_PAY_DEFS.map(cat=>(
-                        <div key={cat.cat}>
-                          <div style={{fontSize:10,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",color:"var(--nvm)",marginTop:14,marginBottom:6}}>{cat.cat}</div>
-                          {cat.items.map(item=>{
-                            const sp=(state.specialPays||{})[item.id]||{on:false,amount:item.prefill};
-                            return(
-                              <div key={item.id} style={{padding:"6px 0",borderBottom:"1px solid var(--sub)"}}>
-                                <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-                                  <input type="checkbox" checked={!!sp.on}
-                                    onChange={e=>{
-                                      const updated={...(state.specialPays||{}),[item.id]:{on:e.target.checked,amount:sp.amount||item.prefill}};
-                                      set("specialPays",updated);
-                                      if(e.target.checked){
-                                        track("Special Pay Entered",{pays_enabled:enabledPayIds(updated),total_monthly_special_pay:sumSpecialPays(updated),pay_count:countSpecialPays(updated)});
-                                      }
-                                    }}
-                                    style={{width:18,height:18,accentColor:"var(--nv)",flexShrink:0}}/>
-                                  <span style={{fontSize:13,color:sp.on?"var(--ink)":"var(--mut)",flex:1,lineHeight:1.3}}>{item.label}</span>
-                                </label>
-                                {sp.on&&(
-                                  <div style={{marginLeft:28,marginTop:6}}>
-                                    <NF value={sp.amount||0} onChange={v=>{
-                                      const updated={...(state.specialPays||{}),[item.id]:{...sp,amount:v}};
-                                      set("specialPays",updated);
-                                    }} pre="$" min={0} max={10000} step={25}/>
-                                  </div>
-                                )}
-                                {item.hint&&<div style={{marginLeft:28,fontSize:11,color:"var(--fnt)",marginTop:2,lineHeight:1.4}}>{item.hint}</div>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ))}
-
-                      {spTotal>0&&(
-                        <div style={{marginTop:14,padding:12,background:"var(--sub)",borderRadius:8}}>
-                          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                            <span style={{fontSize:13,fontWeight:600,color:"var(--ink)"}}>Total Special Pay</span>
-                            <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:16,fontWeight:600,color:"var(--nvm)"}}>{fmt(spTotal)}/mo</span>
-                          </div>
-                        </div>
-                      )}
-
-                      <div className="ib ib-nv" style={{marginTop:14,fontSize:12}}>
-                        Special pays count toward TSP annual contribution limits ($23,500 for 2026). If contributing to TSP from special pay, factor this into your savings plan.
-                      </div>
-                    </div>
-                  </Reveal>
+                  {/* Link to edit pay in My Info */}
+                  <div style={{marginTop:10,textAlign:"center"}}>
+                    <button onClick={()=>go("myinfo")} style={{background:"none",border:"1px solid var(--nvm)",borderRadius:8,padding:"10px 20px",
+                      color:"var(--nvm)",fontSize:13,fontWeight:600,cursor:"pointer",fontFamily:"Barlow,sans-serif"}}>
+                      Edit pay details in My Info &#8594;
+                    </button>
+                  </div>
                 </div>
 
                 {/* Nudge if no special pays entered */}
@@ -3576,6 +3528,93 @@ function ProfileTab({state,set,isConfigured,go}){
           </div>
           <span style={{fontSize:13,fontWeight:600,color:"var(--nvm)",whiteSpace:"nowrap"}}>See Dashboard {"\u2192"}</span>
         </button>
+      )}
+
+      {/* ── ACTIVE DUTY PAY (BAH / BAS / Special Pays) ── */}
+      {separationType!=="veteran"&&(
+        <div className="card" id="comp-inputs">
+          <div className="cttl">Active Duty Pay</div>
+          <div style={{fontSize:13,color:"var(--mut)",marginBottom:14,lineHeight:1.5}}>Enter your current pay to calculate your true retirement income gap</div>
+
+          {/* Base Pay — read-only from pay grade */}
+          <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderBottom:"1px solid var(--sub)"}}>
+            <div>
+              <div style={{fontSize:13,fontWeight:600,color:"var(--ink)"}}>Base Pay (Monthly)</div>
+              <div style={{fontSize:11,color:"var(--mut)"}}>From {usePayGrade?(GRADE_LABELS[payGrade]||payGrade):"manual entry"} at {fmtYos(yos)} YOS</div>
+            </div>
+            <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:16,fontWeight:600,color:"var(--nvm)"}}>{fmt(h3Prof)}</div>
+          </div>
+
+          <NF label="BAH (Monthly)" value={state.bah||0} onChange={v=>set("bah",v)} pre="$" min={0} max={6000} step={50}
+            hint={(()=>{const ac=STATE_DEFAULT_CITY[selectedState];const sb=ac?MHA_CITIES[ac]||0:0;return sb>0?`E-5 w/deps BAH for ${ac}: ${fmt(sb)}. Enter your actual rate.`:"Enter your current monthly BAH";})()}/>
+          <NF label="BAS (Monthly)" value={(state.bas||0)>0?state.bas:(payGrade&&payGrade.startsWith("E-")?BAS_2026.enlisted:BAS_2026.officer)} onChange={v=>set("bas",v)} pre="$" min={0} max={1000} step={10}
+            hint={`Auto-filled: ${payGrade&&payGrade.startsWith("E-")?"Enlisted":"Officer"} 2026 rate. Adjust if needed.`}/>
+
+          {/* Special & Incentive Pay — collapsible */}
+          <Reveal label={`Special & Incentive Pay${countSpecialPays(state.specialPays||{})>0?` (${countSpecialPays(state.specialPays||{})} active — ${fmt(sumSpecialPays(state.specialPays||{}))}/mo)`:""}`}>
+            <div style={{marginTop:8}}>
+              <div style={{fontSize:12,color:"var(--fnt)",lineHeight:1.5,marginBottom:8}}>Add special pays to improve gap accuracy. All special pays are tax-free and NOT included in pension calculations.</div>
+              {SPECIAL_PAY_DEFS.map(cat=>(
+                <div key={cat.cat}>
+                  <div style={{fontSize:10,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",color:"var(--nvm)",marginTop:14,marginBottom:6}}>{cat.cat}</div>
+                  {cat.items.map(item=>{
+                    const sp=(state.specialPays||{})[item.id]||{on:false,amount:item.prefill};
+                    return(
+                      <div key={item.id} style={{padding:"6px 0",borderBottom:"1px solid var(--sub)"}}>
+                        <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
+                          <input type="checkbox" checked={!!sp.on}
+                            onChange={e=>{
+                              const updated={...(state.specialPays||{}),[item.id]:{on:e.target.checked,amount:sp.amount||item.prefill}};
+                              set("specialPays",updated);
+                              if(e.target.checked){
+                                track("Special Pay Entered",{pays_enabled:enabledPayIds(updated),total_monthly_special_pay:sumSpecialPays(updated),pay_count:countSpecialPays(updated)});
+                              }
+                            }}
+                            style={{width:18,height:18,accentColor:"var(--nv)",flexShrink:0}}/>
+                          <span style={{fontSize:13,color:sp.on?"var(--ink)":"var(--mut)",flex:1,lineHeight:1.3}}>{item.label}</span>
+                        </label>
+                        {sp.on&&(
+                          <div style={{marginLeft:28,marginTop:6}}>
+                            <NF value={sp.amount||0} onChange={v=>{
+                              const updated={...(state.specialPays||{}),[item.id]:{...sp,amount:v}};
+                              set("specialPays",updated);
+                            }} pre="$" min={0} max={10000} step={25}/>
+                          </div>
+                        )}
+                        {item.hint&&<div style={{marginLeft:28,fontSize:11,color:"var(--fnt)",marginTop:2,lineHeight:1.4}}>{item.hint}</div>}
+                      </div>
+                    );
+                  })}
+                </div>
+              ))}
+              {sumSpecialPays(state.specialPays||{})>0&&(
+                <div style={{marginTop:14,padding:12,background:"var(--sub)",borderRadius:8}}>
+                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                    <span style={{fontSize:13,fontWeight:600,color:"var(--ink)"}}>Total Special Pay</span>
+                    <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:16,fontWeight:600,color:"var(--nvm)"}}>{fmt(sumSpecialPays(state.specialPays||{}))}/mo</span>
+                  </div>
+                </div>
+              )}
+              <div className="ib ib-nv" style={{marginTop:14,fontSize:12}}>
+                Special pays count toward TSP annual contribution limits ($23,500 for 2026). If contributing to TSP from special pay, factor this into your savings plan.
+              </div>
+            </div>
+          </Reveal>
+
+          {/* Total active comp summary */}
+          {(()=>{
+            const isEnl=payGrade&&payGrade.startsWith("E-");
+            const effBAS=(state.bas||0)>0?state.bas:(isEnl?BAS_2026.enlisted:BAS_2026.officer);
+            const spTot=sumSpecialPays(state.specialPays||{});
+            const total=h3Prof+(state.bah||0)+effBAS+spTot;
+            return total>0?(
+              <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",marginTop:8,borderTop:"2px solid var(--nvm)"}}>
+                <span style={{fontSize:14,fontWeight:700,color:"var(--ink)"}}>Total Active Duty Comp</span>
+                <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:18,fontWeight:600,color:"var(--nvm)"}}>{fmt(total)}<span style={{fontSize:12,color:"var(--mut)"}}>/mo</span></span>
+              </div>
+            ):null;
+          })()}
+        </div>
       )}
 
       {/* ── VA DISABILITY ── */}
