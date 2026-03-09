@@ -89,42 +89,61 @@ const VA = {
 };
 
 const STATES = {
-  "Alabama":{ok:true,note:"Fully exempt"},"Alaska":{ok:true,note:"No state income tax"},
-  "Arizona":{ok:true,note:"Fully exempt"},"Arkansas":{ok:true,note:"Fully exempt"},
-  "California":{ok:false,rate:9.3,note:"Partial: $20k exempt for AGI <$125k (single) — 2025–2030"},
-  "Colorado":{ok:true,note:"Exempt age 55+"},"Connecticut":{ok:true,note:"Fully exempt"},
-  "Delaware":{ok:false,rate:5.5,note:"$12,500 exempt (any age); taxed above that"},
-  "Florida":{ok:true,note:"No state income tax"},
-  "Georgia":{ok:true,note:"Partial: $17.5k (<62), $35k (62–64), $65k (65+); full $65k for all in 2026"},
-  "Hawaii":{ok:true,note:"Fully exempt"},
-  "Idaho":{ok:false,rate:5.8,note:"Taxed; exempt for disabled retirees and age 62+"},
-  "Illinois":{ok:true,note:"Fully exempt"},"Indiana":{ok:true,note:"Fully exempt"},
-  "Iowa":{ok:true,note:"Fully exempt"},"Kansas":{ok:true,note:"Fully exempt"},
-  "Kentucky":{ok:false,rate:4.5,note:"First $31,110 tax-free; taxed above that"},
-  "Louisiana":{ok:true,note:"Fully exempt"},"Maine":{ok:true,note:"Up to $10,000 exempt"},
-  "Maryland":{ok:true,note:"First $12,500 exempt; $20,000 at age 55"},
-  "Massachusetts":{ok:true,note:"Fully exempt"},"Michigan":{ok:true,note:"Fully exempt"},
-  "Minnesota":{ok:true,note:"Fully exempt"},"Mississippi":{ok:true,note:"Fully exempt"},
-  "Missouri":{ok:true,note:"Fully exempt"},
-  "Montana":{ok:false,rate:6.5,note:"50% deductible first 5 yrs; age 65+ get $5,500 subtraction"},
-  "Nebraska":{ok:true,note:"Fully exempt"},"Nevada":{ok:true,note:"No state income tax"},
-  "New Hampshire":{ok:true,note:"No state income tax (as of 2025)"},
-  "New Jersey":{ok:true,note:"Fully exempt"},"New Mexico":{ok:true,note:"Up to $30,000 exempt"},
-  "New York":{ok:true,note:"Fully exempt"},
-  "North Carolina":{ok:true,note:"Exempt under Bailey Exclusion for qualifying service"},
-  "North Dakota":{ok:true,note:"Fully exempt"},"Ohio":{ok:true,note:"Fully exempt"},
-  "Oklahoma":{ok:true,note:"Fully exempt"},
-  "Oregon":{ok:false,rate:9.0,note:"Taxed; full exemption legislation pending for 2026"},
-  "Pennsylvania":{ok:true,note:"Fully exempt"},
-  "Rhode Island":{ok:true,note:"Exempt age 59½+"},
-  "South Carolina":{ok:true,note:"Fully exempt (as of 2025)"},
-  "South Dakota":{ok:true,note:"No state income tax"},"Tennessee":{ok:true,note:"No state income tax"},
-  "Texas":{ok:true,note:"No state income tax"},
-  "Utah":{ok:false,rate:4.55,note:"Non-refundable credit offsets most/all tax on retirement pay"},
-  "Vermont":{ok:true,note:"Exempt AGI ≤$125k; partial $125k–$175k; fully taxed above (2025+)"},
-  "Virginia":{ok:true,note:"$40,000 exemption (2025 and beyond)"},
-  "Washington":{ok:true,note:"No state income tax"},"West Virginia":{ok:true,note:"Fully exempt"},
-  "Wisconsin":{ok:true,note:"Fully exempt"},"Wyoming":{ok:true,note:"No state income tax"},
+  // ── NO STATE INCOME TAX ──
+  "Alaska":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
+  "Florida":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
+  "Nevada":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
+  "New Hampshire":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
+  "South Dakota":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
+  "Tennessee":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
+  "Texas":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
+  "Washington":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
+  "Wyoming":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
+  // ── INCOME TAX — FULLY EXEMPT MILITARY RETIREMENT ──
+  "Alabama":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Arizona":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Arkansas":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Connecticut":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Hawaii":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Illinois":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Indiana":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Iowa":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Kansas":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Louisiana":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Maine":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Massachusetts":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Michigan":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Minnesota":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Mississippi":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Missouri":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Nebraska":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "New Jersey":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "New York":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "North Carolina":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt (Bailey Exclusion)"},
+  "North Dakota":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Ohio":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Pennsylvania":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "South Carolina":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "West Virginia":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  "Wisconsin":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
+  // ── PARTIAL EXEMPTIONS ──
+  "California":{ok:false,rate:9.3,exempt:20000,label:"Partial Exemption — first $20k exempt (income limits apply)",note:"Up to $20k exempt for AGI ≤$125k (single/HOH) / $250k (joint) · 2025–2029 · also applies to SBP annuities"},
+  "Colorado":{ok:false,rate:4.4,exempt:20000,label:"Partial Exemption — age-based",note:"Under 55: $15k exempt · 55–64: $20k exempt · 65+: $24k exempt"},
+  "Delaware":{ok:false,rate:6.6,exempt:12500,label:"Partial Exemption — first $12,500 exempt",note:"Up to $12,500 exempt any age · taxed above"},
+  "Georgia":{ok:false,rate:5.49,exempt:65000,label:"Partial Exemption — first $65k exempt",note:"Starting 2026: up to $65,000 exempt any age"},
+  "Idaho":{ok:false,rate:5.8,exempt:0,label:"Exempt (age 62+ or disabled)",note:"Tax-free for disabled retirees and age 62+ · all others fully taxable"},
+  "Kentucky":{ok:false,rate:4.0,exempt:31110,label:"Partial Exemption — up to $31,110",note:"Pre-1997 retirees fully exempt · post-1997: first $31,110 exempt"},
+  "Maryland":{ok:false,rate:5.75,exempt:12500,label:"Partial Exemption — age-based",note:"Under 55: $12,500 exempt · 55+: $20,000 exempt"},
+  "Montana":{ok:false,rate:6.5,exempt:0,label:"Partial Exemption — 50% up to 5 years",note:"50% deductible for first 5 years of eligibility · age 65+: additional $5,500 subtraction"},
+  "New Mexico":{ok:false,rate:4.9,exempt:30000,label:"Partial Exemption — first $30k exempt",note:"Up to $30,000 exempt (2024–2026) · age 100+: fully exempt"},
+  "Oklahoma":{ok:false,rate:4.75,exempt:10000,pctExempt:75,label:"Partial Exemption — 75% or $10k (whichever greater)",note:"Up to 75% OR $10,000 exempt, whichever is greater"},
+  "Oregon":{ok:false,rate:9.9,exempt:0,label:"Exempt (pre-Oct 1991 service only)",note:"Service before Oct 1, 1991: fully exempt · after: fully taxable · mixed: prorated"},
+  "Rhode Island":{ok:false,rate:5.99,exempt:0,label:"Partial Exemption — exempt age 59½+",note:"Exempt for retirees age 59½ and older · fully taxable below age 59½"},
+  "Utah":{ok:false,rate:0.05,exempt:0,label:"Tax Credit Offset",note:"4.55% flat tax offset by non-refundable credit of 4.5% of retirement pay · effective rate ≈ 0%"},
+  "Vermont":{ok:false,rate:6.6,exempt:0,label:"Exempt (AGI ≤ $125k) / Partial above",note:"AGI ≤$125k: fully exempt · $125k–$175k: partial (prorated) · above $175k: fully taxable"},
+  "Virginia":{ok:false,rate:5.75,exempt:40000,label:"Partial Exemption — first $40k exempt",note:"$40,000 exemption (2025+) · remainder taxed at VA marginal rates"},
+  // ── FULLY TAXABLE ──
+  "District of Columbia":{ok:false,rate:8.95,exempt:0,label:"Fully Taxable",note:"No military retirement tax exemption"},
 };
 
 const COL = {
@@ -637,16 +656,24 @@ function combinedVA(ratings) {
   return Math.round(Math.round(c)/10)*10;
 }
 
-// ── MEDICAL RETIREMENT (PDRL/TDRL) ─────────────────────────────────────
+// ── MEDICAL RETIREMENT (PDRL/TDRL) — Chapter 61 ──────────────────────
 // Source: 10 USC § 1201/§ 1202; congress.gov/crs-product/IF10483
-// Formula: max(DoD disability %, YOS × multiplier) × High-3, capped at 75%
+// PDRL: DOD rating ≥ 30% OR YOS ≥ 20 → permanent disability retired list
+//   Pay = HIGHER of (DOD% × High-3) or (YOS × multiplier × High-3), capped at 75%
+// TDRL: DOD rating < 30% AND YOS < 20 → temporary list, minimum 50% applied
+//   Pay = 50% × High-3 (minimum floor)
 // BRS members get 2.0% for the YOS leg (NOT 2.5%) — confirmed by DoD Defense Primer
-// TDRL: minimum 50% multiplier while on temporary list
+// Severance: DOD < 30% AND YOS < 20 AND not TDRL → no retirement, severance only
 function medicalPension(yos, h3, dodPct, tdrl, retType) {
   const yosMult = yos * (retType === "BRS" ? 2.0 : 2.5);
-  const disabMult = tdrl ? Math.max(dodPct, 50) : dodPct;
-  const finalMult = Math.min(Math.max(yosMult, disabMult), 75);
-  return { pay: h3 * (finalMult / 100), mult: finalMult, yosMult, disabMult };
+  const isPDRL = dodPct >= 30 || yos >= 20;
+  const isTDRL = !isPDRL && tdrl;
+  const isSeverance = !isPDRL && !tdrl;
+  const disabMult = isTDRL ? Math.max(dodPct, 50) : dodPct;
+  const finalMult = isPDRL ? Math.min(Math.max(yosMult, disabMult), 75) : isTDRL ? 50 : 0;
+  const method = isPDRL ? (disabMult >= yosMult ? "disability" : "yos") : isTDRL ? "tdrl" : "severance";
+  const severancePay = isSeverance ? 2 * h3 * yos : 0;
+  return { pay: h3 * (finalMult / 100), mult: finalMult, yosMult, disabMult, isPDRL, isTDRL, isSeverance, method, severancePay };
 }
 
 // ── RESERVE/GUARD RETIREMENT ────────────────────────────────────────────
@@ -677,8 +704,8 @@ function reservePensionAmount(reservePoints, h3, retType) {
 }
 
 // ── 2026 FEDERAL INCOME TAX — Progressive Brackets ───────────────────
-// Source: IRS Rev. Proc. 2025-28
-// Standard deductions: $15,000 single / $30,000 MFJ
+// Source: IRS Rev. Proc. 2025-28 + One Big Beautiful Bill (OBBB) adjustments
+// 2026 IRS figures — standard deductions: $16,100 single/MFS / $32,200 MFJ / $24,150 HOH
 const TAX_BRACKETS_2026 = {
   single: [
     { rate: 0.10, min: 0,       max: 11925 },
@@ -698,17 +725,43 @@ const TAX_BRACKETS_2026 = {
     { rate: 0.35, min: 501050,  max: 751600 },
     { rate: 0.37, min: 751600,  max: Infinity },
   ],
+  hoh: [
+    { rate: 0.10, min: 0,       max: 17000 },
+    { rate: 0.12, min: 17000,   max: 64850 },
+    { rate: 0.22, min: 64850,   max: 103350 },
+    { rate: 0.24, min: 103350,  max: 197300 },
+    { rate: 0.32, min: 197300,  max: 250500 },
+    { rate: 0.35, min: 250500,  max: 626350 },
+    { rate: 0.37, min: 626350,  max: Infinity },
+  ],
 };
+TAX_BRACKETS_2026.mfs = TAX_BRACKETS_2026.single; // MFS uses single brackets
 
-const STANDARD_DEDUCTION_2026 = { single: 15000, mfj: 30000 };
+const STANDARD_DEDUCTION_2026 = { single: 16100, mfj: 32200, hoh: 24150, mfs: 16100 };
 
-// Returns { annualTax, monthlyTax, effectiveRate }
+const FILING_STATUS_LABELS = { single:"Single", mfj:"MFJ", hoh:"Head of Household", mfs:"Married Filing Separately" };
+
+// Returns { annualTax, monthlyTax, effectiveRate, totalDeduction }
 // taxableAnnualGross = all taxable income (pension + other) — VA comp excluded
-// filingStatus = "single" | "mfj"
-function calcFederalTax(taxableAnnualGross, filingStatus) {
+// filingStatus = "single" | "mfj" | "hoh" | "mfs"
+// age65Plus = boolean (filer is 65+), spouseAge65Plus = boolean (spouse is 65+, MFJ only)
+function calcFederalTax(taxableAnnualGross, filingStatus, age65Plus, spouseAge65Plus) {
   const gross = Number(taxableAnnualGross) || 0;
-  if (gross <= 0) return { annualTax: 0, monthlyTax: 0, effectiveRate: 0 };
-  const deduction = STANDARD_DEDUCTION_2026[filingStatus] ?? 15000;
+  if (gross <= 0) return { annualTax: 0, monthlyTax: 0, effectiveRate: 0, totalDeduction: 0 };
+  let deduction = STANDARD_DEDUCTION_2026[filingStatus] ?? 16100;
+  // Additional standard deduction for age 65+ or blind
+  if (age65Plus) {
+    deduction += (filingStatus === "mfj") ? 1650 : 2050;
+  }
+  if (spouseAge65Plus && filingStatus === "mfj") {
+    deduction += 1650;
+  }
+  // OBBB senior deduction (2025–2028): additional $6,000 for age 65+
+  // Phases out above $75,000 AGI (single/HOH/MFS) / $150,000 (MFJ)
+  if (age65Plus) {
+    const obbThreshold = (filingStatus === "mfj") ? 150000 : 75000;
+    if (gross <= obbThreshold) deduction += 6000;
+  }
   const taxableIncome = Math.max(0, gross - deduction);
   const brackets = TAX_BRACKETS_2026[filingStatus] ?? TAX_BRACKETS_2026.single;
 
@@ -727,7 +780,20 @@ function calcFederalTax(taxableAnnualGross, filingStatus) {
     annualTax: Math.round(annualTax),
     monthlyTax: Math.round(annualTax / 12),
     effectiveRate,
+    totalDeduction: deduction,
   };
+}
+
+// ── STATE TAX HELPER ─────────────────────────────────────────────────
+// Calculates estimated state tax on military retirement pay
+function calcStateTax(annualPension, stateInfo) {
+  if (!stateInfo || stateInfo.ok) return 0;
+  const pension = Math.max(0, annualPension);
+  const exemptDollar = stateInfo.exempt || 0;
+  const exemptPct = (stateInfo.pctExempt || 0) / 100;
+  const exemptAmt = Math.max(exemptDollar, pension * exemptPct);
+  const taxable = Math.max(0, pension - exemptAmt);
+  return Math.round(taxable * ((stateInfo.rate || 0) / 100));
 }
 
 // ── TRICARE 2026 PREMIUM RATES (Monthly, Retiree Enrollment Fees) ────
@@ -1644,10 +1710,15 @@ function DashboardTab({state,isConfigured,go}){
   const netP=g-sbpC;
   const vaM=calcVAComp(vaRating,key,vaChildren||0);
   const si=STATES[selectedState]||{ok:true};
-  const taxableAnnual=netP*12+(income||0);
-  const {monthlyTax:fedTax,effectiveRate:fedEffRate}=calcFederalTax(taxableAnnual,filingStatus||"single");
-  const stTax=si.ok?0:netP*((si.rate||0)/100);
-  const atP=netP-fedTax-stTax;
+  // VA offset for medical retirees with < 20 YOS (Ch. 61)
+  const medCalc=separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType):null;
+  const isVAOffset=separationType==="medical"&&yos<20&&vaM>0&&g>0&&medCalc&&!medCalc.isSeverance;
+  // With VA offset: DOD pay reduced dollar-for-dollar by VA comp; receive higher of the two
+  const offsetNetP=isVAOffset?Math.max(0,netP-vaM):netP;
+  const taxableAnnual=offsetNetP*12+(income||0);
+  const {monthlyTax:fedTax,effectiveRate:fedEffRate,totalDeduction:fedDeduction}=calcFederalTax(taxableAnnual,filingStatus||"single",state.age65Plus,state.spouseAge65Plus);
+  const stTax=calcStateTax(offsetNetP*12,si)/12;
+  const atP=offsetNetP-fedTax-stTax;
   const mhaBase=giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[giSchoolCity]||0);
   const mhaMo=giUsing?Math.round(mhaBase*(giEligPct/100)*giEnroll):0;
   const mhaBooksMo=giUsing?Math.round((1000*(giEligPct/100))/12):0;
@@ -1675,7 +1746,7 @@ function DashboardTab({state,isConfigured,go}){
   const elig=isAnyRetiree&&vaRating>=50;
   const reserveCalc=separationType==="reserve"?reservePension(reservePoints||0,h3||0,retType):{pay:0,equivYOS:0,multPct:0};
   const p=separationType==="active"?pct(retType,yos):separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType).mult:separationType==="reserve"?Math.min(reserveCalc.equivYOS*reserveCalc.multPct,100):0;
-  const pensionLabel=separationType==="active"?"Pension / mo":separationType==="medical"?"Med. Ret. / mo":separationType==="reserve"?(isReserveEligibleNow?"Reserve Pay / mo":`Reserve (Age ${payStartAge})`):"No Pension";
+  const pensionLabel=separationType==="active"?"Pension / mo":separationType==="medical"?"Medical Ret. Pay":separationType==="reserve"?(isReserveEligibleNow?"Reserve Pay / mo":`Reserve (Age ${payStartAge})`):"No Pension";
   const reserveProjected=separationType==="reserve"&&!isReserveEligibleNow?reserveCalc.pay:0;
 
   const [showFullDisclaimer,setShowFullDisclaimer]=useState(false);
@@ -1774,14 +1845,15 @@ function DashboardTab({state,isConfigured,go}){
             ):(
               <>
                 <DR label="Years of Service" value={`${fmtYos(yos)} years`}/>
-                {separationType==="medical"&&<DR label="DoD Disability %" value={`${medDodPct}%${tdrl?" (TDRL)":""}`}/>}
+                {separationType==="medical"&&<DR label="DoD Disability %" value={`${medDodPct}%${tdrl?" (TDRL)":""}${medCalc?.method==="disability"?" (disability method)":medCalc?.method==="yos"?" (YOS method)":""}`}/>}
                 <DR label="Pension Multiplier" value={`${p.toFixed(1)}%`} sub={`of High-36 avg ${fmt(h3)}/mo`}/>
-                <DR label="Gross Monthly" value={fmt(g)}/>
+                <DR label={separationType==="medical"?"Gross Medical Retirement":"Gross Monthly"} value={fmt(g)}/>
+                {isVAOffset&&<DR label="VA Offset" value={`-${fmt(Math.min(vaM,netP))}/mo`} color="red" sub="DOD pay offset dollar-for-dollar by VA comp"/>}
               </>
             )}
             {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}/mo`} color="red"/>}
-            <DR label="Federal Tax (est.)" value={`-${fmt(fedTax)}/mo`} color="red" sub={`${(fedEffRate*100).toFixed(1)}% effective · ${(filingStatus||"single")==="mfj"?"MFJ":"Single"}`}/>
-            <DR label={`State Tax — ${selectedState}`} value={si.ok?"Exempt":`-${fmt(stTax)}/mo`} color={si.ok?"green":"red"}/>
+            <DR label="Federal Tax (est.)" value={`-${fmt(fedTax)}/mo`} color="red" sub={`${(fedEffRate*100).toFixed(1)}% effective · ${FILING_STATUS_LABELS[filingStatus||"single"]||"Single"} · 2026 IRS figures`}/>
+            <DR label={`State Tax — ${selectedState}`} value={si.ok?"Exempt":`-${fmt(stTax)}/mo`} color={si.ok?"green":"red"} sub={si.label||si.note}/>
             <DR label="Net After-Tax Pension" value={fmt(atP)+"/mo"} color="navy"/>
             {separationType==="reserve"&&!isReserveEligibleNow&&(
               <div className="ib ib-gd" style={{marginTop:10,fontSize:13}}>Reserve pay starts at age {payStartAge}. Currently age {currentAge}.</div>
@@ -1989,7 +2061,7 @@ function DashboardTab({state,isConfigured,go}){
       // Four stat boxes
       const bw=(cw-18)/4;
       const grossPension=separationType==="reserve"?reserveCalc.pay:g;
-      statBox(M,bw,"PENSION (GROSS)",separationType==="veteran"?"N/A":fmt(grossPension));
+      statBox(M,bw,separationType==="medical"?"MED. RETIREMENT":"PENSION (GROSS)",separationType==="veteran"?"N/A":fmt(grossPension));
       statBox(M+bw+6,bw,"VA DISABILITY",fmt(vaM));
       statBox(M+(bw+6)*2,bw,"TOTAL MONTHLY",fmt(totalSchool));
       statBox(M+(bw+6)*3,bw,"ANNUAL INCOME",fmt(totalSchool*12));
@@ -1997,7 +2069,7 @@ function DashboardTab({state,isConfigured,go}){
 
       // PENSION section
       if(exportSections.pension&&separationType!=="veteran"){
-        sectionHead("PENSION BREAKDOWN");
+        sectionHead(separationType==="medical"?"MEDICAL RETIREMENT PAY":"PENSION BREAKDOWN");
         dataRow("Retirement System",retType);
         if(separationType==="reserve"){
           dataRow("Total Retirement Points",(reservePoints||0).toLocaleString());
@@ -2006,7 +2078,14 @@ function DashboardTab({state,isConfigured,go}){
           dataRow("High-3 Base Pay",fmt(h3)+"/mo");
           dataRow("Years of Service",fmtYos(yos)+" years");
         }
-        dataRow(separationType==="reserve"&&!isReserveEligibleNow?"Projected Monthly Gross":"Monthly Gross Pension",fmt(grossPension),{highlight:true,valueColor:GOLD_B});
+        if(separationType==="medical"){
+          const pdfMedCalc=medicalPension(yos,h3,medDodPct,tdrl,retType);
+          dataRow("DoD Disability Rating",medDodPct+"%");
+          dataRow("Status",pdfMedCalc.isPDRL?"PDRL (Permanent)":pdfMedCalc.isTDRL?"TDRL (Temporary)":"Severance Only");
+          dataRow("Calculation Method",pdfMedCalc.method==="disability"?"Disability % method":"YOS method");
+          if(isVAOffset) dataRow("VA Offset","DOD pay offset by VA comp (YOS < 20)",{valueColor:[192,57,43]});
+        }
+        dataRow(separationType==="reserve"&&!isReserveEligibleNow?"Projected Monthly Gross":separationType==="medical"?"Monthly Medical Retirement":"Monthly Gross Pension",fmt(grossPension),{highlight:true,valueColor:GOLD_B});
         dataRow("After-Tax Estimate",fmt(atP)+"/mo");
         dataRow("Annual Gross",fmt(grossPension*12));
         dataRow("CRDP/CRSC Status",elig?"Eligible":"Not eligible",{valueColor:elig?GOLD_B:MUT});
@@ -2045,7 +2124,7 @@ function DashboardTab({state,isConfigured,go}){
       if(exportSections.tax){
         sectionHead("TAX ANALYSIS");
         dataRow("State",selectedState);
-        dataRow("State Tax Treatment",si2.ok?"Exempt":"Taxed",{valueColor:si2.ok?GRN:MUT});
+        dataRow("State Tax Treatment",si2.label||si2.note||(si2.ok?"Exempt":"Taxed"),{valueColor:si2.ok?GRN:MUT});
         dataRow("Federal Effective Rate",(fedEffRate*100).toFixed(1)+"%");
         dataRow("Estimated Federal Tax","-"+fmt(fedTax*12)+"/yr",{valueColor:[192,57,43]});
         if(!si2.ok) dataRow("Estimated State Tax","-"+fmt(stTax*12)+"/yr",{valueColor:[192,57,43]});
@@ -2176,12 +2255,15 @@ function BenefitsTab({state,isConfigured,go}){
   const vaExtra=nKids>1?(VA[vaRating]?.ac||0)*(nKids-1):0;
   const comb=combinedVA(vaRatings);
   const combMo=calcVAComp(comb,key,nKids);
+  const medCalcB=separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType):null;
+  const isVAOffsetB=separationType==="medical"&&yos<20&&vaM>0&&g>0&&medCalcB&&!medCalcB.isSeverance;
+  const offsetNetB=isVAOffsetB?Math.max(0,net-vaM):net;
   const isAnyRetiree=separationType==="active"||(separationType==="medical"&&yos>=20)||(separationType==="reserve"&&isReserveEligibleNow);
   const elig=isAnyRetiree&&vaRating>=50;
   const [crdpOpen,setCrdpOpen]=useState(false);
-  const bTaxableAnn=net*12+(state.income||0);
-  const {effectiveRate:bEffRate}=calcFederalTax(bTaxableAnn,state.filingStatus||"single");
-  const bAfterTaxMo=net*(1-bEffRate);
+  const bTaxableAnn=offsetNetB*12+(state.income||0);
+  const {effectiveRate:bEffRate}=calcFederalTax(bTaxableAnn,state.filingStatus||"single",state.age65Plus,state.spouseAge65Plus);
+  const bAfterTaxMo=offsetNetB*(1-bEffRate);
 
   // GI Bill
   const rate26=MHA_CITIES[giSchoolCity]||0;
@@ -2224,32 +2306,56 @@ function BenefitsTab({state,isConfigured,go}){
           </div>
         ):separationType==="medical"?(
           <div>
-            <div style={{marginBottom:16}}>
-              <BStat label="Gross Monthly Med. Retirement" value={fmt(g)} color="navy"
-                sub={`Multiplier: ${medicalPension(yos,h3,medDodPct,tdrl,retType).mult.toFixed(1)}% of High-36 avg${tdrl?" (TDRL — min 50%)":""}`}/>
-            </div>
-            <div style={{marginBottom:14}}>
-              <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
-                <span>YOS leg: {fmtYos(yos)} yrs × {retType==="BRS"?"2.0":"2.5"}% = {medicalPension(yos,h3,medDodPct,tdrl,retType).yosMult.toFixed(1)}%</span>
-                <span>DoD: {medicalPension(yos,h3,medDodPct,tdrl,retType).disabMult}%</span>
+            {medCalcB?.isSeverance?(
+              <div>
+                <div className="ib ib-rd" style={{fontSize:13,marginBottom:12}}>
+                  Not eligible for retirement pay — severance pay only.
+                </div>
+                <DR label="Severance Pay (one-time)" value={fmt(medCalcB.severancePay)} color="navy" sub={`2 × ${fmt(h3)}/mo × ${fmtYos(yos)} YOS`}/>
+                <div className="ib ib-gd" style={{fontSize:12,marginTop:8}}>
+                  Severance = 2 × monthly base pay × YOS. No ongoing retirement pay.
+                </div>
               </div>
-              <PBar value={medicalPension(yos,h3,medDodPct,tdrl,retType).mult} max={75} color="var(--nv)"/>
-            </div>
-            <div className="ib ib-nv" style={{fontSize:12,marginBottom:12}}>
-              Formula: max(DoD disability {medDodPct}%, YOS {fmtYos(yos)} × {retType==="BRS"?"2.0":"2.5"}%) = {medicalPension(yos,h3,medDodPct,tdrl,retType).mult.toFixed(1)}% × High-36 avg, capped at 75%.
-            </div>
-            <hr/>
-            <DR label="Gross Pension" value={fmt(g)}/>
-            {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}`} color="red" sub="6.5% of covered base amount · pre-tax deduction"/>}
-            {sbp&&<DR label="Survivor Annuity" value={fmt(g*(sbpCoverage/100)*0.55)+"/mo"} color="green" sub="55% of base amount · paid to survivor for life"/>}
-            <DR label="Net Monthly" value={fmt(net)} color="navy"/>
-            <DR label="Net Annual" value={fmt(net*12)} color="navy"/>
-            <hr/>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-              <MT label="Est. After-Tax /mo" value={fmt(bAfterTaxMo)} color="green" sub={`${(bEffRate*100).toFixed(1)}% effective rate`}/>
-              <MT label="Annual After-Tax" value={fmt(bAfterTaxMo*12)} color="green" sub="Not FICA-taxed"/>
-            </div>
-            {sbp&&<div className="ib ib-gn" style={{marginTop:10,fontSize:11}}>SBP-DIC offset eliminated Jan 2023 — survivor receives both SBP and VA DIC in full.</div>}
+            ):(
+              <>
+                <div style={{marginBottom:16}}>
+                  <BStat label="Gross Monthly Medical Retirement Pay" value={fmt(g)} color="navy"
+                    sub={`${medCalcB?.isPDRL?"PDRL":"TDRL"} · Multiplier: ${medCalcB?.mult.toFixed(1)}% of High-36 avg${medCalcB?.method==="disability"?" (disability % method)":medCalcB?.method==="yos"?" (YOS method)":medCalcB?.isTDRL?" (TDRL — min 50%)":""}`}/>
+                </div>
+                <div style={{marginBottom:14}}>
+                  <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
+                    <span>YOS leg: {fmtYos(yos)} yrs × {retType==="BRS"?"2.0":"2.5"}% = {medCalcB?.yosMult.toFixed(1)}%</span>
+                    <span>DoD: {medCalcB?.disabMult}%{medCalcB?.method==="disability"?" ✓":""}</span>
+                  </div>
+                  <PBar value={medCalcB?.mult||0} max={75} color="var(--nv)"/>
+                </div>
+                <div className="ib ib-nv" style={{fontSize:12,marginBottom:12}}>
+                  {medCalcB?.isPDRL
+                    ?`PDRL: max(DoD ${medDodPct}%, YOS ${fmtYos(yos)} × ${retType==="BRS"?"2.0":"2.5"}%) = ${medCalcB?.mult.toFixed(1)}% × High-36, capped at 75%.`
+                    :`TDRL: minimum 50% applied. Reassessed every 18 months, max 5 years.`}
+                </div>
+                {isVAOffsetB&&(
+                  <div className="ib ib-gd" style={{fontSize:12,marginBottom:12}}>
+                    <strong>VA Offset (YOS &lt; 20):</strong> DOD retirement pay offset dollar-for-dollar by VA compensation. You receive the higher of the two, not both.
+                    {state.combatRelated&&<><br/><strong style={{color:"var(--gn)"}}>CRSC eligible:</strong> Combat-Related Special Compensation IS payable concurrently with VA comp.</>}
+                  </div>
+                )}
+                <hr/>
+                <DR label="Gross Medical Retirement" value={fmt(g)}/>
+                {isVAOffsetB&&<DR label="VA Offset" value={`-${fmt(Math.min(vaM,net))}`} color="red" sub="DOD pay reduced by VA compensation"/>}
+                {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}`} color="red" sub="6.5% of covered base amount · pre-tax deduction"/>}
+                {sbp&&<DR label="Survivor Annuity" value={fmt(g*(sbpCoverage/100)*0.55)+"/mo"} color="green" sub="55% of base amount · paid to survivor for life"/>}
+                <DR label="Net Monthly" value={fmt(isVAOffsetB?offsetNetB:net)} color="navy"/>
+                <DR label="Net Annual" value={fmt((isVAOffsetB?offsetNetB:net)*12)} color="navy"/>
+                <hr/>
+                <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                  <MT label="Est. After-Tax /mo" value={fmt(bAfterTaxMo)} color="green" sub={`${(bEffRate*100).toFixed(1)}% effective rate`}/>
+                  <MT label="Annual After-Tax" value={fmt(bAfterTaxMo*12)} color="green" sub="Not FICA-taxed"/>
+                </div>
+                {yos>=20&&<div className="ib ib-gn" style={{marginTop:10,fontSize:11}}>20+ YOS: eligible for CRDP — can receive both DOD retirement and VA compensation concurrently. No offset.</div>}
+                {sbp&&<div className="ib ib-gn" style={{marginTop:10,fontSize:11}}>SBP-DIC offset eliminated Jan 2023 — survivor receives both SBP and VA DIC in full.</div>}
+              </>
+            )}
           </div>
         ):separationType==="reserve"?(
           <div>
@@ -2397,7 +2503,7 @@ function BenefitsTab({state,isConfigured,go}){
               :separationType==="veteran"
                 ?`Veterans without retirement pay are not eligible for CRDP. See CRSC below if you have combat-related injuries.`
                 :separationType==="medical"&&yos<20
-                  ?`Chapter 61 medical retirees with fewer than 20 years of service do not qualify for CRDP. You may qualify for CRSC if your disability is combat-related. Current YOS: ${fmtYos(yos)}.`
+                  ?`Chapter 61 medical retirees with fewer than 20 years of service do not qualify for CRDP. Your DOD pay is offset dollar-for-dollar by VA comp.${state.combatRelated?" You may qualify for CRSC (combat-related) — apply through your branch.":" If your disability is combat-related, you may qualify for CRSC."} Current YOS: ${fmtYos(yos)}.`
                   :separationType==="reserve"&&!isReserveEligibleNow
                     ?`CRDP eligibility begins when Reserve retirement pay starts at age ${payStartAge}.`
                     :`To qualify: must be a retiree with 50%+ VA rating. Current rating: ${vaRating}%.`}
@@ -2556,6 +2662,7 @@ const STATE_DEFAULT_CITY={
   "Texas":"San Antonio, TX","Utah":"Salt Lake City, UT","Vermont":"Burlington, VT",
   "Virginia":"Hampton Roads/Norfolk, VA","Washington":"Seattle, WA","West Virginia":"Charleston, WV",
   "Wisconsin":"Milwaukee, WI","Wyoming":"Cheyenne, WY",
+  "District of Columbia":"Washington DC",
 };
 
 // Popular military retirement destinations
@@ -2576,10 +2683,13 @@ function PlanningTab({state,set,go}){
   const vaM=calcVAComp(vaRating,key,nKids);
   const annVA=vaM*12;
   const si=STATES[selectedState]||{ok:true,note:""};
-  const stTax=si.ok?0:annP*((si.rate||0)/100);
-  const taxableAnnualP=annP+(income||0);
-  const {annualTax:fedTaxAnn,effectiveRate:pEffRate}=calcFederalTax(taxableAnnualP,filingStatus||"single");
-  const take=annP+annVA+income-fedTaxAnn-stTax;
+  const medCalcP=separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType):null;
+  const isVAOffsetP=separationType==="medical"&&yos<20&&vaM>0&&g>0&&medCalcP&&!medCalcP.isSeverance;
+  const offsetAnnP=isVAOffsetP?Math.max(0,annP-annVA):annP;
+  const stTax=calcStateTax(offsetAnnP,si);
+  const taxableAnnualP=offsetAnnP+(income||0);
+  const {annualTax:fedTaxAnn,effectiveRate:pEffRate,totalDeduction:pDeduction}=calcFederalTax(taxableAnnualP,filingStatus||"single",state.age65Plus,state.spouseAge65Plus);
+  const take=offsetAnnP+annVA+income-fedTaxAnn-stTax;
   const friendly=["Texas","Florida","Nevada","Wyoming","South Dakota","Washington","Tennessee","Mississippi","Illinois","Alabama","Hawaii"];
 
   // COL — auto-derive "from" city based on state if user hasn't changed it
@@ -2587,8 +2697,8 @@ function PlanningTab({state,set,go}){
   const effectiveFrom=COL[colFrom]?colFrom:autoFrom;
   const fi=COL[effectiveFrom]||100,ti=COL[colTo]||100;
   // Use the user's computed total monthly income as the default if they haven't touched monthlyIncome
-  const {monthlyTax:pFedTaxMo}=calcFederalTax(taxableAnnualP,filingStatus||"single");
-  const stTaxMo=si.ok?0:netP*((si.rate||0)/100);
+  const {monthlyTax:pFedTaxMo}=calcFederalTax(taxableAnnualP,filingStatus||"single",state.age65Plus,state.spouseAge65Plus);
+  const stTaxMo=calcStateTax(offsetAnnP,si)/12;
   const atP=netP-pFedTaxMo-stTaxMo;
   const mhaBase=giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[giSchoolCity]||0);
   const mhaMo=giUsing?Math.round(mhaBase*(giEligPct/100)*giEnroll):0;
@@ -2682,15 +2792,16 @@ function PlanningTab({state,set,go}){
             <div className="cttl">Location & Income</div>
             <EditInMyInfo label="State of Residence" value={selectedState} go={go}/>
             <EditInMyInfo label="Other Annual Income" value={income>0?fmt(income):"$0"} go={go}/>
-            <div style={{marginTop:12}} className={"ib "+(si.ok?"ib-gn":"ib-rd")}><strong>{selectedState}:</strong> {si.note}</div>
+            <div style={{marginTop:12}} className={"ib "+(si.ok?"ib-gn":"ib-rd")}><strong>{selectedState}:</strong> {si.label||si.note}</div>
           </div>
           <div className="card">
-            <div className="cttl">Annual Tax Breakdown</div>
-            <DR label="Pension Income" value={fmt(annP)}/>
+            <div className="cttl">Annual Tax Breakdown <span style={{fontSize:11,color:"var(--mut)",fontWeight:400}}>· 2026 IRS figures</span></div>
+            <DR label={isVAOffsetP?"Pension (after VA offset)":"Pension Income"} value={fmt(isVAOffsetP?offsetAnnP:annP)}/>
+            {isVAOffsetP&&<div className="ib ib-gd" style={{fontSize:11,marginBottom:8}}>DOD pay offset dollar-for-dollar by VA comp (YOS &lt; 20). You receive the higher of the two.</div>}
             <DR label="VA Compensation" value={fmt(annVA)} color="green" sub="Always tax-free"/>
             {income>0&&<DR label="Other Income" value={fmt(income)}/>}
-            <DR label="Est. Federal Tax" value={`-${fmt(fedTaxAnn)}`} color="red" sub={taxableAnnualP>0?`${(pEffRate*100).toFixed(1)}% effective · ${(filingStatus||"single")==="mfj"?"MFJ":"Single"} · incl. $${(STANDARD_DEDUCTION_2026[filingStatus||"single"]||15000).toLocaleString()} std. deduction`:"No taxable income"}/>
-            <DR label={`State Tax — ${selectedState}`} value={si.ok?"Exempt":`-${fmt(stTax)}`} color={si.ok?"green":"red"} sub={si.ok?"No state tax on your pension":`${si.rate}% rate`}/>
+            <DR label="Est. Federal Tax" value={`-${fmt(fedTaxAnn)}`} color="red" sub={taxableAnnualP>0?`${(pEffRate*100).toFixed(1)}% effective · ${FILING_STATUS_LABELS[filingStatus||"single"]||"Single"} · $${(pDeduction||16100).toLocaleString()} std. deduction`:"No taxable income"}/>
+            <DR label={`State Tax — ${selectedState}`} value={si.ok?"Exempt":`-${fmt(stTax)}`} color={si.ok?"green":"red"} sub={si.ok?(si.label||"No state tax on your pension"):(si.label||`${si.rate}% rate`)}/>
             <hr/>
             <BStat label="Total Annual Take-Home" value={fmt(take)} color="green" sub={`${fmt(take/12)}/month after all taxes`}/>
           </div>
@@ -2919,7 +3030,7 @@ function ProfileTab({state,set,isConfigured}){
 
   const plan=TRICARE_PLANS[tricareplan];
   const PLAN_OPTS=[
-    {v:"prime",l:"TRICARE Prime"},{v:"select",l:"TRICARE Select"},
+    {v:"prime",l:"TRICARE Prime *"},{v:"select",l:"TRICARE Select"},
     {v:"tfl",l:"TRICARE For Life (65+)"},{v:"select_overseas",l:"TRICARE Select Overseas"},
   ];
   const FAM_OPTS=[{v:"self",l:"Self Only"},{v:"family",l:"Self + Family"}];
@@ -2977,7 +3088,7 @@ function ProfileTab({state,set,isConfigured}){
 
         {separationType==="medical"&&(
           <div className="ib ib-nv" style={{fontSize:13,marginBottom:12}}>
-            Medical retirement (PDRL/TDRL) is available at any YOS. Pay = higher of (DoD disability %) or (YOS × {retType==="BRS"?"2.0":"2.5"}%) × High-36 avg, capped at 75%.
+            <strong>Chapter 61 Medical Retirement.</strong> PDRL (DoD ≥ 30% or YOS ≥ 20): pay = higher of (DoD disability %) or (YOS × {retType==="BRS"?"2.0":"2.5"}%) × High-36, capped at 75%. TDRL (DoD &lt; 30%, YOS &lt; 20): 50% × High-36 minimum. Below that: severance only.
           </div>
         )}
 
@@ -3009,6 +3120,29 @@ function ProfileTab({state,set,isConfigured}){
             <TG label="Disability Status" value={tdrl?"tdrl":"pdrl"} onChange={v=>set("tdrl",v==="tdrl")}
               options={[{v:"pdrl",l:"Permanent (PDRL)"},{v:"tdrl",l:"Temporary (TDRL)"}]}
               hint={tdrl?"TDRL applies a minimum 50% multiplier while condition is re-evaluated":"Permanently retired — final disability rating applies"}/>
+            <TG label="Combat-Related Disability?" value={state.combatRelated?"y":"n"} onChange={v=>set("combatRelated",v==="y")}
+              options={[{v:"n",l:"No"},{v:"y",l:"Yes (CRSC eligible)"}]}
+              hint="Combat-Related Special Compensation (CRSC) is payable concurrently with VA compensation. Apply through your branch of service."/>
+            {(()=>{
+              const mp=medicalPension(yos,h3Prof,medDodPct,tdrl,retType);
+              if(mp.isTDRL) return(
+                <div className="ib ib-gd" style={{fontSize:12,marginTop:8}}>
+                  Placed on TDRL — minimum 50% rating applied. Reassessed every 18 months, max 5 years. May be moved to PDRL or separated with severance.
+                </div>
+              );
+              if(mp.isSeverance) return(
+                <div className="ib ib-rd" style={{fontSize:12,marginTop:8}}>
+                  Not eligible for retirement pay — severance pay only. Severance = 2 × monthly base pay × YOS = <strong>{fmt(mp.severancePay)}</strong> (one-time).
+                </div>
+              );
+              return null;
+            })()}
+            {yos<20&&vaRating>0&&!medicalPension(yos,h3Prof,medDodPct,tdrl,retType).isSeverance&&(
+              <div className="ib ib-gd" style={{fontSize:12,marginTop:8}}>
+                <strong>VA Offset:</strong> With fewer than 20 YOS, your DoD retirement pay is offset dollar-for-dollar by VA compensation. You receive the higher of the two, not both.
+                {state.combatRelated&&<><br/><strong style={{color:"var(--gn)"}}>CRSC:</strong> You may be eligible for Combat-Related Special Compensation, which IS payable concurrently with VA compensation. Apply through your branch of service.</>}
+              </div>
+            )}
           </>
         )}
 
@@ -3160,9 +3294,17 @@ function ProfileTab({state,set,isConfigured}){
       <div className="card">
         <div className="cttl">Location & Income</div>
         <SF label="State of Residence" value={selectedState} onChange={v=>set("selectedState",v)} options={Object.keys(STATES).sort()}/>
-        <TG label="Filing Status" value={state.filingStatus||"single"} onChange={v=>set("filingStatus",v)}
-          options={[{v:"single",l:"Single"},{v:"mfj",l:"Married Filing Jointly"}]}
-          hint="Affects standard deduction and tax brackets"/>
+        <SF label="Filing Status" value={state.filingStatus||"single"} onChange={v=>set("filingStatus",v)}
+          options={[{v:"single",l:"Single"},{v:"mfj",l:"Married Filing Jointly"},{v:"hoh",l:"Head of Household"},{v:"mfs",l:"Married Filing Separately"}]}
+          hint={`2026 IRS figures — Standard deduction: $${(STANDARD_DEDUCTION_2026[state.filingStatus||"single"]||16100).toLocaleString()}`}/>
+        <TG label="Age 65 or Older?" value={state.age65Plus?"y":"n"} onChange={v=>set("age65Plus",v==="y")}
+          options={[{v:"n",l:"Under 65"},{v:"y",l:"65+"}]}
+          hint={state.age65Plus?"Additional standard deduction + OBBB senior deduction applied":undefined}/>
+        {(state.filingStatus||"single")==="mfj"&&(
+          <TG label="Spouse Age 65+?" value={state.spouseAge65Plus?"y":"n"} onChange={v=>set("spouseAge65Plus",v==="y")}
+            options={[{v:"n",l:"Under 65"},{v:"y",l:"65+"}]}
+            hint={state.spouseAge65Plus?"Additional $1,650 standard deduction for qualifying spouse":undefined}/>
+        )}
         <NF label="Other Annual Income" value={income} onChange={v=>set("income",v)} pre="$" min={0} max={600000} step={1000}
           hint="Employment, TSP withdrawals, or other taxable income"/>
         <NF label="Desired Monthly Take-Home" value={desiredIncome} onChange={v=>set("desiredIncome",v)} pre="$" min={0} max={50000} step={100}
@@ -3242,6 +3384,11 @@ function ProfileTab({state,set,isConfigured}){
             }}
               options={PLAN_OPTS}
               hint={plan.note}/>
+            {tricareplan==="prime"&&(
+              <div className="fhint" style={{marginTop:6,fontSize:11}}>
+                * Includes US Family Health Plan (USFHP) — same enrollment fees apply. Available in select regions only.
+              </div>
+            )}
             {tricareplan!=="tfl"&&(
               <SF label="Coverage Level" value={tricareFamSize} onChange={v=>set("tricareFamSize",v)}
                 options={FAM_OPTS}/>
@@ -3258,7 +3405,7 @@ function ProfileTab({state,set,isConfigured}){
             )}
             {separationType==="medical"&&tricareplan==="select"&&(
               <div className="ib ib-gn" style={{marginTop:8,fontSize:12}}>
-                As a medical retiree, your TRICARE Select enrollment fee is waived ($0). Chapter 61 retirees are exempt per NDAA FY2017 §731.
+                As a Chapter 61 medical retiree, your TRICARE Select enrollment fee is waived ($0). Per NDAA FY2017 Section 731.
               </div>
             )}
             {(() => {
@@ -3622,10 +3769,10 @@ export default function App(){
     userName:"",
     separationType:"active",
     retType:"High-3",yos:0,high3:0,usePayGrade:true,payGrade:"E-7",sbp:false,sbpCoverage:55,sbpRetireAge:42,
-    medDodPct:50,tdrl:false,
+    medDodPct:50,tdrl:false,combatRelated:false,
     reservePoints:3600,currentAge:45,payStartAge:60,reserveHealthType:"trs",
     vaRating:0,vaDeps:"Single",vaChildren:0,vaRatings:[],
-    selectedState:"Texas",income:0,filingStatus:"single",
+    selectedState:"Texas",income:0,filingStatus:"single",age65Plus:false,spouseAge65Plus:false,
     colFrom:"Fayetteville, NC",colTo:"Austin, TX",monthlyIncome:5000,
     desiredIncome:6000,
     giUsing:false,giEligPct:100,giSchoolCity:"Austin, TX",giEnroll:1.0,giOnline:false,giMonthsPerYear:9,
@@ -3655,11 +3802,15 @@ export default function App(){
   const sbpC=s.sbp?g*(s.sbpCoverage/100)*0.065:0;
   const netP=g-sbpC;
   const si=STATES[s.selectedState]||{ok:true};
-  const appTaxableAnn=netP*12+(s.income||0);
-  const {monthlyTax:appFedTax}=calcFederalTax(appTaxableAnn,s.filingStatus||"single");
-  const stTax=si.ok?0:netP*((si.rate||0)/100);
-  const atP=netP-appFedTax-stTax;
-  const vaM=calcVAComp(s.vaRating,dk(s.vaDeps),s.vaChildren||0);
+  const vaM_app=calcVAComp(s.vaRating,dk(s.vaDeps),s.vaChildren||0);
+  const medCalcApp=s.separationType==="medical"?medicalPension(s.yos,h3,s.medDodPct,s.tdrl,s.retType):null;
+  const isVAOffsetApp=s.separationType==="medical"&&s.yos<20&&vaM_app>0&&g>0&&medCalcApp&&!medCalcApp.isSeverance;
+  const offsetNetPApp=isVAOffsetApp?Math.max(0,netP-vaM_app):netP;
+  const appTaxableAnn=offsetNetPApp*12+(s.income||0);
+  const {monthlyTax:appFedTax}=calcFederalTax(appTaxableAnn,s.filingStatus||"single",s.age65Plus,s.spouseAge65Plus);
+  const stTax=calcStateTax(offsetNetPApp*12,si)/12;
+  const atP=offsetNetPApp-appFedTax-stTax;
+  const vaM=vaM_app;
   const mhaBase=s.giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[s.giSchoolCity]||0);
   const mhaMo=s.giUsing?Math.round(mhaBase*(s.giEligPct/100)*s.giEnroll):0;
   const otherMo=Math.round((s.income||0)/12);
