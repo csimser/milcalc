@@ -4089,18 +4089,7 @@ export default function App(){
     setShowPopup(true);
     track("Engagement Popup Shown",{trigger});
   };
-  // Popup: trigger after user has BOTH calculated pension AND selected VA rating
-  // (minimum 60s on page to avoid premature trigger)
   const popupStartTime=useRef(Date.now());
-  useEffect(()=>{
-    if(isPopupBlocked()||popupShownRef.current) return;
-    const hasEngaged=s.yos>0&&s.vaRating>0&&s._hasVisitedMyInfo;
-    if(!hasEngaged) return;
-    const elapsed=Date.now()-popupStartTime.current;
-    const delay=Math.max(0,60000-elapsed);
-    const timer=setTimeout(()=>triggerPopup("engagement"),delay);
-    return ()=>clearTimeout(timer);
-  },[s.yos,s.vaRating,s._hasVisitedMyInfo]);
   const dismissPopup=()=>{
     setShowPopup(false);
     try{localStorage.setItem(POPUP_DISMISSED_KEY,"1");}catch{}
@@ -4131,6 +4120,17 @@ export default function App(){
   };
   const [s,setS]=useState(()=>({...defaults,...(loadSaved()||{})}));
   const set=(k,v)=>setS(x=>{const n={...x,[k]:v};try{localStorage.setItem(STORAGE_KEY,JSON.stringify(n));}catch{}return n;});
+  // Popup: trigger after user has BOTH calculated pension AND selected VA rating
+  // (minimum 60s on page to avoid premature trigger)
+  useEffect(()=>{
+    if(isPopupBlocked()||popupShownRef.current) return;
+    const hasEngaged=s.yos>0&&s.vaRating>0&&s._hasVisitedMyInfo;
+    if(!hasEngaged) return;
+    const elapsed=Date.now()-popupStartTime.current;
+    const delay=Math.max(0,60000-elapsed);
+    const timer=setTimeout(()=>triggerPopup("engagement"),delay);
+    return ()=>clearTimeout(timer);
+  },[s.yos,s.vaRating,s._hasVisitedMyInfo]);
   const tabRef=useRef(tab);
   const go=id=>{
     const TAB_NAMES={"myinfo":"My Info","dashboard":"Dashboard","benefits":"Benefits","planning":"Planning"};
