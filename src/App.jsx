@@ -1915,14 +1915,17 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
 
   // ── Share button handler: generate infographic, open modal ──
   const handleShareMyResults=()=>{
-    const canvas=buildInfographicCanvas();
-    canvas.toBlob((blob)=>{
-      if(!blob) return;
-      shareBlobRef.current=blob;
-      setShareImgURL(URL.createObjectURL(blob));
-      setShowShareModal(true);
-      track("Share Modal Opened",{});
-    },"image/png");
+    setShowShareModal(true);
+    track("Share Modal Opened",{});
+    // Build canvas after modal is open so preview renders reliably
+    requestAnimationFrame(()=>{
+      const canvas=buildInfographicCanvas();
+      canvas.toBlob((blob)=>{
+        if(!blob) return;
+        shareBlobRef.current=blob;
+        setShareImgURL(URL.createObjectURL(blob));
+      },"image/png");
+    });
   };
 
   // ── Share helpers ──
@@ -1932,11 +1935,6 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
     const a=document.createElement("a");a.href=url;a.download="milcalc-retirement-plan.png";document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
     track("Infographic Shared",{method:"download"});
   };
-  const shareToFacebook=()=>{window.open("https://www.facebook.com/sharer/sharer.php?u=https://milcalc.app","_blank");track("Infographic Shared",{method:"facebook"});};
-  const shareToInstagram=()=>{downloadPNG();track("Infographic Shared",{method:"instagram"});};
-  const shareToTwitter=()=>{window.open("https://twitter.com/intent/tweet?text=I+just+calculated+my+military+retirement+pay+%E2%80%94+see+yours+at+milcalc.app&url=https://milcalc.app","_blank");downloadPNG();track("Infographic Shared",{method:"twitter"});};
-  const shareToWhatsApp=()=>{window.open("https://wa.me/?text=I+just+calculated+my+military+retirement+pay.+Calculate+yours+free+at+milcalc.app","_blank");downloadPNG();track("Infographic Shared",{method:"whatsapp"});};
-  const shareViaSMS=()=>{window.open("sms:?body=I+just+calculated+my+military+retirement+pay.+Calculate+yours+free+at+milcalc.app");downloadPNG();track("Infographic Shared",{method:"sms"});};
   const shareNative=async()=>{
     if(!shareBlobRef.current) return;
     const file=new File([shareBlobRef.current],"milcalc-retirement-plan.png",{type:"image/png"});
@@ -2321,88 +2319,31 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
           <div style={{position:"relative",background:"var(--card)",borderRadius:16,padding:24,maxWidth:420,width:"90%",
               border:"1px solid var(--br)",maxHeight:"85vh",overflowY:"auto"}}
               onClick={e=>e.stopPropagation()}>
-            {/* Close button */}
             <button onClick={closeShareModal}
               style={{position:"absolute",top:12,right:14,background:"none",border:"none",fontSize:18,color:"var(--mut)",cursor:"pointer",lineHeight:1,zIndex:1}}>{"\u2715"}</button>
             <div style={{fontSize:18,fontWeight:700,color:"var(--ink)",marginBottom:4}}>Share My Results</div>
-            <div style={{fontSize:13,color:"var(--mut)",marginBottom:16}}>Preview your infographic, then pick a platform.</div>
-            {/* Infographic preview thumbnail */}
-            {shareImgURL&&<div style={{marginBottom:20,borderRadius:10,overflow:"hidden",border:"1px solid var(--sub)",background:"#0a1628"}}>
-              <img src={shareImgURL} alt="Infographic preview" style={{width:"100%",display:"block"}}/>
-            </div>}
-            {/* Platform options */}
-            <div style={{display:"flex",flexDirection:"column",gap:8}}>
-              <button onClick={downloadPNG}
-                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
-                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
-                  transition:"border-color .15s"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\u2B07"}</span>
-                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Download PNG</div>
-                <div style={{fontSize:11,color:"var(--mut)"}}>Save the infographic to your device</div></div>
-              </button>
-              <button onClick={shareToFacebook}
-                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
-                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
-                  transition:"border-color .15s"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\uD83D\uDCF1"}</span>
-                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Facebook</div>
-                <div style={{fontSize:11,color:"var(--mut)"}}>Share link — attach downloaded image manually</div></div>
-              </button>
-              <button onClick={shareToInstagram}
-                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
-                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
-                  transition:"border-color .15s"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\uD83D\uDCF7"}</span>
-                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Instagram</div>
-                <div style={{fontSize:11,color:"var(--mut)"}}>Save the image, then post it to Instagram</div></div>
-              </button>
-              <button onClick={shareToTwitter}
-                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
-                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
-                  transition:"border-color .15s"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"X"}</span>
-                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Twitter / X</div>
-                <div style={{fontSize:11,color:"var(--mut)"}}>Tweet + download image to attach</div></div>
-              </button>
-              <button onClick={shareToWhatsApp}
-                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
-                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
-                  transition:"border-color .15s"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\uD83D\uDCAC"}</span>
-                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>WhatsApp</div>
-                <div style={{fontSize:11,color:"var(--mut)"}}>Send message + download image to attach</div></div>
-              </button>
-              <button onClick={shareViaSMS}
-                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
-                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
-                  transition:"border-color .15s"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\uD83D\uDCE8"}</span>
-                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Text Message</div>
-                <div style={{fontSize:11,color:"var(--mut)"}}>Open SMS + download image to attach</div></div>
-              </button>
-              {canNativeShare&&<button onClick={shareNative}
-                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"linear-gradient(135deg,rgba(212,160,23,.08),rgba(212,160,23,.03))",
-                  border:"1px solid rgba(212,160,23,.3)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
-                  transition:"border-color .15s"}}
-                onMouseEnter={e=>e.currentTarget.style.borderColor="#d4a017"}
-                onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(212,160,23,.3)"}>
-                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\uD83D\uDCE4"}</span>
-                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>More Options</div>
-                <div style={{fontSize:11,color:"var(--mut)"}}>AirDrop, Messages, and more</div></div>
-              </button>}
+            <div style={{fontSize:13,color:"var(--mut)",marginBottom:16}}>Preview your retirement infographic.</div>
+            {/* Infographic preview */}
+            <div style={{marginBottom:20,borderRadius:10,overflow:"hidden",border:"1px solid var(--sub)",background:"#0a1628",minHeight:200}}>
+              {shareImgURL?<img src={shareImgURL} alt="Infographic preview" style={{width:"100%",display:"block"}}/>
+                :<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:200,color:"var(--mut)",fontSize:13}}>Generating infographic...</div>}
             </div>
+            {/* Single action button: native share on mobile, download on desktop */}
+            {canNativeShare?
+              <button onClick={shareNative} disabled={!shareBlobRef.current}
+                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,width:"100%",padding:"14px 0",
+                  background:shareBlobRef.current?"var(--nv)":"var(--sub)",color:"#fff",border:"none",borderRadius:10,
+                  cursor:shareBlobRef.current?"pointer":"default",fontFamily:"Barlow,sans-serif",fontSize:15,fontWeight:600,
+                  opacity:shareBlobRef.current?1:.5,transition:"opacity .2s"}}>
+                <span style={{fontSize:18}}>{"\uD83D\uDCE4"}</span> Share
+              </button>
+              :<button onClick={downloadPNG} disabled={!shareBlobRef.current}
+                style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,width:"100%",padding:"14px 0",
+                  background:shareBlobRef.current?"var(--nv)":"var(--sub)",color:"#fff",border:"none",borderRadius:10,
+                  cursor:shareBlobRef.current?"pointer":"default",fontFamily:"Barlow,sans-serif",fontSize:15,fontWeight:600,
+                  opacity:shareBlobRef.current?1:.5,transition:"opacity .2s"}}>
+                <span style={{fontSize:18}}>{"\u2B07"}</span> Download PNG
+              </button>}
           </div>
         </div>,document.body
       )}
