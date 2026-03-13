@@ -1766,7 +1766,9 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
   const [exporting,setExporting]=useState(false);
   const [showDebriefedPromo,setShowDebriefedPromo]=useState(false);
   const DEBRIEF_SESSION_KEY="milcalc_debriefed_shown";
-  const [shareCopied,setShareCopied]=useState(false);
+  const [showShareModal,setShowShareModal]=useState(false);
+  const [shareImgURL,setShareImgURL]=useState(null);
+  const [shareBlobRef]=useState({current:null});
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
   const key=dk(vaDeps);
   const isReserveEligibleNow=separationType==="reserve"&&currentAge>=payStartAge;
@@ -1816,28 +1818,133 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
 
   const [showFullDisclaimer,setShowFullDisclaimer]=useState(false);
 
-  // ── Personalized share ──
-  const buildShareText=()=>{
-    const parts=[];
-    if(separationType!=="veteran"&&atP>0) parts.push(`${fmt(atP)}/mo pension`);
-    if(vaM>0) parts.push(`${fmt(vaM)}/mo VA disability`);
-    if(sbp&&sbpC>0) parts.push(`SBP coverage`);
-    const url="https://milcalc.app";
-    if(parts.length===0) return `Free military retirement calculator — pension, VA disability, taxes, and more. ${url}`;
-    const summary=parts.join(" + ");
-    const total=atP+vaM;
-    const totalStr=total>0?` = ${fmt(total)}/mo`:"";
-    return `I just calculated my military retirement pay using MilCalc — ${summary}${totalStr}. Calculate yours free: ${url}`;
-  };
-  const handleShare=async()=>{
-    const text=buildShareText();
-    const url="https://milcalc.app";
-    if(navigator.share){
-      try{await navigator.share({title:"MilCalc — Military Retirement Calculator",text,url});track("Share Completed",{method:"native"});}catch{}
-    }else{
-      try{await navigator.clipboard.writeText(text);setShareCopied(true);setTimeout(()=>setShareCopied(false),2500);track("Share Completed",{method:"clipboard"});}catch{}
+  // ── individual deduction components for infographic ──
+  const vgliPrem=state.useVgli?vgliMonthly(state.vgliCoverage,state.vgliAge):0;
+  const otherLifePrem=state.otherLifePremium||0;
+
+  // ── Infographic Canvas Generator — returns canvas for blob extraction ──
+  const buildInfographicCanvas=()=>{
+    const C={bg:"#0a1628",card:"#1e3a5f",gold:"#d4a017",goldL:"#f0c14b",red:"#f87171",mut:"#8a9bb0",lt:"#cbd5e1",wh:"#ffffff",disc:"#111f35"};
+    const W=400,PAD=20,CARD_H=36,CARD_GAP=6,SEC_GAP=18,CARD_R=8;
+    const incomeRows=[];
+    if(atP>0) incomeRows.push({label:"Pension (after tax)",val:atP});
+    if(vaM>0) incomeRows.push({label:"VA Disability",val:vaM});
+    if(mhaMo>0) incomeRows.push({label:"GI Bill MHA",val:mhaMo});
+    if(otherMo>0) incomeRows.push({label:"Additional Income",val:otherMo});
+    const deductRows=[];
+    if(sbpC>0) deductRows.push({label:"SBP Premium",val:sbpC});
+    if(healthPrem>0) deductRows.push({label:"TRICARE Premium",val:healthPrem});
+    if(vgliPrem>0||otherLifePrem>0) deductRows.push({label:"Life Insurance",val:Math.round(vgliPrem+otherLifePrem)});
+    const totalIncome=incomeRows.reduce((s,r)=>s+r.val,0);
+    const totalDeductions=deductRows.reduce((s,r)=>s+r.val,0);
+    const takeHome=Math.max(0,totalIncome-totalDeductions);
+    const hasGap=desiredIncome>0&&(desiredIncome-takeHome)>0;
+    const gapAmt=hasGap?desiredIncome-takeHome:0;
+    let h=PAD+30+SEC_GAP+20+8+incomeRows.length*(CARD_H+CARD_GAP);
+    if(deductRows.length>0) h+=SEC_GAP+20+8+deductRows.length*(CARD_H+CARD_GAP);
+    h+=SEC_GAP+46+SEC_GAP+1;
+    if(hasGap) h+=SEC_GAP+20+8+80+SEC_GAP;
+    h+=60+SEC_GAP+20+PAD;
+    const canvas=document.createElement("canvas");
+    canvas.width=W*2;canvas.height=h*2;
+    const ctx=canvas.getContext("2d");ctx.scale(2,2);
+    ctx.fillStyle=C.bg;ctx.fillRect(0,0,W,h);
+    let y=PAD;
+    const rr=(x,ry,w,rh,r)=>{ctx.beginPath();ctx.moveTo(x+r,ry);ctx.lineTo(x+w-r,ry);ctx.quadraticCurveTo(x+w,ry,x+w,ry+r);ctx.lineTo(x+w,ry+rh-r);ctx.quadraticCurveTo(x+w,ry+rh,x+w-r,ry+rh);ctx.lineTo(x+r,ry+rh);ctx.quadraticCurveTo(x,ry+rh,x,ry+rh-r);ctx.lineTo(x,ry+r);ctx.quadraticCurveTo(x,ry,x+r,ry);ctx.closePath();};
+    const fmtD=v=>"$"+Math.round(v).toLocaleString();
+    // Header
+    const logoSz=26;
+    rr(PAD,y,logoSz,logoSz,6);ctx.fillStyle="#0A0E1A";ctx.fill();ctx.strokeStyle=C.gold;ctx.lineWidth=1;ctx.stroke();
+    ctx.fillStyle=C.goldL;ctx.font="bold 16px system-ui,-apple-system,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";
+    ctx.fillText("M",PAD+logoSz/2,y+logoSz/2);
+    ctx.fillStyle=C.goldL;ctx.font="500 14px system-ui,-apple-system,sans-serif";ctx.textAlign="left";ctx.textBaseline="middle";
+    ctx.fillText("MilCalc",PAD+logoSz+8,y+logoSz/2);
+    ctx.fillStyle=C.mut;ctx.font="11px system-ui,-apple-system,sans-serif";ctx.textAlign="right";
+    ctx.fillText("My Retirement Plan",W-PAD,y+logoSz/2);
+    y+=30+SEC_GAP;
+    const secLabel=(text,sy)=>{ctx.fillStyle=C.gold;ctx.font="bold 10px system-ui,-apple-system,sans-serif";ctx.textAlign="left";ctx.textBaseline="top";ctx.letterSpacing="1.5px";ctx.fillText(text.toUpperCase(),PAD,sy);try{ctx.letterSpacing="0px";}catch{}return sy+20+8;};
+    const cardRow=(label,val,ry,isDeduct)=>{rr(PAD,ry,W-PAD*2,CARD_H,CARD_R);ctx.fillStyle=C.card;ctx.fill();ctx.fillStyle=C.lt;ctx.font="12px system-ui,-apple-system,sans-serif";ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(label,PAD+12,ry+CARD_H/2);ctx.fillStyle=isDeduct?C.red:C.wh;ctx.font="500 13px system-ui,-apple-system,sans-serif";ctx.textAlign="right";ctx.fillText((isDeduct?"-":"")+fmtD(val),W-PAD-12,ry+CARD_H/2);return ry+CARD_H+CARD_GAP;};
+    y=secLabel("Monthly Income",y);
+    for(const row of incomeRows) y=cardRow(row.label,row.val,y,false);
+    if(deductRows.length>0){y+=SEC_GAP-CARD_GAP;y=secLabel("Deductions",y);for(const row of deductRows) y=cardRow(row.label,row.val,y,true);}
+    y+=SEC_GAP-CARD_GAP;
+    const totalY=y,totalH=46;
+    rr(PAD,totalY,W-PAD*2,totalH,CARD_R);ctx.fillStyle=C.card;ctx.fill();
+    ctx.strokeStyle=C.gold;ctx.lineWidth=1.5;rr(PAD,totalY,W-PAD*2,totalH,CARD_R);ctx.stroke();
+    ctx.fillStyle=C.gold;ctx.font="500 13px system-ui,-apple-system,sans-serif";ctx.textAlign="left";ctx.textBaseline="middle";
+    ctx.fillText("Est. Monthly Take-Home",PAD+12,totalY+totalH/2);
+    ctx.fillStyle=C.goldL;ctx.font="500 20px system-ui,-apple-system,sans-serif";ctx.textAlign="right";
+    ctx.fillText(fmtD(takeHome),W-PAD-12,totalY+totalH/2);
+    y=totalY+totalH+SEC_GAP;
+    ctx.strokeStyle="rgba(212,160,23,0.3)";ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(PAD,y);ctx.lineTo(W-PAD,y);ctx.stroke();y+=1;
+    if(hasGap){
+      y+=SEC_GAP;y=secLabel("Transition Picture",y);const panelH=80;
+      rr(PAD,y,W-PAD*2,panelH,CARD_R);ctx.fillStyle=C.card;ctx.fill();
+      ctx.fillStyle=C.gold;ctx.font="10px system-ui,-apple-system,sans-serif";ctx.textAlign="left";ctx.textBaseline="top";
+      ctx.fillText("Income Gap",PAD+14,y+10);
+      ctx.fillStyle=C.wh;ctx.font="500 18px system-ui,-apple-system,sans-serif";ctx.textBaseline="top";
+      ctx.fillText(fmtD(gapAmt),PAD+14,y+24);
+      ctx.fillStyle=C.mut;ctx.font="11px system-ui,-apple-system,sans-serif";
+      const gW=ctx.measureText(fmtD(gapAmt)).width;ctx.fillText("/mo needed",PAD+14+gW+4,y+28);
+      const rX=W-PAD-14;ctx.fillStyle=C.mut;ctx.font="10px system-ui,-apple-system,sans-serif";ctx.textAlign="right";ctx.textBaseline="top";
+      ctx.fillText("Target salary",rX,y+10);ctx.fillStyle=C.wh;ctx.font="500 13px system-ui,-apple-system,sans-serif";
+      ctx.fillText(fmtD(desiredIncome*12)+"/yr",rX,y+24);
+      const barY=y+50,barH=6,barX=PAD+14,barW=W-PAD*2-28;
+      rr(barX,barY,barW,barH,3);ctx.fillStyle=C.bg;ctx.fill();
+      const pctFill=Math.min(1,desiredIncome>0?takeHome/desiredIncome:0);
+      if(pctFill>0){rr(barX,barY,Math.max(barH,barW*pctFill),barH,3);ctx.fillStyle=C.gold;ctx.fill();}
+      ctx.fillStyle=C.mut;ctx.font="10px system-ui,-apple-system,sans-serif";ctx.textAlign="left";ctx.textBaseline="top";
+      ctx.fillText(`Benefits cover ${Math.round(pctFill*100)}% of target income`,barX,barY+barH+6);
+      y+=panelH+SEC_GAP;
     }
+    const discY=y,discH=52;
+    rr(PAD,discY,W-PAD*2,discH,CARD_R);ctx.fillStyle=C.disc;ctx.fill();
+    ctx.fillStyle=C.mut;ctx.font="10px system-ui,-apple-system,sans-serif";ctx.textAlign="left";ctx.textBaseline="top";
+    const discTxt="These are estimates only. Actual amounts may vary. Rates and benefits are subject to change. Not financial advice.";
+    const maxTW=W-PAD*2-24;const words=discTxt.split(" ");let ln="",lnY=discY+10;
+    for(const w of words){const t=ln?ln+" "+w:w;if(ctx.measureText(t).width>maxTW&&ln){ctx.fillText(ln,PAD+12,lnY);lnY+=14;ln=w;}else{ln=t;}}
+    if(ln) ctx.fillText(ln,PAD+12,lnY);
+    y=discY+discH+SEC_GAP;
+    ctx.fillStyle=C.mut;ctx.font="11px system-ui,-apple-system,sans-serif";ctx.textAlign="left";ctx.textBaseline="top";
+    ctx.fillText("Calculate yours free",PAD,y);
+    ctx.fillStyle=C.goldL;ctx.font="500 12px system-ui,-apple-system,sans-serif";ctx.textAlign="right";
+    const fT="milcalc.app",fX=W-PAD;ctx.fillText(fT,fX,y);
+    const fW=ctx.measureText(fT).width;ctx.strokeStyle=C.goldL;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(fX-fW,y+15);ctx.lineTo(fX,y+15);ctx.stroke();
+    return canvas;
   };
+
+  // ── Share button handler: generate infographic, open modal ──
+  const handleShareMyResults=()=>{
+    const canvas=buildInfographicCanvas();
+    canvas.toBlob((blob)=>{
+      if(!blob) return;
+      shareBlobRef.current=blob;
+      setShareImgURL(URL.createObjectURL(blob));
+      setShowShareModal(true);
+      track("Share Modal Opened",{});
+    },"image/png");
+  };
+
+  // ── Share helpers ──
+  const downloadPNG=()=>{
+    if(!shareBlobRef.current) return;
+    const url=URL.createObjectURL(shareBlobRef.current);
+    const a=document.createElement("a");a.href=url;a.download="milcalc-retirement-plan.png";document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+    track("Infographic Shared",{method:"download"});
+  };
+  const shareToFacebook=()=>{window.open("https://www.facebook.com/sharer/sharer.php?u=https://milcalc.app","_blank");track("Infographic Shared",{method:"facebook"});};
+  const shareToInstagram=()=>{downloadPNG();track("Infographic Shared",{method:"instagram"});};
+  const shareToTwitter=()=>{window.open("https://twitter.com/intent/tweet?text=I+just+calculated+my+military+retirement+pay+%E2%80%94+see+yours+at+milcalc.app&url=https://milcalc.app","_blank");downloadPNG();track("Infographic Shared",{method:"twitter"});};
+  const shareToWhatsApp=()=>{window.open("https://wa.me/?text=I+just+calculated+my+military+retirement+pay.+Calculate+yours+free+at+milcalc.app","_blank");downloadPNG();track("Infographic Shared",{method:"whatsapp"});};
+  const shareViaSMS=()=>{window.open("sms:?body=I+just+calculated+my+military+retirement+pay.+Calculate+yours+free+at+milcalc.app");downloadPNG();track("Infographic Shared",{method:"sms"});};
+  const shareNative=async()=>{
+    if(!shareBlobRef.current) return;
+    const file=new File([shareBlobRef.current],"milcalc-retirement-plan.png",{type:"image/png"});
+    try{await navigator.share({files:[file],text:"I just calculated my military retirement pay. Calculate yours free at milcalc.app",url:"https://milcalc.app"});track("Infographic Shared",{method:"native"});}catch{}
+  };
+  const canNativeShare=(()=>{try{return navigator.canShare&&navigator.canShare({files:[new File([""],"test.png",{type:"image/png"})]});}catch{return false;}})();
+  const closeShareModal=()=>{if(shareImgURL) URL.revokeObjectURL(shareImgURL);setShareImgURL(null);shareBlobRef.current=null;setShowShareModal(false);};
+  const showShareBtn=(atP>0||vaM>0);
 
   return(
     <div className="fu">
@@ -1854,7 +1961,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
       </div>
 
       {/* ── EXPORT + SHARE BUTTONS ── */}
-      <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,marginBottom:16}}>
+      <div style={{display:"grid",gridTemplateColumns:"1fr"+(showShareBtn?" 1fr":""),gap:10,marginBottom:16}}>
         <button onClick={()=>setShowExportModal(true)}
           style={{padding:"14px 20px",background:"linear-gradient(135deg,#c2782a,#e09448)",
             color:"#0A0E1A",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:"pointer",
@@ -1862,15 +1969,15 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
             fontFamily:"Barlow,sans-serif",boxShadow:"0 2px 12px rgba(194,120,42,.3)"}}>
           <span style={{fontSize:20}}>{"\u2B07"}</span> Export My Plan
         </button>
-        <button onClick={handleShare}
-          style={{padding:"14px 18px",background:"var(--card)",
-            color:"var(--ink)",border:"1px solid var(--br)",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",
-            display:"flex",alignItems:"center",justifyContent:"center",gap:8,
-            fontFamily:"Barlow,sans-serif",whiteSpace:"nowrap",transition:"border-color .15s"}}
-          onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
-          onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
-          <span style={{fontSize:18}}>{shareCopied?"\u2705":"\u{1F517}"}</span> {shareCopied?"Copied!":"Share"}
-        </button>
+        {showShareBtn&&<button onClick={handleShareMyResults}
+          style={{padding:"14px 20px",background:"linear-gradient(135deg,#0a1628,#1e3a5f)",
+            color:"#f0c14b",border:"1px solid rgba(212,160,23,.4)",borderRadius:12,fontSize:16,fontWeight:700,cursor:"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+            fontFamily:"Barlow,sans-serif",boxShadow:"0 2px 12px rgba(10,22,40,.4)",transition:"border-color .15s"}}
+          onMouseEnter={e=>e.currentTarget.style.borderColor="#d4a017"}
+          onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(212,160,23,.4)"}>
+          <span style={{fontSize:18}}>{"\u{1F4F2}"}</span> Share My Results
+        </button>}
       </div>
 
       <div className="dash-grid">
@@ -2039,7 +2146,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
             <div style={{flex:1,minWidth:0}}>
               <div style={{fontSize:14,fontWeight:600,color:"var(--ink)",lineHeight:1.4}}>Share your results with your spouse or financial advisor</div>
             </div>
-            <button onClick={()=>{try{sessionStorage.setItem("milcalc_share_prompted","1");}catch{}handleShare();}}
+            <button onClick={()=>{try{sessionStorage.setItem("milcalc_share_prompted","1");}catch{}handleShareMyResults();}}
               style={{flexShrink:0,padding:"8px 16px",background:"var(--card)",
                 color:"var(--ink)",border:"1px solid var(--br)",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",
                 fontFamily:"Barlow,sans-serif",whiteSpace:"nowrap"}}>
@@ -2202,6 +2309,100 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
             <button onClick={()=>setShowExportModal(false)}
               style={{width:"100%",marginTop:8,padding:"10px",background:"none",border:"none",
                 color:"var(--mut)",fontSize:13,cursor:"pointer",fontFamily:"Barlow,sans-serif"}}>Cancel</button>
+          </div>
+        </div>,document.body
+      )}
+
+      {/* ── SHARE MY RESULTS MODAL ── */}
+      {showShareModal&&createPortal(
+        <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",
+            background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)"}}
+          onClick={closeShareModal}>
+          <div style={{position:"relative",background:"var(--card)",borderRadius:16,padding:24,maxWidth:420,width:"90%",
+              border:"1px solid var(--br)",maxHeight:"85vh",overflowY:"auto"}}
+              onClick={e=>e.stopPropagation()}>
+            {/* Close button */}
+            <button onClick={closeShareModal}
+              style={{position:"absolute",top:12,right:14,background:"none",border:"none",fontSize:18,color:"var(--mut)",cursor:"pointer",lineHeight:1,zIndex:1}}>{"\u2715"}</button>
+            <div style={{fontSize:18,fontWeight:700,color:"var(--ink)",marginBottom:4}}>Share My Results</div>
+            <div style={{fontSize:13,color:"var(--mut)",marginBottom:16}}>Preview your infographic, then pick a platform.</div>
+            {/* Infographic preview thumbnail */}
+            {shareImgURL&&<div style={{marginBottom:20,borderRadius:10,overflow:"hidden",border:"1px solid var(--sub)",background:"#0a1628"}}>
+              <img src={shareImgURL} alt="Infographic preview" style={{width:"100%",display:"block"}}/>
+            </div>}
+            {/* Platform options */}
+            <div style={{display:"flex",flexDirection:"column",gap:8}}>
+              <button onClick={downloadPNG}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
+                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
+                  transition:"border-color .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\u2B07"}</span>
+                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Download PNG</div>
+                <div style={{fontSize:11,color:"var(--mut)"}}>Save the infographic to your device</div></div>
+              </button>
+              <button onClick={shareToFacebook}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
+                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
+                  transition:"border-color .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\uD83D\uDCF1"}</span>
+                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Facebook</div>
+                <div style={{fontSize:11,color:"var(--mut)"}}>Share link — attach downloaded image manually</div></div>
+              </button>
+              <button onClick={shareToInstagram}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
+                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
+                  transition:"border-color .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\uD83D\uDCF7"}</span>
+                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Instagram</div>
+                <div style={{fontSize:11,color:"var(--mut)"}}>Save the image, then post it to Instagram</div></div>
+              </button>
+              <button onClick={shareToTwitter}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
+                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
+                  transition:"border-color .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"X"}</span>
+                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Twitter / X</div>
+                <div style={{fontSize:11,color:"var(--mut)"}}>Tweet + download image to attach</div></div>
+              </button>
+              <button onClick={shareToWhatsApp}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
+                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
+                  transition:"border-color .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\uD83D\uDCAC"}</span>
+                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>WhatsApp</div>
+                <div style={{fontSize:11,color:"var(--mut)"}}>Send message + download image to attach</div></div>
+              </button>
+              <button onClick={shareViaSMS}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"var(--bg)",
+                  border:"1px solid var(--br)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
+                  transition:"border-color .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\uD83D\uDCE8"}</span>
+                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Text Message</div>
+                <div style={{fontSize:11,color:"var(--mut)"}}>Open SMS + download image to attach</div></div>
+              </button>
+              {canNativeShare&&<button onClick={shareNative}
+                style={{display:"flex",alignItems:"center",gap:12,padding:"12px 16px",background:"linear-gradient(135deg,rgba(212,160,23,.08),rgba(212,160,23,.03))",
+                  border:"1px solid rgba(212,160,23,.3)",borderRadius:10,cursor:"pointer",fontFamily:"Barlow,sans-serif",
+                  transition:"border-color .15s"}}
+                onMouseEnter={e=>e.currentTarget.style.borderColor="#d4a017"}
+                onMouseLeave={e=>e.currentTarget.style.borderColor="rgba(212,160,23,.3)"}>
+                <span style={{fontSize:20,width:28,textAlign:"center"}}>{"\uD83D\uDCE4"}</span>
+                <div style={{textAlign:"left"}}><div style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>More Options</div>
+                <div style={{fontSize:11,color:"var(--mut)"}}>AirDrop, Messages, and more</div></div>
+              </button>}
+            </div>
           </div>
         </div>,document.body
       )}
