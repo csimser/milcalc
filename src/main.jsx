@@ -47,7 +47,9 @@ initAnalytics();
 // Delay UTM capture to next tick so Mixpanel is fully initialized
 setTimeout(captureUtm, 0);
 
-ReactDOM.createRoot(document.getElementById('root')).render(
+const root = document.getElementById('root');
+root.style.visibility = 'visible';
+ReactDOM.createRoot(root).render(
   React.createElement(React.StrictMode, null,
     React.createElement(ErrorBoundary, null,
       React.createElement(App)
