@@ -4426,6 +4426,9 @@ export default function App(){
   const [showPwaPrompt,setShowPwaPrompt]=useState(false);
   const pwaShownRef=useRef(false);
   const isPwaBlocked=()=>{try{return sessionStorage.getItem(PWA_SESSION_KEY)==="1"||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;}catch{return false;}};
+  // Reveal body after first React render (prevents white flash)
+  useEffect(()=>{document.body.style.visibility='visible';},[]);
+
   useEffect(()=>{
     const handler=e=>{e.preventDefault();setPwaPromptEvent(e);};
     window.addEventListener('beforeinstallprompt',handler);

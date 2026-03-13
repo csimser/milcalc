@@ -40,6 +40,12 @@
 
     <link rel="icon" type="image/svg+xml" href="/icon.svg" />
 
+    <!-- Prevent white flash: hide everything until React is ready -->
+    <style>
+      body { visibility: hidden; }
+      .lp-hero { display: none; }
+    </style>
+
     <!-- JSON-LD: SoftwareApplication -->
     <script type="application/ld+json">
     {
@@ -106,7 +112,7 @@
     </script>
   </head>
   <body>
-    <div id="root" style="visibility:hidden">
+    <div id="root">
       <h1>MilCalc — Free Military Retirement Calculator</h1>
       <p>Calculate your military pension, VA disability compensation, TRICARE premiums, SBP costs, state taxes, and true income gap. Free, no account required.</p>
       <h2>What MilCalc calculates</h2>

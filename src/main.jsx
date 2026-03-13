@@ -48,7 +48,6 @@ initAnalytics();
 setTimeout(captureUtm, 0);
 
 const root = document.getElementById('root');
-root.style.visibility = 'visible';
 ReactDOM.createRoot(root).render(
   React.createElement(React.StrictMode, null,
     React.createElement(ErrorBoundary, null,
