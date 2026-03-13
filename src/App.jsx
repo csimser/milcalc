@@ -1756,7 +1756,7 @@ function UnconfiguredBanner({go}){
   );
 }
 
-function DashboardTab({state,set,isConfigured,go}){
+function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
   const {userName,separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
          selectedState,desiredIncome,income,filingStatus,medDodPct,tdrl,reservePoints,currentAge,payStartAge,
          colFrom,colTo,monthlyIncome,
@@ -1764,6 +1764,9 @@ function DashboardTab({state,set,isConfigured,go}){
   const [showExportModal,setShowExportModal]=useState(false);
   const [exportSections,setExportSections]=useState({dashboard:true,pension:true,va:true,tax:true,col:true,gap:true});
   const [exporting,setExporting]=useState(false);
+  const [showDebriefedPromo,setShowDebriefedPromo]=useState(false);
+  const DEBRIEF_SESSION_KEY="milcalc_debriefed_shown";
+  const [shareCopied,setShareCopied]=useState(false);
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
   const key=dk(vaDeps);
   const isReserveEligibleNow=separationType==="reserve"&&currentAge>=payStartAge;
@@ -1813,6 +1816,29 @@ function DashboardTab({state,set,isConfigured,go}){
 
   const [showFullDisclaimer,setShowFullDisclaimer]=useState(false);
 
+  // ── Personalized share ──
+  const buildShareText=()=>{
+    const parts=[];
+    if(separationType!=="veteran"&&atP>0) parts.push(`${fmt(atP)}/mo pension`);
+    if(vaM>0) parts.push(`${fmt(vaM)}/mo VA disability`);
+    if(sbp&&sbpC>0) parts.push(`SBP coverage`);
+    const url="https://milcalc.app";
+    if(parts.length===0) return `Free military retirement calculator — pension, VA disability, taxes, and more. ${url}`;
+    const summary=parts.join(" + ");
+    const total=atP+vaM;
+    const totalStr=total>0?` = ${fmt(total)}/mo`:"";
+    return `I just calculated my military retirement pay using MilCalc — ${summary}${totalStr}. Calculate yours free: ${url}`;
+  };
+  const handleShare=async()=>{
+    const text=buildShareText();
+    const url="https://milcalc.app";
+    if(navigator.share){
+      try{await navigator.share({title:"MilCalc — Military Retirement Calculator",text,url});track("Share Completed",{method:"native"});}catch{}
+    }else{
+      try{await navigator.clipboard.writeText(text);setShareCopied(true);setTimeout(()=>setShareCopied(false),2500);track("Share Completed",{method:"clipboard"});}catch{}
+    }
+  };
+
   return(
     <div className="fu">
       {!isConfigured&&<UnconfiguredBanner go={go}/>}
@@ -1827,14 +1853,25 @@ function DashboardTab({state,set,isConfigured,go}){
         <p>{separationType==="veteran"?"Veteran":separationType==="medical"?"Medical Retiree":separationType==="reserve"?"Reserve/Guard":"Active Duty"} / {retType} / {separationType==="reserve"?`${(reservePoints/360).toFixed(1)} equiv. YOS`:fmtYos(yos)+" YOS"} / {selectedState}</p>
       </div>
 
-      {/* ── EXPORT BUTTON ── */}
-      <button onClick={()=>setShowExportModal(true)}
-        style={{width:"100%",padding:"14px 20px",marginBottom:16,background:"linear-gradient(135deg,#c2782a,#e09448)",
-          color:"#0A0E1A",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:"pointer",
-          display:"flex",alignItems:"center",justifyContent:"center",gap:10,
-          fontFamily:"Barlow,sans-serif",boxShadow:"0 2px 12px rgba(194,120,42,.3)"}}>
-        <span style={{fontSize:20}}>{"\u2B07"}</span> Export My Plan
-      </button>
+      {/* ── EXPORT + SHARE BUTTONS ── */}
+      <div style={{display:"grid",gridTemplateColumns:"1fr auto",gap:10,marginBottom:16}}>
+        <button onClick={()=>setShowExportModal(true)}
+          style={{padding:"14px 20px",background:"linear-gradient(135deg,#c2782a,#e09448)",
+            color:"#0A0E1A",border:"none",borderRadius:12,fontSize:16,fontWeight:700,cursor:"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center",gap:10,
+            fontFamily:"Barlow,sans-serif",boxShadow:"0 2px 12px rgba(194,120,42,.3)"}}>
+          <span style={{fontSize:20}}>{"\u2B07"}</span> Export My Plan
+        </button>
+        <button onClick={handleShare}
+          style={{padding:"14px 18px",background:"var(--card)",
+            color:"var(--ink)",border:"1px solid var(--br)",borderRadius:12,fontSize:14,fontWeight:600,cursor:"pointer",
+            display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+            fontFamily:"Barlow,sans-serif",whiteSpace:"nowrap",transition:"border-color .15s"}}
+          onMouseEnter={e=>e.currentTarget.style.borderColor="var(--nv)"}
+          onMouseLeave={e=>e.currentTarget.style.borderColor="var(--br)"}>
+          <span style={{fontSize:18}}>{shareCopied?"\u2705":"\u{1F517}"}</span> {shareCopied?"Copied!":"Share"}
+        </button>
+      </div>
 
       <div className="dash-grid">
       {/* Hero stat cards — 2 wide */}
@@ -1965,6 +2002,72 @@ function DashboardTab({state,set,isConfigured,go}){
       </div>
 
       </div>{/* close dash-grid */}
+
+      {/* ── SAVE PROMPT — appears after 3+ pension calculations in session ── */}
+      {(()=>{
+        let calcCount=0;try{calcCount=parseInt(sessionStorage.getItem("milcalc_calc_count")||"0",10);}catch{}
+        const prompted=sessionStorage.getItem("milcalc_save_prompted")==="1";
+        if(calcCount>=3&&!prompted&&isConfigured) return(
+          <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",marginBottom:16,
+            background:"linear-gradient(135deg,rgba(194,120,42,.10),rgba(194,120,42,.04))",
+            border:"1px solid rgba(194,120,42,.25)",borderRadius:12}}>
+            <span style={{fontSize:20,flexShrink:0}}>{"\u{1F4BE}"}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:600,color:"var(--ink)",marginBottom:2}}>Ready to save your results?</div>
+              <div style={{fontSize:12,color:"var(--mut)"}}>Export a personalized PDF with all your numbers.</div>
+            </div>
+            <button onClick={()=>{try{sessionStorage.setItem("milcalc_save_prompted","1");}catch{}setShowExportModal(true);}}
+              style={{flexShrink:0,padding:"8px 16px",background:"linear-gradient(135deg,#c2782a,#e09448)",
+                color:"#0A0E1A",border:"none",borderRadius:8,fontSize:13,fontWeight:700,cursor:"pointer",
+                fontFamily:"Barlow,sans-serif",whiteSpace:"nowrap"}}>
+              Export PDF
+            </button>
+          </div>
+        );
+        return null;
+      })()}
+
+      {/* ── SHARE PROMPT — appears after 5+ calculations ── */}
+      {(()=>{
+        let calcCount=0;try{calcCount=parseInt(sessionStorage.getItem("milcalc_calc_count")||"0",10);}catch{}
+        const sharePrompted=sessionStorage.getItem("milcalc_share_prompted")==="1";
+        if(calcCount>=5&&!sharePrompted&&isConfigured) return(
+          <div style={{display:"flex",alignItems:"center",gap:12,padding:"14px 16px",marginBottom:16,
+            background:"linear-gradient(135deg,rgba(26,60,110,.06),rgba(26,60,110,.02))",
+            border:"1px solid rgba(26,60,110,.15)",borderRadius:12}}>
+            <span style={{fontSize:20,flexShrink:0}}>{"\u{1F517}"}</span>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{fontSize:14,fontWeight:600,color:"var(--ink)",lineHeight:1.4}}>Share your results with your spouse or financial advisor</div>
+            </div>
+            <button onClick={()=>{try{sessionStorage.setItem("milcalc_share_prompted","1");}catch{}handleShare();}}
+              style={{flexShrink:0,padding:"8px 16px",background:"var(--card)",
+                color:"var(--ink)",border:"1px solid var(--br)",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",
+                fontFamily:"Barlow,sans-serif",whiteSpace:"nowrap"}}>
+              Share
+            </button>
+          </div>
+        );
+        return null;
+      })()}
+
+      {/* ── COL CALLOUT — elevated prominence ── */}
+      {isConfigured&&(
+        <button onClick={()=>{set("planSection","col");go("planning");track("COL Banner Tapped",{source:"dashboard"});}}
+          style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"18px 16px",marginBottom:16,
+            background:"linear-gradient(135deg,rgba(26,60,110,.08),rgba(26,60,110,.03))",
+            border:"1px solid rgba(26,60,110,.2)",borderRadius:12,cursor:"pointer",
+            textAlign:"left",fontFamily:"Barlow,sans-serif",
+            transition:"border-color .15s,box-shadow .15s",WebkitTapHighlightColor:"transparent"}}
+          onMouseEnter={e=>{e.currentTarget.style.borderColor="var(--nv)";e.currentTarget.style.boxShadow="0 2px 12px rgba(26,60,110,.12)";}}
+          onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(26,60,110,.2)";e.currentTarget.style.boxShadow="none";}}>
+          <span style={{fontSize:28,width:40,textAlign:"center",flexShrink:0}}>{"\u{1F4CD}"}</span>
+          <div style={{flex:1,minWidth:0}}>
+            <div style={{fontSize:15,fontWeight:700,color:"var(--ink)",marginBottom:3}}>See how your pay compares across cities</div>
+            <div style={{fontSize:13,color:"var(--mut)",lineHeight:1.4}}>Your {fmt(totalSchool)}/mo may stretch further — or less — depending on where you settle.</div>
+          </div>
+          <span style={{fontSize:20,color:"var(--nvm)",flexShrink:0,fontWeight:700}}>{"\u2192"}</span>
+        </button>
+      )}
 
       {/* ── EXPLORE MORE — discovery cards to bridge the navigation cliff ── */}
       <div style={{marginTop:6,marginBottom:16}}>
@@ -2099,6 +2202,35 @@ function DashboardTab({state,set,isConfigured,go}){
             <button onClick={()=>setShowExportModal(false)}
               style={{width:"100%",marginTop:8,padding:"10px",background:"none",border:"none",
                 color:"var(--mut)",fontSize:13,cursor:"pointer",fontFamily:"Barlow,sans-serif"}}>Cancel</button>
+          </div>
+        </div>,document.body
+      )}
+
+      {/* ── DEBRIEFED CROSS-PROMO (post-export) ── */}
+      {showDebriefedPromo&&!modalActive&&createPortal(
+        <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",
+            background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)"}}
+          onClick={()=>{setShowDebriefedPromo(false);track("Debriefed Promo Dismissed",{});}}>
+          <div style={{position:"relative",background:"var(--card)",borderRadius:16,padding:"28px 24px",maxWidth:400,width:"90%",
+              border:"1px solid var(--br)",textAlign:"center"}}
+              onClick={e=>e.stopPropagation()}>
+            <button onClick={()=>{setShowDebriefedPromo(false);track("Debriefed Promo Dismissed",{});}}
+              style={{position:"absolute",top:12,right:14,background:"none",border:"none",fontSize:18,color:"var(--mut)",cursor:"pointer",lineHeight:1}}>{"\u2715"}</button>
+            <div style={{fontSize:28,marginBottom:8}}>{"\u{1F3AF}"}</div>
+            <div style={{fontSize:18,fontWeight:700,color:"var(--ink)",marginBottom:8,fontFamily:"'Libre Baskerville',serif"}}>Planning your transition?</div>
+            <div style={{fontSize:14,color:"var(--mut)",lineHeight:1.55,marginBottom:20}}>Translate your military experience into a civilian resume at GetDebriefed.co</div>
+            <a href="https://getdebriefed.co?utm_source=milcalc&utm_medium=app&utm_campaign=post-export"
+              target="_blank" rel="noopener noreferrer"
+              onClick={()=>{track("Debriefed Promo Clicked",{});setShowDebriefedPromo(false);}}
+              style={{display:"inline-block",padding:"12px 28px",background:"linear-gradient(135deg,#c2782a,#e09448)",
+                color:"#0A0E1A",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",
+                fontFamily:"Barlow,sans-serif",textDecoration:"none"}}>
+              Check It Out
+            </a>
+            <div style={{marginTop:12}}>
+              <button onClick={()=>{setShowDebriefedPromo(false);track("Debriefed Promo Dismissed",{});}}
+                style={{background:"none",border:"none",color:"var(--mut)",fontSize:13,cursor:"pointer",fontFamily:"Barlow,sans-serif"}}>No thanks</button>
+            </div>
           </div>
         </div>,document.body
       )}
@@ -2430,6 +2562,13 @@ function DashboardTab({state,set,isConfigured,go}){
       });
 
       setShowExportModal(false);
+      if(onPdfExported) onPdfExported();
+      // Debriefed cross-promo — 2.5s delay, once per session
+      try{
+        if(sessionStorage.getItem(DEBRIEF_SESSION_KEY)!=="1"){
+          setTimeout(()=>{sessionStorage.setItem(DEBRIEF_SESSION_KEY,"1");setShowDebriefedPromo(true);track("Debriefed Promo Shown",{trigger:"pdf_export"});},2500);
+        }
+      }catch{}
     }catch(err){
       console.error("PDF export error:",err);
     }finally{
@@ -3267,6 +3406,7 @@ function ProfileTab({state,set,isConfigured,go}){
     if(yos>0&&pensionMo>0&&pensionMo!==prevPension.current){
       prevPension.current=pensionMo;
       track("Pension Calculated",{years_of_service:yos,retirement_type:separationType==="veteran"?"none":retType,monthly_amount:r100(pensionMo)});
+      try{const c=parseInt(sessionStorage.getItem("milcalc_calc_count")||"0",10);sessionStorage.setItem("milcalc_calc_count",String(c+1));}catch{}
     }
   },[yos,retType,payGrade,separationType,high3,medDodPct,pensionMo]);
 
@@ -4104,7 +4244,7 @@ function loadTab(){
 }
 
 const LANDING_KEY="milcalc_entered";
-function hasEnteredApp(){try{return localStorage.getItem(LANDING_KEY)==="1";}catch{return false;}}
+function hasEnteredApp(){return true;}
 
 export default function App(){
   const [entered,setEntered]=useState(hasEnteredApp);
@@ -4122,7 +4262,7 @@ export default function App(){
     try{return localStorage.getItem(POPUP_DISMISSED_KEY)==="1"||sessionStorage.getItem(POPUP_SESSION_KEY)==="1";}catch{return false;}
   };
   const triggerPopup=(trigger)=>{
-    if(isPopupBlocked()||popupShownRef.current) return;
+    if(isPopupBlocked()||popupShownRef.current||showPwaPrompt) return;
     popupShownRef.current=true;
     try{sessionStorage.setItem(POPUP_SESSION_KEY,"1");}catch{}
     setShowPopup(true);
@@ -4137,6 +4277,44 @@ export default function App(){
 
   const enterApp=()=>{try{localStorage.setItem(LANDING_KEY,"1");}catch{}setEntered(true);};
   const exitApp=()=>{try{localStorage.removeItem(LANDING_KEY);}catch{}setEntered(false);};
+
+  // ── PWA install prompt (app-level) ──
+  const PWA_SESSION_KEY="milcalc_pwa_shown";
+  const [pwaPromptEvent,setPwaPromptEvent]=useState(null);
+  const [showPwaPrompt,setShowPwaPrompt]=useState(false);
+  const pwaShownRef=useRef(false);
+  const isPwaBlocked=()=>{try{return sessionStorage.getItem(PWA_SESSION_KEY)==="1"||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;}catch{return false;}};
+  useEffect(()=>{
+    const handler=e=>{e.preventDefault();setPwaPromptEvent(e);};
+    window.addEventListener('beforeinstallprompt',handler);
+    return ()=>window.removeEventListener('beforeinstallprompt',handler);
+  },[]);
+  const triggerPwa=()=>{
+    if(isPwaBlocked()||pwaShownRef.current||!pwaPromptEvent) return;
+    pwaShownRef.current=true;
+    try{sessionStorage.setItem(PWA_SESSION_KEY,"1");}catch{}
+    // Dismiss engagement popup if showing — PWA takes priority
+    if(showPopup){dismissPopup();}
+    setShowPwaPrompt(true);
+    track("PWA Install Prompt Shown",{});
+  };
+  const handlePwaInstall=async()=>{
+    if(pwaPromptEvent){
+      track("PWA Install Prompted",{});
+      pwaPromptEvent.prompt();
+      const choice=await pwaPromptEvent.userChoice;
+      if(choice.outcome==="accepted") track("PWA Installed",{});
+      setPwaPromptEvent(null);
+    }
+    setShowPwaPrompt(false);
+  };
+  const dismissPwa=()=>{setShowPwaPrompt(false);track("PWA Install Dismissed",{});};
+  // PWA trigger: 3+ minutes on page
+  useEffect(()=>{
+    if(!pwaPromptEvent) return;
+    const timer=setTimeout(()=>triggerPwa(),180000); // 3 minutes
+    return ()=>clearTimeout(timer);
+  },[pwaPromptEvent]);
 
   const defaults={
     userName:"",
@@ -4159,15 +4337,14 @@ export default function App(){
   };
   const [s,setS]=useState(()=>({...defaults,...(loadSaved()||{})}));
   const set=(k,v)=>setS(x=>{const n={...x,[k]:v};try{localStorage.setItem(STORAGE_KEY,JSON.stringify(n));}catch{}return n;});
-  // Popup: trigger after user has BOTH calculated pension AND selected VA rating
-  // (minimum 60s on page to avoid premature trigger)
+  // Popup: trigger after 5+ minutes of active use, or after PDF export
   useEffect(()=>{
     if(isPopupBlocked()||popupShownRef.current) return;
     const hasEngaged=s.yos>0&&s.vaRating>0&&s._hasVisitedMyInfo;
     if(!hasEngaged) return;
     const elapsed=Date.now()-popupStartTime.current;
-    const delay=Math.max(0,60000-elapsed);
-    const timer=setTimeout(()=>triggerPopup("engagement"),delay);
+    const delay=Math.max(0,300000-elapsed); // 5 minutes minimum
+    const timer=setTimeout(()=>triggerPopup("engagement_5min"),delay);
     return ()=>clearTimeout(timer);
   },[s.yos,s.vaRating,s._hasVisitedMyInfo]);
   const tabRef=useRef(tab);
@@ -4223,12 +4400,13 @@ export default function App(){
   if(window.location.pathname==="/partners"){window.history.replaceState({},"","/share");}
   if(window.location.pathname==="/share") return <SharePage/>;
 
-  if(!entered) return(<><style>{FONTS}</style><style>{CSS}</style><LandingPage onEnter={enterApp}/></>);
-
   return(
-    <div className="has-badge">
+    <>
       <style>{FONTS}</style>
       <style>{CSS}</style>
+      {/* Landing page kept in DOM for SEO, hidden when calculator is active */}
+      <div style={entered?{display:"none"}:undefined}><LandingPage onEnter={enterApp}/></div>
+      <div className="has-badge" style={entered?undefined:{display:"none"}}>
 
       {/* ── DEBRIEFED BRAND BADGE ── */}
       <div className="db-badge">
@@ -4285,7 +4463,7 @@ export default function App(){
       {/* ── MAIN CONTENT ── */}
       <main className="main">
         {tab==="myinfo"    &&<ProfileTab state={s} set={set} isConfigured={s._hasVisitedMyInfo} go={go}/>}
-        {tab==="dashboard"&&<DashboardTab state={s} set={set} isConfigured={s._hasVisitedMyInfo} go={go}/>}
+        {tab==="dashboard"&&<DashboardTab state={s} set={set} isConfigured={s._hasVisitedMyInfo} go={go} onPdfExported={()=>{triggerPwa();triggerPopup("pdf_export");}} modalActive={showPopup||showPwaPrompt}/>}
         {tab==="benefits" &&<BenefitsTab state={s} isConfigured={s._hasVisitedMyInfo} go={go}/>}
         {tab==="planning" &&<PlanningTab state={s} set={set} go={go}/>}
       </main>
@@ -4312,6 +4490,26 @@ export default function App(){
         </div>
       )}
 
+      {/* ── PWA INSTALL PROMPT ── */}
+      {showPwaPrompt&&(
+        <div className="ep-overlay" onClick={dismissPwa}>
+          <div className="ep-modal" onClick={e=>e.stopPropagation()}>
+            <div style={{fontSize:32,textAlign:"center",marginBottom:8}}>{"\u{1F4F1}"}</div>
+            <div className="ep-title">Add MilCalc to Home Screen</div>
+            <div style={{fontSize:14,color:"#7A8AA0",textAlign:"center",lineHeight:1.5,marginBottom:16}}>
+              Install for instant access — works offline, no app store needed.
+            </div>
+            <button onClick={handlePwaInstall}
+              style={{width:"100%",padding:"14px",background:"linear-gradient(135deg,#c2782a,#e09448)",
+                color:"#0A0E1A",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",
+                fontFamily:"Barlow,sans-serif",marginBottom:8}}>
+              Install Now
+            </button>
+            <button className="ep-dismiss" onClick={dismissPwa}>Maybe later</button>
+          </div>
+        </div>
+      )}
+
       {/* ── BOTTOM TAB BAR ── */}
       <nav className="btabs">
         <div className="btabs-scroll" style={{justifyContent:"space-around"}}>
@@ -4333,6 +4531,7 @@ export default function App(){
         </div>
       </nav>
     </div>
+    </>
   );
 }
 
