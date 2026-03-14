@@ -648,13 +648,7 @@ function pct(rt, yos) {
   if (rt==="REDUX") return Math.min(40+Math.max(0,y-20)*3.5,75);
   return Math.min(y*(rt==="BRS"?2.0:2.5),100);
 }
-function combinedVA(ratings) {
-  if (!ratings.length) return 0;
-  const s=[...ratings].sort((a,b)=>b-a);
-  let rem=100,c=0;
-  for (const r of s){c+=rem*(r/100);rem-=rem*(r/100);}
-  return Math.round(Math.round(c)/10)*10;
-}
+
 
 // ── MEDICAL RETIREMENT (PDRL/TDRL) — Chapter 61 ──────────────────────
 // Source: 10 USC § 1201/§ 1202; congress.gov/crs-product/IF10483
@@ -915,6 +909,31 @@ const ENROLL_OPTS = [
 // Post-9/11 GI Bill online-only MHA rate for the 2026 academic year cycle
 // Source: va.gov/education/benefit-rates — Aug 2026–Jul 2027 cycle
 const GI_BILL_ONLINE_MHA = 1261;
+
+// ── MGIB Chapter 30 (Active Duty) rates — Oct 1 2025–Sep 30 2026 ────
+// Source: va.gov/education/benefit-rates/montgomery-active-duty-rates
+// Note: MGIB pays directly to student and IS taxable income (unlike Post-9/11)
+const MGIB_AD = {
+  "3+": { full: 2518.00, three_quarter: 1888.50, half: 1259.00, quarter: 629.50 },
+  "2-3": { full: 2043.00, three_quarter: 1532.25, half: 1021.50, quarter: 510.75 },
+};
+
+// ── MGIB Chapter 1606 (Selected Reserve) rates — Oct 1 2025–Sep 30 2026 ──
+// Source: va.gov/education/benefit-rates/montgomery-selected-reserve-rates
+const MGIB_SR = { full: 493.00, three_quarter: 369.00, half: 246.00, quarter: 123.25 };
+
+const MGIB_ENROLL_OPTS = [
+  { v: "full", l: "Full-Time" },
+  { v: "three_quarter", l: "¾ Time" },
+  { v: "half", l: "Half-Time" },
+  { v: "quarter", l: "¼ Time or Less" },
+];
+
+function mgibMonthly(giType, mgibEnroll, mgibServiceYears) {
+  if (giType === "ch30") return (MGIB_AD[mgibServiceYears] || MGIB_AD["3+"])[mgibEnroll] || 0;
+  if (giType === "ch1606") return MGIB_SR[mgibEnroll] || 0;
+  return 0;
+}
 
 // ── 2026 BAS (Basic Allowance for Subsistence) ─────────────────────────
 // Source: DFAS — adjusted annually per USDA Cost of Food at Home data
@@ -1581,7 +1600,7 @@ function LandingPage({onEnter}){
         <div className="lp-feat">
           <span className="lp-feat-ico">{"\u{1FA96}"}</span>
           <h3>VA Disability</h3>
-          <p>2026 VA compensation rates, combined rating calculator (VA math), CRDP/CRSC eligibility, and tax-equivalent value.</p>
+          <p>2026 VA compensation rates, CRDP/CRSC eligibility, and tax-equivalent value.</p>
         </div>
         <div className="lp-feat">
           <span className="lp-feat-ico">{"\u{1F4CA}"}</span>
@@ -1760,10 +1779,12 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
   const {userName,separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
          selectedState,desiredIncome,income,filingStatus,medDodPct,tdrl,reservePoints,currentAge,payStartAge,
          colFrom,colTo,monthlyIncome,
-         giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear}=state;
+         giUsing,giType,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear,
+         mgibEnroll,mgibServiceYears}=state;
   const [showExportModal,setShowExportModal]=useState(false);
   const [exportSections,setExportSections]=useState({dashboard:true,pension:true,va:true,tax:true,col:true,gap:true});
   const [exporting,setExporting]=useState(false);
+  const [pdfTheme,setPdfTheme]=useState("dark");
   const [showDebriefedPromo,setShowDebriefedPromo]=useState(false);
   const DEBRIEF_SESSION_KEY="milcalc_debriefed_shown";
   const [showShareModal,setShowShareModal]=useState(false);
@@ -1786,9 +1807,12 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
   const {monthlyTax:fedTax,effectiveRate:fedEffRate,totalDeduction:fedDeduction}=calcFederalTax(taxableAnnual,filingStatus||"single",state.age65Plus,state.spouseAge65Plus);
   const stTax=calcStateTax(offsetNetP*12,si)/12;
   const atP=offsetNetP-fedTax-stTax;
+  const isMGIB=giType==="ch30"||giType==="ch1606";
   const mhaBase=giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[giSchoolCity]||0);
-  const mhaMo=giUsing?Math.round(mhaBase*(giEligPct/100)*giEnroll):0;
-  const mhaBooksMo=giUsing?Math.round((1000*(giEligPct/100))/12):0;
+  const mhaMo=giUsing?(isMGIB?Math.round(mgibMonthly(giType,mgibEnroll,mgibServiceYears)):Math.round(mhaBase*(giEligPct/100)*giEnroll)):0;
+  const mhaBooksMo=giUsing&&!isMGIB?Math.round((1000*(giEligPct/100))/12):0;
+  const giLabel=isMGIB?(giType==="ch30"?"MGIB-AD (Ch. 30)":"MGIB-SR (Ch. 1606)"):"GI Bill MHA";
+  const giTaxNote=isMGIB?"taxable":"tax-free";
   const otherMo=Math.round((income||0)/12);
   const totalBase=atP+vaM+otherMo;
   const totalSchool=totalBase+mhaMo;
@@ -1829,7 +1853,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
     const incomeRows=[];
     if(atP>0) incomeRows.push({label:"Pension (after tax)",val:atP});
     if(vaM>0) incomeRows.push({label:"VA Disability",val:vaM});
-    if(mhaMo>0) incomeRows.push({label:"GI Bill MHA",val:mhaMo});
+    if(mhaMo>0) incomeRows.push({label:giLabel,val:mhaMo});
     if(otherMo>0) incomeRows.push({label:"Additional Income",val:otherMo});
     const deductRows=[];
     if(sbpC>0) deductRows.push({label:"SBP Premium",val:sbpC});
@@ -2007,7 +2031,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
         </div>
         <DR label="Pension (net)" value={fmt(atP)} color="navy"/>
         <DR label="VA Compensation" value={fmt(vaM)} color="green" sub="Tax-free"/>
-        {mhaMo>0&&<DR label="GI Bill MHA" value={fmt(mhaMo)} color="green" sub={`${giMonthsPerYear} mo/yr · tax-free`}/>}
+        {mhaMo>0&&<DR label={giLabel} value={fmt(mhaMo)} color="green" sub={`${giMonthsPerYear} mo/yr · ${giTaxNote}`}/>}
         {otherMo>0&&<DR label="Other Income" value={fmt(otherMo)} sub={fmt(income)+"/yr"}/>}
         {insuranceMo>0&&<DR label="Insurance Premiums" value={`-${fmt(insuranceMo)}`} color="red" sub="TRICARE + VGLI + other"/>}
         {deductionsExceedIncome&&<div className="ib ib-rd" style={{marginTop:10,fontSize:12}}>Estimated deductions exceed income. Review insurance and SBP selections.</div>}
@@ -2269,7 +2293,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
           <div style={{marginBottom:14}}><strong style={{color:"var(--ink)"}}>Healthcare Coverage</strong><br/>
             TRICARE plan costs and eligibility shown are estimates. Actual enrollment fees, copays, and coverage depend on your specific enrollment status, location, and plan. Verify current costs at tricare.mil or by calling 1-800-444-5445.</div>
           <div><strong style={{color:"var(--ink)"}}>VA Disability</strong><br/>
-            Combined disability ratings and compensation amounts are calculated using the VA's standard whole-person method but are estimates only. Your actual rating and payment are determined solely by the Department of Veterans Affairs.</div>
+            Compensation amounts are estimates only. Your actual rating and payment are determined solely by the Department of Veterans Affairs.</div>
         </div>
       )}
 
@@ -2298,8 +2322,21 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
                 <span style={{fontSize:14,color:s.locked?"var(--mut)":"var(--ink)"}}>{s.label}{s.locked?" (always included)":""}</span>
               </label>
             ))}
+            <div style={{marginTop:16,marginBottom:4}}>
+              <div style={{fontSize:13,color:"var(--mut)",marginBottom:8}}>PDF Style:</div>
+              <div style={{display:"flex",gap:8}}>
+                {[{v:"dark",l:"Dark"},{v:"light",l:"Print Friendly"}].map(t=>(
+                  <button key={t.v} onClick={()=>setPdfTheme(t.v)}
+                    style={{flex:1,padding:"10px 12px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",
+                      fontFamily:"Barlow,sans-serif",border:pdfTheme===t.v?"2px solid var(--gd)":"1px solid var(--br)",
+                      background:pdfTheme===t.v?"var(--sub)":"transparent",color:pdfTheme===t.v?"var(--ink)":"var(--mut)"}}>
+                    {t.l}
+                  </button>
+                ))}
+              </div>
+            </div>
             <button onClick={()=>{generatePDF();}} disabled={exporting}
-              style={{width:"100%",marginTop:20,padding:"14px 20px",background:exporting?"var(--sub)":"linear-gradient(135deg,#c2782a,#e09448)",
+              style={{width:"100%",marginTop:12,padding:"14px 20px",background:exporting?"var(--sub)":"linear-gradient(135deg,#c2782a,#e09448)",
                 color:exporting?"var(--mut)":"#0A0E1A",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:exporting?"wait":"pointer",
                 fontFamily:"Barlow,sans-serif"}}>
               {exporting?"Generating...":"Generate PDF"}
@@ -2390,10 +2427,21 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
       const COL_DATA=COL||{};
       const si2=STATES[selectedState]||{ok:true,note:""};
 
-      // Colors
-      const BG=[10,14,26],CARD=[20,28,46],CARD2=[26,36,64];
-      const GOLD=[201,145,58],GOLD_B=[228,169,74],GOLD_D=[107,80,32];
-      const TXT=[240,244,248],MUT=[122,138,160],GRN=[42,122,75];
+      // Colors — theme-aware
+      const isLight=pdfTheme==="light";
+      const BG=isLight?[255,255,255]:[10,14,26];
+      const CARD=isLight?[241,245,249]:[20,28,46];
+      const CARD2=isLight?[226,232,240]:[26,36,64];
+      const GOLD=[201,145,58],GOLD_B=[228,169,74];
+      const GOLD_P=isLight?[180,83,9]:GOLD_B;   // #b45309 — amber for totals/fills in print
+      const GOLD_D=isLight?[180,83,9]:[107,80,32]; // #b45309 footer divider
+      const HDR_BG=isLight?[26,39,68]:CARD;     // #1a2744 navy header in print
+      const TXT=isLight?[10,22,40]:[240,244,248];  // #0a1628 primary text
+      const MUT=isLight?[55,65,81]:[122,138,160];  // #374151 secondary/muted
+      const HDR_SUB=isLight?[200,215,235]:MUT;  // light blue-white for header subtitle on navy
+      const ROWLBL=isLight?[30,41,59]:MUT;      // #1e293b row label text
+      const GRN=[42,122,75];
+      const RED=isLight?[185,28,28]:[248,113,113]; // #b91c1c darker red for print
 
       let pageNum=1,totalPages=0; // we'll fix page numbers at end
       let y=0;
@@ -2408,11 +2456,11 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
 
       // Header
       const drawHeader=()=>{
-        setF(doc,GOLD_B);doc.rect(0,0,W,4,"F");
-        setF(doc,CARD);doc.rect(0,4,W,36,"F");
+        setF(doc,GOLD_P);doc.rect(0,0,W,4,"F");
+        setF(doc,HDR_BG);doc.rect(0,4,W,36,"F");
         doc.setFont("helvetica","bold");doc.setFontSize(14);setC(doc,GOLD_B);
         doc.text("MILCALC",M,27);
-        doc.setFont("helvetica","normal");doc.setFontSize(8);setC(doc,MUT);
+        doc.setFont("helvetica","normal");doc.setFontSize(8);setC(doc,HDR_SUB);
         doc.text("Military Retirement Financial Summary",M+70,27);
         doc.text(`Generated ${date}`,W-M,20,{align:"right"});
       };
@@ -2435,8 +2483,8 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
       const sectionHead=(title)=>{
         checkSpace(30);
         setF(doc,CARD);doc.rect(M,y,cw,22,"F");
-        setF(doc,GOLD_B);doc.rect(M,y,4,22,"F");
-        doc.setFont("helvetica","bold");doc.setFontSize(10);setC(doc,GOLD_B);
+        setF(doc,GOLD_P);doc.rect(M,y,4,22,"F");
+        doc.setFont("helvetica","bold");doc.setFontSize(10);setC(doc,isLight?TXT:GOLD_B);
         doc.text(title,M+14,y+15);
         y+=28;
       };
@@ -2446,7 +2494,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
         checkSpace(20);
         if(opts.highlight){setF(doc,CARD2);doc.rect(M,y-2,cw,18,"F");}
         doc.setFont("helvetica","normal");doc.setFontSize(8.5);
-        setC(doc,opts.labelColor||MUT);doc.text(label,M+8,y+10);
+        setC(doc,opts.labelColor||ROWLBL);doc.text(label,M+8,y+10);
         doc.setFont("helvetica","bold");
         setC(doc,opts.valueColor||TXT);doc.text(String(value),W-M-8,y+10,{align:"right"});
         y+=18;
@@ -2455,17 +2503,17 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
       // Stat box
       const statBox=(x,w,label,value)=>{
         setF(doc,CARD);doc.rect(x,y,w,50,"F");
-        setF(doc,GOLD_B);doc.rect(x,y,w,3,"F");
-        doc.setFont("helvetica","normal");doc.setFontSize(7);setC(doc,MUT);
+        setF(doc,GOLD_P);doc.rect(x,y,w,3,"F");
+        doc.setFont("helvetica","normal");doc.setFontSize(7);setC(doc,ROWLBL);
         doc.text(label,x+w/2,y+18,{align:"center"});
-        doc.setFont("helvetica","bold");doc.setFontSize(14);setC(doc,GOLD_B);
+        doc.setFont("helvetica","bold");doc.setFontSize(14);setC(doc,isLight?TXT:GOLD_B);
         doc.text(String(value),x+w/2,y+38,{align:"center"});
       };
 
       // Progress bar
       const progressBar=(x,w,pct,color)=>{
         checkSpace(14);
-        setF(doc,CARD);doc.rect(x,y,w,8,"F");
+        setF(doc,isLight?CARD2:CARD);doc.rect(x,y,w,8,"F");
         const fillW=Math.min(1,Math.max(0,pct/100))*w;
         setF(doc,color||GRN);doc.rect(x,y,fillW,8,"F");
         doc.setFont("helvetica","bold");doc.setFontSize(7);setC(doc,TXT);
@@ -2520,12 +2568,12 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
           dataRow("DoD Disability Rating",medDodPct+"%");
           dataRow("Status",pdfMedCalc.isPDRL?"PDRL (Permanent)":pdfMedCalc.isTDRL?"TDRL (Temporary)":"Severance Only");
           dataRow("Calculation Method",pdfMedCalc.method==="disability"?"Disability % method":"YOS method");
-          if(isVAOffset) dataRow("VA Offset","DOD pay offset by VA comp (YOS < 20)",{valueColor:[192,57,43]});
+          if(isVAOffset) dataRow("VA Offset","DOD pay offset by VA comp (YOS < 20)",{valueColor:RED});
         }
-        dataRow(separationType==="reserve"&&!isReserveEligibleNow?"Projected Monthly Gross":separationType==="medical"?"Monthly Medical Retirement":"Monthly Gross Pension",fmt(grossPension),{highlight:true,valueColor:GOLD_B});
+        dataRow(separationType==="reserve"&&!isReserveEligibleNow?"Projected Monthly Gross":separationType==="medical"?"Monthly Medical Retirement":"Monthly Gross Pension",fmt(grossPension),{highlight:true,valueColor:GOLD_P});
         dataRow("After-Tax Estimate",fmt(atP)+"/mo");
         dataRow("Annual Gross",fmt(grossPension*12));
-        dataRow("CRDP/CRSC Status",elig?"Eligible":"Not eligible",{valueColor:elig?GOLD_B:MUT});
+        dataRow("CRDP/CRSC Status",elig?"Eligible":"Not eligible",{valueColor:elig?GOLD_P:MUT});
         if(sbp&&grossPension>0){
           const sbpBase=grossPension*(sbpCoverage/100);
           const sbpPrem=sbpBase*0.065;
@@ -2534,7 +2582,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
           y+=4;
           dataRow("SBP Coverage",sbpCoverage+"% of retired pay");
           dataRow("SBP Base Amount",fmt(sbpBase)+"/mo");
-          dataRow("SBP Premium (6.5%)","-"+fmt(sbpPrem)+"/mo",{valueColor:[192,57,43]});
+          dataRow("SBP Premium (6.5%)","-"+fmt(sbpPrem)+"/mo",{valueColor:RED});
           dataRow("Survivor Annuity (55%)",fmt(sbpAnnuity)+"/mo",{valueColor:GRN});
           dataRow("Paid-Up Status","Age "+paidUpAge+" (30 yrs + age 70 rule)");
           checkSpace(20);
@@ -2550,10 +2598,10 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
         sectionHead("VA DISABILITY");
         dataRow("Combined Rating",vaRating>0?vaRating+"%":"Not rated");
         dataRow("Dependency Status",vaDeps);
-        dataRow("Monthly Tax-Free Amount",fmt(vaM),{highlight:true,valueColor:GOLD_B});
+        dataRow("Monthly Tax-Free Amount",fmt(vaM),{highlight:true,valueColor:GOLD_P});
         dataRow("Annual Tax-Free",fmt(vaM*12));
         const taxEquiv=vaM>0&&fedEffRate>0?fmt(vaM/(1-fedEffRate)):"N/A";
-        dataRow("Tax-Equivalent Value",taxEquiv,{valueColor:GOLD_B});
+        dataRow("Tax-Equivalent Value",taxEquiv,{valueColor:GOLD_P});
         y+=6;
       }
 
@@ -2563,8 +2611,8 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
         dataRow("State",selectedState);
         dataRow("State Tax Treatment",si2.label||si2.note||(si2.ok?"Exempt":"Taxed"),{valueColor:si2.ok?GRN:MUT});
         dataRow("Federal Effective Rate",(fedEffRate*100).toFixed(1)+"%");
-        dataRow("Estimated Federal Tax","-"+fmt(fedTax*12)+"/yr",{valueColor:[192,57,43]});
-        if(!si2.ok) dataRow("Estimated State Tax","-"+fmt(stTax*12)+"/yr",{valueColor:[192,57,43]});
+        dataRow("Estimated Federal Tax","-"+fmt(fedTax*12)+"/yr",{valueColor:RED});
+        if(!si2.ok) dataRow("Estimated State Tax","-"+fmt(stTax*12)+"/yr",{valueColor:RED});
         y+=6;
       }
 
@@ -2582,7 +2630,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
           sectionHead("COST OF LIVING COMPARISON");
           dataRow("Moving From",effectiveFrom2+` (Index: ${fi2})`);
           dataRow("Moving To",colTo+` (Index: ${ti2})`);
-          dataRow("Monthly Savings",(diff2<=0?"+":"")+fmt(Math.abs(diff2))+"/mo",{highlight:true,valueColor:diff2<=0?GRN:[192,57,43]});
+          dataRow("Monthly Savings",(diff2<=0?"+":"")+fmt(Math.abs(diff2))+"/mo",{highlight:true,valueColor:diff2<=0?GRN:RED});
           dataRow("Purchasing Power Equivalent",fmt(adj2)+"/mo");
 
           // Visual bar chart
@@ -2590,12 +2638,12 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
           const maxIdx=Math.max(fi2,ti2,120);
           const barW=cw-120;
           doc.setFont("helvetica","normal");doc.setFontSize(7);
-          setC(doc,MUT);doc.text(effectiveFrom2.split(",")[0],M+8,y+10);
-          setF(doc,GOLD_B);doc.rect(M+110,y+2,barW*(fi2/(maxIdx||1)),10,"F");
+          setC(doc,ROWLBL);doc.text(effectiveFrom2.split(",")[0],M+8,y+10);
+          setF(doc,GOLD_P);doc.rect(M+110,y+2,barW*(fi2/(maxIdx||1)),10,"F");
           doc.setFont("helvetica","bold");setC(doc,TXT);doc.text(String(fi2),M+114+barW*(fi2/(maxIdx||1)),y+10);
           y+=16;
-          setC(doc,MUT);doc.setFont("helvetica","normal");doc.text(colTo.split(",")[0],M+8,y+10);
-          setF(doc,diff2<=0?GRN:[192,57,43]);doc.rect(M+110,y+2,barW*(ti2/(maxIdx||1)),10,"F");
+          setC(doc,ROWLBL);doc.setFont("helvetica","normal");doc.text(colTo.split(",")[0],M+8,y+10);
+          setF(doc,diff2<=0?GRN:RED);doc.rect(M+110,y+2,barW*(ti2/(maxIdx||1)),10,"F");
           doc.setFont("helvetica","bold");setC(doc,TXT);doc.text(String(ti2),M+114+barW*(ti2/(maxIdx||1)),y+10);
           y+=24;
         }
@@ -2618,27 +2666,27 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
             dataRow("Base Pay",fmt(h3)+"/mo");
             if((state.bah||0)>0) dataRow("BAH",fmt(state.bah)+"/mo");
             dataRow("BAS",fmt(pdfEffBAS)+"/mo");
-            if(pdfSpTotal>0) dataRow("Special & Incentive Pay",fmt(pdfSpTotal)+"/mo",{valueColor:GOLD_B});
-            dataRow("Total Active Duty Comp",fmt(pdfPreTotal)+"/mo",{highlight:true,valueColor:GOLD_B});
+            if(pdfSpTotal>0) dataRow("Special & Incentive Pay",fmt(pdfSpTotal)+"/mo",{valueColor:GOLD_P});
+            dataRow("Total Active Duty Comp",fmt(pdfPreTotal)+"/mo",{highlight:true,valueColor:GOLD_P});
             y+=4;
             dataRow("Post-Retirement Income",fmt(totalForGap2)+"/mo");
-            dataRow("True Compensation Drop",(pdfCompDrop>=0?"+":"")+fmt(pdfCompDrop)+"/mo",{highlight:true,valueColor:pdfCompDrop>=0?GRN:[192,57,43]});
+            dataRow("True Compensation Drop",(pdfCompDrop>=0?"+":"")+fmt(pdfCompDrop)+"/mo",{highlight:true,valueColor:pdfCompDrop>=0?GRN:RED});
             y+=8;
           }
 
           sectionHead("INCOME GAP ANALYSIS");
           dataRow("Target Income",fmt(desiredIncome)+"/mo");
           dataRow("Total Benefits",fmt(totalForGap2)+"/mo");
-          dataRow("Monthly Gap",gap2>0?fmt(gap2)+"/mo":"Fully covered!",{highlight:true,valueColor:gap2>0?GOLD_B:GRN});
+          dataRow("Monthly Gap",gap2>0?fmt(gap2)+"/mo":"Fully covered!",{highlight:true,valueColor:gap2>0?GOLD_P:GRN});
           if(gap2>0){
-            dataRow("Gross Salary Needed",fmt(sal2*12)+"/yr",{valueColor:GOLD_B});
-            dataRow("Part-Time Equivalent","$"+(sal2*12/1040).toFixed(0)+"/hr",{valueColor:GOLD_B});
+            dataRow("Gross Salary Needed",fmt(sal2*12)+"/yr",{valueColor:GOLD_P});
+            dataRow("Part-Time Equivalent","$"+(sal2*12/1040).toFixed(0)+"/hr",{valueColor:GOLD_P});
           }
           // Coverage bar
           checkSpace(24);
-          doc.setFont("helvetica","normal");doc.setFontSize(7.5);setC(doc,MUT);
+          doc.setFont("helvetica","normal");doc.setFontSize(7.5);setC(doc,ROWLBL);
           doc.text("Benefits Coverage",M+8,y+8);
-          progressBar(M+100,cw-160,cov2,gap2<=0?GRN:GOLD_B);
+          progressBar(M+100,cw-160,cov2,gap2<=0?GRN:GOLD_P);
           y+=6;
         }
       }
@@ -2665,8 +2713,8 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
       checkSpace(36);
       y+=8;
       setF(doc,CARD2);doc.rect(M,y,cw,28,"F");
-      setF(doc,GOLD_B);doc.rect(M,y,cw,2,"F");
-      doc.setFont("helvetica","bold");doc.setFontSize(9);setC(doc,GOLD_B);
+      setF(doc,GOLD_P);doc.rect(M,y,cw,2,"F");
+      doc.setFont("helvetica","bold");doc.setFontSize(9);setC(doc,GOLD_P);
       doc.text("Update your numbers anytime at milcalc.app",W/2,y+18,{align:"center"});
 
       // Add page numbers
@@ -2721,9 +2769,10 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
 
 // ── TAB 2: BENEFITS (output-only detail views) ───────────────────────
 function BenefitsTab({state,isConfigured,go}){
-  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,vaRatings,sbp,sbpCoverage,
+  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
          selectedState,medDodPct,tdrl,reservePoints,currentAge,payStartAge,
-         giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear}=state;
+         giUsing,giType,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear,
+         mgibEnroll,mgibServiceYears}=state;
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
   const derivedPay=usePayGrade?lookupPay(payGrade,yos):null;
   const key=dk(vaDeps);
@@ -2736,8 +2785,6 @@ function BenefitsTab({state,isConfigured,go}){
   const vaM=calcVAComp(vaRating,key,nKids);
   const vaBase=calcVAComp(vaRating,key,Math.min(nKids,1)); // base rate (includes first child)
   const vaExtra=nKids>1?(VA[vaRating]?.ac||0)*(nKids-1):0;
-  const comb=combinedVA(vaRatings);
-  const combMo=calcVAComp(comb,key,nKids);
   const medCalcB=separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType):null;
   const isVAOffsetB=separationType==="medical"&&yos<20&&vaM>0&&g>0&&medCalcB&&!medCalcB.isSeverance;
   const offsetNetB=isVAOffsetB?Math.max(0,net-vaM):net;
@@ -2749,11 +2796,14 @@ function BenefitsTab({state,isConfigured,go}){
   const bAfterTaxMo=offsetNetB*(1-bEffRate);
 
   // GI Bill
+  const isMGIBb=giType==="ch30"||giType==="ch1606";
   const rate26=MHA_CITIES[giSchoolCity]||0;
   const baseRate=giOnline?GI_BILL_ONLINE_MHA:rate26;
-  const mhaMonthly=giOnline?baseRate*(giEligPct/100):baseRate*(giEligPct/100)*giEnroll;
-  const bookStipend=1000*(giEligPct/100);
+  const mhaMonthly=isMGIBb?mgibMonthly(giType,mgibEnroll,mgibServiceYears):(giOnline?baseRate*(giEligPct/100):baseRate*(giEligPct/100)*giEnroll);
+  const bookStipend=isMGIBb?0:1000*(giEligPct/100);
   const annualMHA=mhaMonthly*giMonthsPerYear;
+  const giLabelB=isMGIBb?(giType==="ch30"?"MGIB-AD (Ch. 30)":"MGIB-SR (Ch. 1606)"):"GI Bill MHA";
+  const giTaxNoteB=isMGIBb?"Taxable income":"Tax-free · school months only";
 
   // Insurance — branches by separation type
   const plan=TRICARE_PLANS[state.tricareplan]||TRICARE_PLANS.prime;
@@ -2940,17 +2990,6 @@ function BenefitsTab({state,isConfigured,go}){
           <MT label="Tax-Equiv. Value" value={`${fmt(bEffRate<1?vaM/(1-bEffRate):vaM)}/mo`} color="navy" sub={`At ${(bEffRate*100).toFixed(1)}% effective rate`}/>
         </div>
 
-        {vaRatings.length>0&&<>
-          <hr/>
-          <div className="cttl">Combined Rating (VA Math)</div>
-          <div style={{display:"flex",flexWrap:"wrap",gap:5,marginBottom:10}}>
-            {vaRatings.map((r,i)=><span key={i} className="chip g">{r}%</span>)}
-          </div>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <MT label="Combined Rating" value={`${comb}%`} color="navy"/>
-            <MT label="Monthly Comp." value={fmt(combMo)} color="green"/>
-          </div>
-        </>}
 
         {/* Collapsed reference: VA rate table */}
         <Reveal label="Show 2026 VA Rate Table">
@@ -3011,25 +3050,44 @@ function BenefitsTab({state,isConfigured,go}){
         )}
       </div>
 
-      {/* ── GI BILL MHA (only if giUsing) ── */}
+      {/* ── GI BILL (only if giUsing) ── */}
       {giUsing&&(
         <div className="card">
-          <div className="cttl">GI Bill MHA</div>
-          <div style={{marginBottom:16}}>
-            <BStat label="Monthly MHA (2026 rates)" value={fmt(mhaMonthly)} color="green"
-              sub={giOnline
-                ?`Online flat rate x ${giEligPct}% eligibility`
-                :`${fmt(baseRate)} base x ${giEligPct}% elig. x ${(giEnroll*100).toFixed(0)}% enrollment`}/>
-          </div>
-          <DR label="Monthly MHA" value={fmt(mhaMonthly)} color="green" sub="Tax-free · school months only"/>
-          <DR label="Books Stipend" value={fmt(bookStipend)+"/yr"} color="green" sub="Paid at term start"/>
-          <DR label={`Annual MHA (${giMonthsPerYear} mo)`} value={fmt(annualMHA)} color="green"/>
-          <DR label="Annual Total (MHA + Books)" value={fmt(annualMHA+bookStipend)} color="green"/>
-          <hr/>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <MT label="Lifetime (4 yr)" value={fmt((annualMHA+bookStipend)*4)} color="navy"/>
-            <MT label="Monthly avg" value={fmt((annualMHA+bookStipend)/12)} color="green" sub="incl. books"/>
-          </div>
+          <div className="cttl">{giLabelB}</div>
+          {isMGIBb?(
+            <div>
+              <div style={{marginBottom:16}}>
+                <BStat label={`Monthly Benefit (2026 rates)`} value={fmt(mhaMonthly)} color="green"
+                  sub={giType==="ch30"?`${mgibServiceYears==="3+"?"3+ yrs":"2-3 yrs"} AD · ${MGIB_ENROLL_OPTS.find(o=>o.v===mgibEnroll)?.l||"Full-Time"}`:`Selected Reserve · ${MGIB_ENROLL_OPTS.find(o=>o.v===mgibEnroll)?.l||"Full-Time"}`}/>
+              </div>
+              <DR label="Monthly Payment" value={fmt(mhaMonthly)} color="green" sub={giTaxNoteB}/>
+              <DR label={`Annual (${giMonthsPerYear} mo)`} value={fmt(annualMHA)} color="green"/>
+              <div className="ib ib-gd" style={{marginTop:10,fontSize:12}}>MGIB pays directly to you and is taxable income — unlike Post-9/11, which pays tuition to the school and provides a tax-free housing allowance.</div>
+              <hr/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <MT label="Lifetime (36 mo)" value={fmt(mhaMonthly*36)} color="navy"/>
+                <MT label="Monthly avg" value={fmt(annualMHA/12)} color="green"/>
+              </div>
+            </div>
+          ):(
+            <div>
+              <div style={{marginBottom:16}}>
+                <BStat label="Monthly MHA (2026 rates)" value={fmt(mhaMonthly)} color="green"
+                  sub={giOnline
+                    ?`Online flat rate x ${giEligPct}% eligibility`
+                    :`${fmt(baseRate)} base x ${giEligPct}% elig. x ${(giEnroll*100).toFixed(0)}% enrollment`}/>
+              </div>
+              <DR label="Monthly MHA" value={fmt(mhaMonthly)} color="green" sub="Tax-free · school months only"/>
+              <DR label="Books Stipend" value={fmt(bookStipend)+"/yr"} color="green" sub="Paid at term start"/>
+              <DR label={`Annual MHA (${giMonthsPerYear} mo)`} value={fmt(annualMHA)} color="green"/>
+              <DR label="Annual Total (MHA + Books)" value={fmt(annualMHA+bookStipend)} color="green"/>
+              <hr/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <MT label="Lifetime (4 yr)" value={fmt((annualMHA+bookStipend)*4)} color="navy"/>
+                <MT label="Monthly avg" value={fmt((annualMHA+bookStipend)/12)} color="green" sub="incl. books"/>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -3155,7 +3213,8 @@ function PlanningTab({state,set,go}){
   const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
          selectedState,income,desiredIncome,colFrom,colTo,monthlyIncome,filingStatus,
          medDodPct,tdrl,reservePoints,currentAge,payStartAge,
-         giUsing,giEligPct,giSchoolCity,giEnroll,giOnline}=state;
+         giUsing,giType,giEligPct,giSchoolCity,giEnroll,giOnline,
+         mgibEnroll,mgibServiceYears}=state;
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
   const key=dk(vaDeps);
   const nKids=vaChildren||0;
@@ -3183,8 +3242,10 @@ function PlanningTab({state,set,go}){
   const {monthlyTax:pFedTaxMo}=calcFederalTax(taxableAnnualP,filingStatus||"single",state.age65Plus,state.spouseAge65Plus);
   const stTaxMo=calcStateTax(offsetAnnP,si)/12;
   const atP=netP-pFedTaxMo-stTaxMo;
+  const isMGIBp=giType==="ch30"||giType==="ch1606";
   const mhaBase=giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[giSchoolCity]||0);
-  const mhaMo=giUsing?Math.round(mhaBase*(giEligPct/100)*giEnroll):0;
+  const mhaMo=giUsing?(isMGIBp?Math.round(mgibMonthly(giType,mgibEnroll,mgibServiceYears)):Math.round(mhaBase*(giEligPct/100)*giEnroll)):0;
+  const giLabelP=isMGIBp?(giType==="ch30"?"MGIB-AD (Ch. 30)":"MGIB-SR (Ch. 1606)"):"GI Bill MHA";
   const otherMo=Math.round((income||0)/12);
   const autoMonthly=Math.round(atP+vaM+otherMo+mhaMo);
   const effectiveMonthly=monthlyIncome>0?monthlyIncome:(autoMonthly>0?autoMonthly:5000);
@@ -3415,7 +3476,7 @@ function PlanningTab({state,set,go}){
                   <div style={{fontSize:10,fontWeight:700,letterSpacing:".09em",textTransform:"uppercase",color:"var(--fnt)",marginBottom:6,marginTop:4}}>Post-Retirement Income</div>
                   <DR label="Pension (net)" value={fmt(atP)} color="navy"/>
                   <DR label="VA Compensation" value={fmt(vaM)} color="green" sub="Tax-free"/>
-                  {mhaMo>0&&<DR label="GI Bill MHA" value={fmt(mhaMo)} color="green"/>}
+                  {mhaMo>0&&<DR label={giLabelP} value={fmt(mhaMo)} color="green"/>}
                   {otherMo>0&&<DR label="Other Income" value={fmt(otherMo)}/>}
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderTop:"1px solid var(--br)"}}>
                     <span style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Total Retirement</span>
@@ -3499,7 +3560,7 @@ function PlanningTab({state,set,go}){
             <div className="cttl">Your Benefits (after tax)</div>
             <DR label="Pension (after taxes & SBP)" value={fmt(atP)} color="navy"/>
             <DR label="VA Compensation" value={fmt(vaM)} color="green" sub="Tax-free"/>
-            {mhaMo>0&&<DR label="GI Bill MHA" value={fmt(mhaMo)} color="green" sub="School months only"/>}
+            {mhaMo>0&&<DR label={giLabelP} value={fmt(mhaMo)} color="green" sub="School months only"/>}
             {otherMo>0&&<DR label="Other Income" value={fmt(otherMo)} color="ink" sub="Monthly average"/>}
             <hr/>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0"}}>
@@ -3532,11 +3593,11 @@ function PlanningTab({state,set,go}){
 function ProfileTab({state,set,isConfigured,go}){
   const {userName,separationType,retType,yos,high3,usePayGrade,payGrade,sbp,sbpCoverage,
          medDodPct,tdrl,reservePoints,currentAge,payStartAge,reserveHealthType,
-         vaRating,vaDeps,vaChildren,vaRatings,selectedState,income,desiredIncome,
-         giUsing,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear,
+         vaRating,vaDeps,vaChildren,selectedState,income,desiredIncome,
+         giUsing,giType,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear,
+         mgibEnroll,mgibServiceYears,
          tricareplan,tricareFamSize,tricareGroup,useVgli,vgliCoverage,vgliAge,otherLifePremium}=state;
   const [nameWarn,setNameWarn]=useState("");
-  const [addR,setAddR]=useState(10);
   const [confirmReset,setConfirmReset]=useState(false);
   const derivedPay=usePayGrade?lookupPay(payGrade,yos):null;
   const h3Prof=(usePayGrade&&derivedPay)?derivedPay:high3;
@@ -3923,30 +3984,6 @@ function ProfileTab({state,set,isConfigured,go}){
             ?"Included in base rate"
             :undefined}
           warn={vaRating>0&&vaRating<=20&&nKids>0?"Dependent compensation not available at 10-20% rating":undefined}/>
-
-        <hr/>
-        <div className="cttl" style={{marginTop:0}}>Combined Rating Calculator (VA Math)</div>
-        <p style={{fontSize:13,color:"var(--mut)",marginBottom:12,lineHeight:1.5}}>VA applies each rating to your remaining "whole person" — not simple addition.</p>
-        <div style={{display:"flex",gap:8,marginBottom:12}}>
-          <select value={addR} onChange={e=>setAddR(Number(e.target.value))} style={{flex:1,fontSize:16,minHeight:48}}>
-            {[10,20,30,40,50,60,70,80,90,100].map(v=><option key={v} value={v}>{v}%</option>)}
-          </select>
-          <button onClick={()=>set("vaRatings",[...vaRatings,addR])}
-            style={{background:"var(--nv)",color:"var(--ink)",border:"none",borderRadius:10,padding:"0 20px",
-              fontFamily:"Barlow,sans-serif",fontWeight:600,fontSize:16,cursor:"pointer",flexShrink:0,minHeight:48}}>
-            + Add
-          </button>
-        </div>
-        <div style={{display:"flex",flexWrap:"wrap",gap:5,minHeight:32,marginBottom:10}}>
-          {vaRatings.length===0&&<span style={{color:"var(--fnt)",fontSize:13}}>Add individual ratings above</span>}
-          {vaRatings.map((r,i)=><span key={i} className="chip g" onClick={()=>set("vaRatings",vaRatings.filter((_,j)=>j!==i))}>{r}% x</span>)}
-        </div>
-        {vaRatings.length>0&&(
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
-            <MT label="Combined Rating" value={`${combinedVA(vaRatings)}%`} color="navy"/>
-            <MT label="Monthly Comp." value={fmt(calcVAComp(combinedVA(vaRatings),dk(vaDeps),nKids))} color="green"/>
-          </div>
-        )}
       </div>
 
       {/* ── LOCATION & INCOME ── */}
@@ -3977,22 +4014,48 @@ function ProfileTab({state,set,isConfigured,go}){
           options={[{v:"n",l:"No / Not yet"},{v:"y",l:"Yes, enrolled"}]}/>
         {giUsing&&(
           <div style={{marginTop:12}}>
-            <SF label="Active Duty Service Time" value={giEligPct}
-              onChange={v=>set("giEligPct",Number(v))}
-              options={ELIG_TIERS.map(t=>({v:t.pct,l:t.label}))}/>
-            <TG label="Attendance Mode" value={giOnline?"online":"inperson"}
-              onChange={v=>set("giOnline",v==="online")}
-              options={[{v:"inperson",l:"In-Person / Hybrid"},{v:"online",l:"Online Only"}]}/>
-            {!giOnline&&(
-              <SF label="School Location" value={giSchoolCity}
-                onChange={v=>set("giSchoolCity",v)}
-                options={Object.keys(MHA_CITIES).sort()}
-                hint="Select the city closest to your school."/>
+            <SF label="GI Bill Type" value={giType}
+              onChange={v=>set("giType",v)}
+              options={[{v:"post911",l:"Post-9/11 (Ch. 33)"},{v:"ch30",l:"MGIB Active Duty (Ch. 30)"},{v:"ch1606",l:"MGIB Selected Reserve (Ch. 1606)"}]}/>
+            {giType==="post911"&&(
+              <>
+                <SF label="Active Duty Service Time" value={giEligPct}
+                  onChange={v=>set("giEligPct",Number(v))}
+                  options={ELIG_TIERS.map(t=>({v:t.pct,l:t.label}))}/>
+                <TG label="Attendance Mode" value={giOnline?"online":"inperson"}
+                  onChange={v=>set("giOnline",v==="online")}
+                  options={[{v:"inperson",l:"In-Person / Hybrid"},{v:"online",l:"Online Only"}]}/>
+                {!giOnline&&(
+                  <SF label="School Location" value={giSchoolCity}
+                    onChange={v=>set("giSchoolCity",v)}
+                    options={Object.keys(MHA_CITIES).sort()}
+                    hint="Select the city closest to your school."/>
+                )}
+                <SF label="Enrollment Status" value={giEnroll}
+                  onChange={v=>set("giEnroll",Number(v))}
+                  options={ENROLL_OPTS}/>
+              </>
             )}
-            <SF label="Enrollment Status" value={giEnroll}
-              onChange={v=>set("giEnroll",Number(v))}
-              options={ENROLL_OPTS}/>
-            <NF label="Months of MHA Per Year" value={giMonthsPerYear}
+            {giType==="ch30"&&(
+              <>
+                <SF label="Active Duty Service" value={mgibServiceYears}
+                  onChange={v=>set("mgibServiceYears",v)}
+                  options={[{v:"3+",l:"3+ years"},{v:"2-3",l:"2–3 years"}]}/>
+                <SF label="Enrollment Status" value={mgibEnroll}
+                  onChange={v=>set("mgibEnroll",v)}
+                  options={MGIB_ENROLL_OPTS}/>
+                <div className="ib ib-gd" style={{marginTop:8,fontSize:12}}>MGIB pays {fmt((MGIB_AD[mgibServiceYears]||MGIB_AD["3+"])[mgibEnroll]||0)}/mo directly to you. This is taxable income.</div>
+              </>
+            )}
+            {giType==="ch1606"&&(
+              <>
+                <SF label="Enrollment Status" value={mgibEnroll}
+                  onChange={v=>set("mgibEnroll",v)}
+                  options={MGIB_ENROLL_OPTS}/>
+                <div className="ib ib-gd" style={{marginTop:8,fontSize:12}}>MGIB-SR pays {fmt(MGIB_SR[mgibEnroll]||0)}/mo directly to you. This is taxable income.</div>
+              </>
+            )}
+            <NF label={giType==="post911"?"Months of MHA Per Year":"Months Enrolled Per Year"} value={giMonthsPerYear}
               onChange={v=>set("giMonthsPerYear",v)} min={1} max={12} suf="mo"
               hint="Typically 9-10 months (not paid during breaks)"/>
           </div>
@@ -4467,11 +4530,12 @@ export default function App(){
     retType:"High-3",yos:0,high3:0,usePayGrade:true,payGrade:"E-7",sbp:false,sbpCoverage:55,sbpRetireAge:42,
     medDodPct:50,tdrl:false,combatRelated:false,
     reservePoints:3600,currentAge:45,payStartAge:60,reserveHealthType:"trs",
-    vaRating:0,vaDeps:"Single",vaChildren:0,vaRatings:[],
+    vaRating:0,vaDeps:"Single",vaChildren:0,
     selectedState:"Texas",income:0,filingStatus:"single",age65Plus:false,spouseAge65Plus:false,
     colFrom:"Fayetteville, NC",colTo:"Austin, TX",monthlyIncome:5000,
     desiredIncome:6000,
-    giUsing:false,giEligPct:100,giSchoolCity:"Austin, TX",giEnroll:1.0,giOnline:false,giMonthsPerYear:9,
+    giUsing:false,giType:"post911",giEligPct:100,giSchoolCity:"Austin, TX",giEnroll:1.0,giOnline:false,giMonthsPerYear:9,
+    mgibEnroll:"full",mgibServiceYears:"3+",
     tricareplan:"prime",tricareFamSize:"self",tricareGroup:"A",
     useVgli:true,vgliCoverage:400000,vgliAge:45,otherLifePremium:0,
     bah:0,bas:0,specialPays:{},
@@ -4522,8 +4586,9 @@ export default function App(){
   const stTax=calcStateTax(offsetNetPApp*12,si)/12;
   const atP=offsetNetPApp-appFedTax-stTax;
   const vaM=vaM_app;
+  const isMGIBapp=s.giType==="ch30"||s.giType==="ch1606";
   const mhaBase=s.giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[s.giSchoolCity]||0);
-  const mhaMo=s.giUsing?Math.round(mhaBase*(s.giEligPct/100)*s.giEnroll):0;
+  const mhaMo=s.giUsing?(isMGIBapp?Math.round(mgibMonthly(s.giType,s.mgibEnroll,s.mgibServiceYears)):Math.round(mhaBase*(s.giEligPct/100)*s.giEnroll)):0;
   const otherMo=Math.round((s.income||0)/12);
   const total=Math.max(0,atP+vaM+otherMo+mhaMo);
   const healthPrem2=(()=>{
