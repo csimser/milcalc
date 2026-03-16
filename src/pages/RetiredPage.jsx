@@ -15,6 +15,7 @@ const COLA_2026 = 2.5;
 const LS_KEY = "ret_state_v1";
 
 const DEFAULT_STATE = {
+  name: "",
   pension: 0,
   va: 0,
   vaRating: 0,
@@ -25,6 +26,8 @@ const DEFAULT_STATE = {
   ssa: 0,
   selectedState: "Texas",
   tspType: "traditional",
+  tspTradBalance: 0,
+  tspRothBalance: 0,
   deps: "s0",
   tspBalance: 0,
   tspGrowthRate: 7,
@@ -238,21 +241,29 @@ export default function RetiredPage() {
   const effectiveDeps = isAutoCalc ? (s.autoDeps || "s0") : (s.deps || "s0");
   const filingStatus = effectiveDeps.startsWith("sp") ? "mfj" : "single";
   const tspType = s.tspType || "traditional";
+  const isSplit = tspType === "split";
   // Effective VA: auto or manual
   const effectiveVA = isAutoCalc ? autoVaAmt : (s.va || 0);
   const netPension = grossPension - stateTaxMo;
   // Savings projections (4% rule at 65) — computed first so tspMonthlyDraw can be used in fed tax
   const yearsTo65 = Math.max(0, 65 - age);
   const atAge = age >= 65 ? "now" : "at 65";
-  const tspAt65 = growBal(s.tspBalance || 0, 0, yearsTo65, (s.tspGrowthRate || 7) / 100);
-  const tspMonthlyDraw = tspAt65 * 0.04 / 12;
+  const tspRate = (s.tspGrowthRate || 7) / 100;
+  const tradBal = isSplit ? (s.tspTradBalance || 0) : (s.tspBalance || 0);
+  const rothBal = isSplit ? (s.tspRothBalance || 0) : 0;
+  const tspTradAt65 = growBal(tradBal, 0, yearsTo65, tspRate);
+  const tspRothAt65 = growBal(rothBal, 0, yearsTo65, tspRate);
+  const tspAt65 = tspTradAt65 + tspRothAt65;
+  const tspTradDraw = tspTradAt65 * 0.04 / 12;
+  const tspRothDraw = tspRothAt65 * 0.04 / 12;
+  const tspMonthlyDraw = tspTradDraw + tspRothDraw;
   const hysaAt65 = growBal(s.hysaBalance || 0, s.hysaContribMo || 0, yearsTo65, (s.hysaApy || 4.5) / 100);
   const hysaMonthlyDraw = hysaAt65 * 0.04 / 12;
   const othAt65 = growBal(s.othBalance || 0, s.othContribMo || 0, yearsTo65, (s.othGrowthRate || 7) / 100);
   const othMonthlyDraw = othAt65 * 0.04 / 12;
   const totalSavingsDraw = tspMonthlyDraw + hysaMonthlyDraw + othMonthlyDraw;
-  // Federal tax — computed after tspMonthlyDraw is known
-  const tspTaxable = tspType === "traditional" ? tspMonthlyDraw : 0;
+  // Federal tax — only Traditional TSP draws are taxable
+  const tspTaxable = tspType === "roth" ? 0 : tspTradDraw;
   const fedTaxableAnnual = (grossPension - stateTaxMo) * 12 + tspTaxable * 12;
   const fedTax = calcFederalTax(fedTaxableAnnual, filingStatus, age >= 65, false);
   const fedTaxMo = fedTax.monthlyTax;
@@ -480,7 +491,7 @@ export default function RetiredPage() {
       doc.setFont("helvetica", "bold"); doc.setFontSize(20);
       doc.setTextColor(228, 169, 74); doc.text("MilCalc", M, 44);
       doc.setFont("helvetica", "normal"); doc.setFontSize(11);
-      doc.setTextColor(...hdrSub); doc.text("Retirement Income — milcalc.app", M, 60);
+      doc.setTextColor(...hdrSub); doc.text((s.name||"").trim() ? `Transition Plan for ${(s.name||"").trim()} · milcalc.app` : "Transition Plan · milcalc.app", M, 60);
       doc.setFontSize(10); doc.text(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), W - M, 60, { align: "right" });
       y = 98;
 
@@ -521,7 +532,10 @@ export default function RetiredPage() {
       if (effectiveVA  > 0) row("VA Disability (tax-free)", fmt(effectiveVA) + "/mo",   gold);
       // If already 65+, show investment draws and SSA in same section
       if (age >= 65) {
-        if (tspMonthlyDraw > 0) row(`TSP Draw (${fmt(Math.round(tspAt65))} bal · 4% rule)`, fmt(Math.round(tspMonthlyDraw)) + "/mo", green);
+        if (tspMonthlyDraw > 0 && isSplit) {
+          if (tspTradDraw > 0) row(`TSP Traditional Draw (${fmt(Math.round(tspTradAt65))} bal · taxable)`, fmt(Math.round(tspTradDraw)) + "/mo", green);
+          if (tspRothDraw > 0) row(`TSP Roth Draw (${fmt(Math.round(tspRothAt65))} bal · tax-free)`, fmt(Math.round(tspRothDraw)) + "/mo", green);
+        } else if (tspMonthlyDraw > 0) row(`TSP Draw (${fmt(Math.round(tspAt65))} bal · 4% rule · ${tspType === "roth" ? "tax-free" : "taxable"})`, fmt(Math.round(tspMonthlyDraw)) + "/mo", green);
         if (hysaMonthlyDraw > 0) row(`HYSA Draw (${fmt(Math.round(hysaAt65))} bal · 4% rule)`, fmt(Math.round(hysaMonthlyDraw)) + "/mo", green);
         if (othMonthlyDraw > 0) row(`Investments Draw (${fmt(Math.round(othAt65))} bal · 4% rule)`, fmt(Math.round(othMonthlyDraw)) + "/mo", green);
         if ((s.ssa || 0) > 0) row("Social Security", fmt(s.ssa) + "/mo", green);
@@ -555,8 +569,13 @@ export default function RetiredPage() {
         if (tspMonthlyDraw > 0 || hysaMonthlyDraw > 0 || othMonthlyDraw > 0) {
           section("PROJECTED ACCOUNT BALANCES AT AGE 65");
           if (tspMonthlyDraw > 0) {
-            row("TSP Balance at 65", fmt(Math.round(tspAt65)));
-            row("TSP Monthly Draw (4% rule)", fmt(Math.round(tspMonthlyDraw)) + "/mo", green);
+            if (isSplit) {
+              if (tspTradAt65 > 0) { row("TSP Traditional Balance at 65", fmt(Math.round(tspTradAt65))); row("TSP Traditional Draw (4% rule) — taxable", fmt(Math.round(tspTradDraw)) + "/mo", green); }
+              if (tspRothAt65 > 0) { row("TSP Roth Balance at 65", fmt(Math.round(tspRothAt65))); row("TSP Roth Draw (4% rule) — tax-free", fmt(Math.round(tspRothDraw)) + "/mo", green); }
+            } else {
+              row("TSP Balance at 65", fmt(Math.round(tspAt65)));
+              row(`TSP Monthly Draw (4% rule) — ${tspType === "roth" ? "tax-free" : "taxable"}`, fmt(Math.round(tspMonthlyDraw)) + "/mo", green);
+            }
           }
           if (hysaMonthlyDraw > 0) {
             row("HYSA Balance at 65", fmt(Math.round(hysaAt65)));
@@ -572,7 +591,10 @@ export default function RetiredPage() {
 
         section("FULL INCOME AT AGE 65");
         row("Phase 1 Take-Home (from page 1)", fmt(phase1TakeHome) + "/mo", gold);
-        if (tspMonthlyDraw > 0) row("+ TSP Draw at 65", fmt(Math.round(tspMonthlyDraw)) + "/mo", green);
+        if (tspMonthlyDraw > 0 && isSplit) {
+          if (tspTradDraw > 0) row("+ TSP Traditional Draw at 65 (taxable)", fmt(Math.round(tspTradDraw)) + "/mo", green);
+          if (tspRothDraw > 0) row("+ TSP Roth Draw at 65 (tax-free)", fmt(Math.round(tspRothDraw)) + "/mo", green);
+        } else if (tspMonthlyDraw > 0) row(`+ TSP Draw at 65 (${tspType === "roth" ? "tax-free" : "taxable"})`, fmt(Math.round(tspMonthlyDraw)) + "/mo", green);
         if (hysaMonthlyDraw > 0) row("+ HYSA Draw at 65", fmt(Math.round(hysaMonthlyDraw)) + "/mo", green);
         if (othMonthlyDraw > 0) row("+ Other Investments Draw at 65", fmt(Math.round(othMonthlyDraw)) + "/mo", green);
         if ((s.ssa || 0) > 0) row("+ Social Security at 65", fmt(s.ssa) + "/mo", green);
@@ -593,6 +615,17 @@ export default function RetiredPage() {
         doc.text("These are projections based on historical averages and are not guaranteed.", M, y); y += 14;
       }
 
+      // Debriefed promo box on last page
+      const lastPg = doc.getNumberOfPages(); doc.setPage(lastPg);
+      const promoY = 720;
+      doc.setDrawColor(...gold); doc.setLineWidth(1);
+      doc.rect(M - 6, promoY, W - M * 2 + 12, 36, "S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...gold);
+      doc.text("Planning your transition?", M, promoY + 11);
+      doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(...mut);
+      doc.text("Translate your military experience into a civilian resume at", M, promoY + 22);
+      doc.setTextColor(...gold); doc.text("getdebriefed.co", M, promoY + 32);
+
       const pages = doc.getNumberOfPages();
       for (let i = 1; i <= pages; i++) {
         doc.setPage(i);
@@ -612,9 +645,6 @@ export default function RetiredPage() {
         yos: 0,
         pay_grade: "",
         has_bah: false,
-        has_special_pays: false,
-        special_pay_count: 0,
-        special_pay_total: 0,
         has_preretirement_comp: false,
       });
     } catch (err) {
@@ -868,8 +898,8 @@ export default function RetiredPage() {
             )}
             <div style={{ paddingTop: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", marginBottom: 6 }}>TSP Type:</div>
-              <div style={{ display:"flex", gap:8, marginBottom:8 }}>
-                {["traditional","roth"].map(t => (
+              <div style={{ display:"flex", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+                {[["traditional","Traditional"],["roth","Roth"],["split","Split"]].map(([t,l]) => (
                   <button key={t} type="button"
                     onClick={() => set("tspType", t)}
                     style={{
@@ -879,9 +909,31 @@ export default function RetiredPage() {
                       color: (s.tspType||"traditional") === t ? "#f0c14b" : "#9ca3af",
                       cursor:"pointer", fontFamily:"inherit",
                     }}
-                  >{t === "traditional" ? "Traditional (taxable)" : "Roth (tax-free)"}</button>
+                  >{l}</button>
                 ))}
               </div>
+              {isSplit && (
+                <>
+                  <div className="ds-income-row">
+                    <div><div className="ds-income-lbl">Traditional Balance <span style={{fontSize:10,color:"#9ca3af"}}>(taxable)</span></div></div>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontSize:14,color:"#6b7280"}}>$</span>
+                      <input className="ret2-num" type="number" min={0} placeholder="0"
+                        value={s.tspTradBalance||""} onChange={e=>set("tspTradBalance",Number(e.target.value)||0)}
+                        onFocus={e=>e.target.select()} />
+                    </div>
+                  </div>
+                  <div className="ds-income-row">
+                    <div><div className="ds-income-lbl">Roth Balance <span style={{fontSize:10,color:"#4ade80"}}>(tax-free)</span></div></div>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontSize:14,color:"#6b7280"}}>$</span>
+                      <input className="ret2-num" type="number" min={0} placeholder="0"
+                        value={s.tspRothBalance||""} onChange={e=>set("tspRothBalance",Number(e.target.value)||0)}
+                        onFocus={e=>e.target.select()} />
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
             {/* ── Deductions ── */}
             <div className="ds-income-row">
@@ -1007,8 +1059,13 @@ export default function RetiredPage() {
                       : "Not available at retirement — assumes continued investment growth starting at age 65."}
                   </div>
                 </div>
-                {tspMonthlyDraw > 0 && (
-                  <IncomeRow label="TSP Monthly Draw" sub={age >= 65 ? `4% rule (${fmt(Math.round(tspAt65))} bal)` : `4% rule · at 65 (${fmt(Math.round(tspAt65))} bal)`} value={`+${fmt(Math.round(tspMonthlyDraw))}`} color="green" />
+                {tspMonthlyDraw > 0 && isSplit ? (
+                  <>
+                    {tspTradDraw > 0.5 && <IncomeRow label="TSP Traditional Draw" sub={`4% rule · taxable (${fmt(Math.round(tspTradAt65))} bal)`} value={`+${fmt(Math.round(tspTradDraw))}`} color="green" />}
+                    {tspRothDraw > 0.5 && <IncomeRow label="TSP Roth Draw" sub={`4% rule · tax-free (${fmt(Math.round(tspRothAt65))} bal)`} value={`+${fmt(Math.round(tspRothDraw))}`} color="green" />}
+                  </>
+                ) : tspMonthlyDraw > 0 && (
+                  <IncomeRow label="TSP Monthly Draw" sub={`4% rule · ${tspType === "roth" ? "tax-free" : "taxable"} (${fmt(Math.round(tspAt65))} bal)`} value={`+${fmt(Math.round(tspMonthlyDraw))}`} color="green" />
                 )}
                 {hysaMonthlyDraw > 0 && (
                   <IncomeRow label="HYSA Monthly Draw" sub={age >= 65 ? `4% rule (${fmt(Math.round(hysaAt65))} bal)` : `4% rule · at 65 (${fmt(Math.round(hysaAt65))} bal)`} value={`+${fmt(Math.round(hysaMonthlyDraw))}`} color="green" />
@@ -1036,15 +1093,17 @@ export default function RetiredPage() {
             <div style={{ fontWeight:600, fontSize:13, color:"#9ca3af", marginBottom:8 }}>
               Thrift Savings Plan (TSP)
             </div>
-            <div className="ds-income-row">
-              <div><div className="ds-income-lbl">Current Balance</div></div>
-              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <span style={{fontSize:14,color:"#6b7280"}}>$</span>
-                <input className="ret2-num" type="text" inputMode="numeric" placeholder="0"
-                  value={s.tspBalance||""} onChange={e=>set("tspBalance",Number(e.target.value.replace(/[^0-9]/g,""))||0)}
-                  onFocus={e=>e.target.select()} />
+            {!isSplit && (
+              <div className="ds-income-row">
+                <div><div className="ds-income-lbl">Current Balance</div></div>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:14,color:"#6b7280"}}>$</span>
+                  <input className="ret2-num" type="text" inputMode="numeric" placeholder="0"
+                    value={s.tspBalance||""} onChange={e=>set("tspBalance",Number(e.target.value.replace(/[^0-9]/g,""))||0)}
+                    onFocus={e=>e.target.select()} />
+                </div>
               </div>
-            </div>
+            )}
             <div className="ds-income-row">
               <div>
                 <div className="ds-income-lbl">Growth Rate %</div>
@@ -1057,11 +1116,17 @@ export default function RetiredPage() {
                 <span style={{fontSize:13,color:"#6b7280"}}>%</span>
               </div>
             </div>
-            {tspAt65 > 100 && (
+            {tspAt65 > 100 && !isSplit && (
               <IncomeRow label={`TSP ${atAge} (${fmt(Math.round(tspAt65))})`}
-                sub={`Monthly draw ${atAge} (4% rule · Bengen 1994)`}
+                sub={`4% rule · ${tspType === "roth" ? "tax-free" : "taxable"} · Bengen 1994`}
                 value={`${fmt(Math.round(tspMonthlyDraw))}/mo`}
                 color="green" />
+            )}
+            {tspAt65 > 100 && isSplit && (
+              <>
+                {tspTradAt65 > 100 && <IncomeRow label={`TSP Traditional ${atAge} (${fmt(Math.round(tspTradAt65))})`} sub="4% rule · taxable" value={`${fmt(Math.round(tspTradDraw))}/mo`} color="green" />}
+                {tspRothAt65 > 100 && <IncomeRow label={`TSP Roth ${atAge} (${fmt(Math.round(tspRothAt65))})`} sub="4% rule · tax-free" value={`${fmt(Math.round(tspRothDraw))}/mo`} color="green" />}
+              </>
             )}
 
             {/* HYSA */}
@@ -1307,6 +1372,17 @@ export default function RetiredPage() {
             <button className="ds-share-btn" style={{ flex: 1, marginBottom: 0, background: "rgba(212,160,23,0.15)", color: "#f0c14b", border: "1px solid rgba(212,160,23,0.3)" }} onClick={generatePDF}>
               📄 Export PDF
             </button>
+          </div>
+
+          {/* ── DEBRIEFED PERSISTENT FOOTER ── */}
+          <div style={{ textAlign:"center", padding:"12px 16px", borderTop:"1px solid rgba(255,255,255,0.06)", marginTop:8 }}>
+            <span style={{ fontSize:12, color:"#6b7280" }}>Need a civilian resume? Try Debriefed → </span>
+            <a href="https://getdebriefed.co?utm_source=milcalc&utm_medium=footer&utm_campaign=footer"
+              target="_blank" rel="noopener noreferrer"
+              style={{ fontSize:12, color:"#d4a017", textDecoration:"none", fontWeight:600 }}
+              onClick={() => track("Debriefed Promo Clicked", { trigger: "footer" })}>
+              getdebriefed.co
+            </a>
           </div>
 
           {/* ── FEEDBACK BUTTON ── */}

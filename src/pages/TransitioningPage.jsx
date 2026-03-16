@@ -6,11 +6,11 @@ import {
 } from "../components/ui.jsx";
 import {
   lookupPay, pensionBySepType, calcVAComp, calcStateTax, calcFederalTax, pct, fmt, mgibMonthly,
-  sumSpecialPays, countSpecialPays, enabledPayIds, vgliMonthly, getVAPriorityGroup,
+  vgliMonthly, getVAPriorityGroup,
 } from "../lib/calc.js";
 import {
   GRADE_LABELS, GRADE_GROUPS, COL, MHA_CITIES, STATES,
-  TRICARE_PLANS, GI_BILL_ONLINE_MHA, MGIB_ENROLL_OPTS, SPECIAL_PAY_DEFS, VA_PRIORITY_GROUPS,
+  TRICARE_PLANS, GI_BILL_ONLINE_MHA, MGIB_ENROLL_OPTS, VA_PRIORITY_GROUPS,
 } from "../lib/data.js";
 import { jsPDF } from "jspdf";
 import { track, r100 } from "../analytics.js";
@@ -58,6 +58,9 @@ const DEFAULT_STATE = {
   mgibServiceYears: "3+",
   tspType: "traditional",
   tspBalance: 0,
+  tspTradBalance: 0,
+  tspRothBalance: 0,
+  tspContribMo: 0,
   tspGrowthRate: 7,
   hysaBalance: 0,
   hysaContribMo: 0,
@@ -70,7 +73,7 @@ const DEFAULT_STATE = {
   lifeIns: 0,
   targetIncome: 0,
   vgliOn: false,
-  vgliCoverage: 400000,
+  vgliCoverage: 500000,
   vgliAge: 40,
   civHealthOn: false,
   civHealthAmt: 1300,
@@ -78,7 +81,8 @@ const DEFAULT_STATE = {
   city2: "San Antonio, TX",
   city3: "Jacksonville, FL",
   selectedState: "Texas",
-  specialPays: {},
+  otherMonthlyIncome: 0,
+  tspYrsRemaining: 0,
 };
 
 function loadState() {
@@ -382,7 +386,6 @@ export default function TransitioningPage() {
   const [s, setS] = useState(loadState);
   const set = (key, val) => setS(prev => ({ ...prev, [key]: val }));
   const [showShareModal, setShowShareModal] = useState(false);
-  const [showSpecialPay, setShowSpecialPay] = useState(false);
   const [showDebriefedPromo, setShowDebriefedPromo] = useState(false);
   const DEBRIEF_SESSION_KEY = "milcalc_debriefed_shown";
   const POPUP_SESSION_KEY = "milcalc_tr_popup_shown";
@@ -397,6 +400,7 @@ export default function TransitioningPage() {
   const [fbSent, setFbSent] = useState(false);
   const [pdfTheme, setPdfTheme] = useState("dark");
   const [showTricareInfo, setShowTricareInfo] = useState(false);
+  const [showTargetTip, setShowTargetTip] = useState(false);
   const popupShownRef = useRef(false);
   const popupStartTime = useRef(Date.now());
   const isPopupBlocked = () => { try { return sessionStorage.getItem(POPUP_SESSION_KEY) === "1"; } catch { return false; } };
@@ -412,11 +416,18 @@ export default function TransitioningPage() {
     track("Engagement Popup Dismissed", {});
   };
   // ── PWA install prompt ──
-  const PWA_SESSION_KEY = "milcalc_pwa_shown";
+  const PWA_LS_KEY = "milcalc_pwa_dismissed_at";
   const [pwaPromptEvent, setPwaPromptEvent] = useState(null);
   const [showPwaPrompt, setShowPwaPrompt] = useState(false);
   const pwaShownRef = useRef(false);
-  const isPwaBlocked = () => { try { return sessionStorage.getItem(PWA_SESSION_KEY) === "1" || window.matchMedia("(display-mode: standalone)").matches || navigator.standalone; } catch { return false; } };
+  const isPwaBlocked = () => {
+    try {
+      if (window.matchMedia("(display-mode: standalone)").matches || navigator.standalone) return true;
+      const dismissed = Number(localStorage.getItem(PWA_LS_KEY) || 0);
+      if (dismissed && Date.now() - dismissed < 30 * 24 * 60 * 60 * 1000) return true;
+    } catch {}
+    return false;
+  };
   useEffect(() => {
     const handler = e => { e.preventDefault(); setPwaPromptEvent(e); };
     window.addEventListener("beforeinstallprompt", handler);
@@ -424,8 +435,8 @@ export default function TransitioningPage() {
   }, []);
   const triggerPwa = () => {
     if (isPwaBlocked() || pwaShownRef.current || !pwaPromptEvent || showDebriefedPromo || showPopup) return;
+    if (calcCountRef.current < 3) return;
     pwaShownRef.current = true;
-    try { sessionStorage.setItem(PWA_SESSION_KEY, "1"); } catch {}
     setShowPwaPrompt(true);
     track("PWA Install Prompt Shown", {});
   };
@@ -439,29 +450,46 @@ export default function TransitioningPage() {
     }
     setShowPwaPrompt(false);
   };
-  const dismissPwa = () => { setShowPwaPrompt(false); track("PWA Install Dismissed", {}); };
-  // PWA trigger: 3+ minutes on page
-  useEffect(() => {
-    if (!pwaPromptEvent) return;
-    const timer = setTimeout(() => triggerPwa(), 180000); // 3 minutes
-    return () => clearTimeout(timer);
-  }, [pwaPromptEvent]); // eslint-disable-line react-hooks/exhaustive-deps
+  const dismissPwa = () => {
+    try { localStorage.setItem(PWA_LS_KEY, String(Date.now())); } catch {}
+    setShowPwaPrompt(false);
+    track("PWA Install Dismissed", {});
+  };
   // ── Rating prompt ──
-  const RATING_SESSION_KEY = "milcalc_rating_shown";
+  const RATING_LS_KEY = "milcalc_rating_last_shown";
+  const RETURNING_LS_KEY = "milcalc_returning_user";
   const [showRatingPrompt, setShowRatingPrompt] = useState(false);
   const ratingShownRef = useRef(false);
-  const isRatingBlocked = () => { try { return sessionStorage.getItem(RATING_SESSION_KEY) === "1"; } catch { return false; } };
+  const calcCountRef = useRef(0);
+  const isRatingBlocked = () => {
+    try {
+      // Never first session
+      if (!localStorage.getItem(RETURNING_LS_KEY)) return true;
+      // Once per week
+      const last = Number(localStorage.getItem(RATING_LS_KEY) || 0);
+      if (Date.now() - last < 7 * 24 * 60 * 60 * 1000) return true;
+    } catch {}
+    return false;
+  };
   const triggerRatingPrompt = () => {
-    if (isRatingBlocked() || ratingShownRef.current || showDebriefedPromo || showPopup) return;
+    if (ratingShownRef.current || showDebriefedPromo || showPopup) return;
+    if (isRatingBlocked()) return;
+    if (calcCountRef.current < 3) return;
+    if (Date.now() - popupStartTime.current < 5 * 60 * 1000) return;
     ratingShownRef.current = true;
-    try { sessionStorage.setItem(RATING_SESSION_KEY, "1"); } catch {}
+    try { localStorage.setItem(RATING_LS_KEY, String(Date.now())); } catch {}
     setShowRatingPrompt(true);
     track("Rating Prompt Shown", {});
   };
   const dismissRatingPrompt = (action) => { setShowRatingPrompt(false); track("Rating Prompt Dismissed", { action }); };
-  // Rating prompt trigger: 8 minutes on page (after engagement popup window)
+  // Mark returning user at end of first session, check on mount
   useEffect(() => {
-    const timer = setTimeout(() => triggerRatingPrompt(), 480000); // 8 minutes
+    try { localStorage.setItem(RETURNING_LS_KEY, "1"); } catch {}
+    // Check 5+ min timer for rating (poll every 60s after 5 min)
+    const timer = setTimeout(() => {
+      const poll = setInterval(() => triggerRatingPrompt(), 60000);
+      return () => clearInterval(poll);
+    }, 300000); // 5 minutes
     return () => clearTimeout(timer);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [shareImgURL, setShareImgURL] = useState(null);
@@ -492,28 +520,47 @@ export default function TransitioningPage() {
   const giLabel = isMGIB ? (s.giType === "ch30" ? "MGIB-AD (Ch. 30)" : "MGIB-SR (Ch. 1606)") : "GI Bill MHA";
   const giTaxNote = isMGIB ? "taxable" : "tax-free";
   const tspType = s.tspType || "traditional";
-  const specialPayTotal = sumSpecialPays(s.specialPays || {});
+  const otherMonthlyIncome = s.otherMonthlyIncome || 0;
   // TSP & Savings projections (auto-calculated using 4% rule at 65)
   const yearsTo65 = Math.max(0, 65 - currentAge);
-  const tspAt65 = growBal(s.tspBalance || 0, 0, yearsTo65, (s.tspGrowthRate || 7) / 100);
-  const tspMonthlyDraw = tspAt65 * 0.04 / 12;
+  // Two-phase TSP: contributions while on active duty, then balance grows only after retirement.
+  // User specifies years of service remaining; default 0 (retiring now).
+  const yearsToRetirement = Math.max(0, Number(s.tspYrsRemaining) || 0);
+  const yearsRetTo65 = Math.max(0, yearsTo65 - yearsToRetirement);
+  const tspRate = (s.tspGrowthRate || 7) / 100;
+  // For split mode: use separate balances; contributions go to both proportionally
+  const isSplit = tspType === "split";
+  const tradBal = isSplit ? (s.tspTradBalance || 0) : (s.tspBalance || 0);
+  const rothBal = isSplit ? (s.tspRothBalance || 0) : 0;
+  const totalSplitBal = tradBal + rothBal;
+  const tradContribFrac = totalSplitBal > 0 ? tradBal / totalSplitBal : 1;
+  const tradContrib = isSplit ? (s.tspContribMo || 0) * tradContribFrac : (s.tspContribMo || 0);
+  const rothContrib = isSplit ? (s.tspContribMo || 0) * (1 - tradContribFrac) : 0;
+  const tspAtRetirement = growBal(tradBal, tradContrib, yearsToRetirement, tspRate);
+  const tspRothAtRetirement = growBal(rothBal, rothContrib, yearsToRetirement, tspRate);
+  const tspTradAt65 = growBal(tspAtRetirement, 0, yearsRetTo65, tspRate);
+  const tspRothAt65 = growBal(tspRothAtRetirement, 0, yearsRetTo65, tspRate);
+  const tspAt65 = tspTradAt65 + tspRothAt65;
+  const tspTradDraw = tspTradAt65 * 0.04 / 12;
+  const tspRothDraw = tspRothAt65 * 0.04 / 12;
+  const tspMonthlyDraw = tspTradDraw + tspRothDraw;
   const hysaAt65 = growBal(s.hysaBalance || 0, s.hysaContribMo || 0, yearsTo65, (s.hysaApy || 4.5) / 100);
   const hysaMonthlyDraw = hysaAt65 * 0.04 / 12;
   const othAt65 = growBal(s.othBalance || 0, s.othContribMo || 0, yearsTo65, (s.othGrowthRate || 7) / 100);
   const othMonthlyDraw = othAt65 * 0.04 / 12;
   const totalSavingsDraw = tspMonthlyDraw + hysaMonthlyDraw + othMonthlyDraw;
-  // Federal tax on taxable income
-  const tspTaxable = tspType === "traditional" ? tspMonthlyDraw : 0;
+  // Federal tax: only Traditional TSP draws are taxable
+  const tspTaxable = tspType === "roth" ? 0 : tspTradDraw;
   const mgibTaxableAnnual = isMGIB ? giMhaMo * 12 : 0;
   const federalTaxableAnnual = (grossPension * 12) + mgibTaxableAnnual + (tspTaxable * 12);
   const fedTax = calcFederalTax(federalTaxableAnnual, filingStatus, currentAge >= 65, false);
   const fedTaxMo = fedTax.monthlyTax;
-  const totalIncome = netPension + vaComp + giMhaMo + tspMonthlyDraw + hysaMonthlyDraw + othMonthlyDraw + specialPayTotal;
+  const totalIncome = netPension + vaComp + giMhaMo + tspMonthlyDraw + hysaMonthlyDraw + othMonthlyDraw + otherMonthlyIncome;
   const sbpAmt = s.sbpOn && grossPension > 0 ? Math.round(grossPension * 0.065) : 0;
   const tricarePlanInfo = TRICARE_PLAN_OPTS.find(p => p.v === s.tricarePlan) || TRICARE_PLAN_OPTS[0];
   const tricarePremium = tricarePlanInfo.amt;
   const civHealthAmt = s.civHealthOn ? (s.civHealthAmt || 0) : 0;
-  const vgliPremium = s.vgliOn ? Math.round(vgliMonthly(s.vgliCoverage || 400000, s.vgliAge || 40)) : (s.lifeIns || 0);
+  const vgliPremium = s.vgliOn ? Math.round(vgliMonthly(s.vgliCoverage || 500000, s.vgliAge || 40)) : (s.lifeIns || 0);
   const totalDeductions = sbpAmt + tricarePremium + vgliPremium + civHealthAmt;
   const takeHome = totalIncome - totalDeductions - fedTaxMo;
   // Phase 1: income available immediately at retirement (no investment draws)
@@ -541,6 +588,7 @@ export default function TransitioningPage() {
   useEffect(() => {
     if (grossPension > 0 && grossPension !== prevPension.current) {
       prevPension.current = grossPension;
+      calcCountRef.current += 1;
       track("Pension Calculated", {
         years_of_service: s.yos,
         retirement_type: s.sepType === "veteran" ? "none" : s.retType,
@@ -587,14 +635,15 @@ export default function TransitioningPage() {
     }
   }, [s.city1, s.city2, s.city3]);
 
-  // ── Engagement popup: 5-min timer ─────────────────────────────────────
+  // ── Engagement popup: 3-min timer + income gap calculated ─────────────
   useEffect(() => {
     if (isPopupBlocked() || popupShownRef.current) return;
+    if (grossPension <= 0) return; // only after income gap calculated
     const elapsed = Date.now() - popupStartTime.current;
-    const delay = Math.max(0, 300000 - elapsed); // 5 minutes
-    const timer = setTimeout(() => triggerPopup("engagement_5min"), delay);
+    const delay = Math.max(0, 180000 - elapsed); // 3 minutes
+    const timer = setTimeout(() => triggerPopup("income_gap_3min"), delay);
     return () => clearTimeout(timer);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [grossPension]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── COL comparison helper ─────────────────────────────────────────────
   function colInfo(cityKey, isBase) {
@@ -619,7 +668,7 @@ export default function TransitioningPage() {
       giMhaMo      > 0.5 ? ["GI Bill MHA", giMhaMo]      : null,
       tspMonthlyDraw  > 0.5 ? ["TSP Draw",  tspMonthlyDraw]  : null,
       hysaMonthlyDraw > 0.5 ? ["HYSA Draw", hysaMonthlyDraw] : null,
-      specialPayTotal > 0.5 ? ["Special Pay", specialPayTotal] : null,
+      otherMonthlyIncome > 0.5 ? ["Other Income", otherMonthlyIncome] : null,
     ].filter(Boolean);
     const deductData = [
       sbpAmt > 0.5           ? ["SBP Premium", sbpAmt]          : null,
@@ -629,9 +678,11 @@ export default function TransitioningPage() {
     ].filter(Boolean);
 
     const hasDeduct = deductData.length > 0;
+    const hasTspPhases = yearsToRetirement > 0 && tspAtRetirement > 100 && (s.tspContribMo || 0) > 0;
     const gridRows = Math.max(1, Math.ceil(incomeData.length / 2));
     const gridH = gridRows * (CELL_H + CELL_GAP) - CELL_GAP;
     let totalH = PAD + 48 + 16 + gridH + 24 + 60;
+    if (hasTspPhases) totalH += 38;
     if (hasDeduct) totalH += 24 + deductData.length * (44 + 8) + 16 + 10 + 16;
     totalH += 24 + 68 + 14 + 24 + PAD;
 
@@ -669,6 +720,17 @@ export default function TransitioningPage() {
       ctx.fillText(fmt2(val), cx + 12, cy + CELL_H - 13);
     }
     y += gridH + 24;
+
+    // TSP phase info strip (only when user has years remaining + contributions)
+    if (hasTspPhases) {
+      ctx.fillStyle = C.mut; ctx.font = "500 11px -apple-system,system-ui";
+      ctx.textAlign = "left"; ctx.textBaseline = "top";
+      ctx.fillText("TSP AT SEPARATION: $" + Math.round(tspAtRetirement).toLocaleString(), PAD, y);
+      const sepW = ctx.measureText("TSP AT SEPARATION: $" + Math.round(tspAtRetirement).toLocaleString()).width;
+      ctx.fillStyle = C.lt;
+      ctx.fillText("   ·   TSP AT 65: $" + Math.round(tspAt65).toLocaleString(), PAD + sepW, y);
+      y += 38;
+    }
 
     // Total row (60px tall)
     rr(ctx, PAD, y, W - PAD * 2, 60, RR);
@@ -764,14 +826,19 @@ export default function TransitioningPage() {
   const doShare = async () => {
     if (!shareBlobRef.current) return;
     const file = new File([shareBlobRef.current], "milcalc-transition-plan.png", { type: "image/png" });
+    const shareText = isFullyCovered
+      ? `My military retirement covers ${coverage}% of my target income — I calculated it free at milcalc.app`
+      : `Planning my military transition — my retirement covers ${coverage}% of my target. Calculate yours free at milcalc.app`;
     if (canNativeShare) {
-      try { await navigator.share({ files: [file], text: "I just calculated my military retirement pay. Calculate yours free at milcalc.app", url: "https://milcalc.app" }); track("Infographic Shared", { method: "native" }); } catch {}
+      try { await navigator.share({ files: [file], text: shareText, url: "https://milcalc.app" }); track("Infographic Shared", { method: "native" }); } catch {}
     } else {
       const url = URL.createObjectURL(shareBlobRef.current);
       const a = document.createElement("a"); a.href = url; a.download = "milcalc-transition-plan.png";
       document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
       track("Infographic Shared", { method: "download" });
     }
+    calcCountRef.current += 1;
+    setTimeout(() => triggerPwa(), 1500);
   };
 
   // ── PDF export ────────────────────────────────────────────────────────
@@ -806,7 +873,7 @@ export default function TransitioningPage() {
         doc.setFillColor(17, 24, 39);   doc.rect(0, 3, PW, 69, "F"); // dark navy header always
         doc.setFont("helvetica", "bold"); doc.setFontSize(20); doc.setTextColor(...goldHdr); doc.text("MilCalc", M, 44);
         doc.setFont("helvetica", "normal"); doc.setFontSize(11); doc.setTextColor(...hdrSub);
-        doc.text("Transition Plan · milcalc.app", M, 60);
+        doc.text((s.name||"").trim() ? `Transition Plan for ${(s.name||"").trim()} · milcalc.app` : "Transition Plan · milcalc.app", M, 60);
         doc.text(new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" }), PW - M, 60, { align: "right" });
         y = 98;
       };
@@ -842,7 +909,7 @@ export default function TransitioningPage() {
       if (grossPension > 0) row("Military Pension (gross)", fmt(grossPension) + "/mo", gold);
       if (vaComp > 0) row(`VA Disability (${s.vaRating}%) — tax-free`, fmt(vaComp) + "/mo", gold);
       if (giMhaMo > 0) row(isMGIB ? `${giLabel} (gross — taxable)` : `${giLabel} (tax-free)`, fmt(giMhaMo) + "/mo", gold);
-      if (specialPayTotal > 0) row("Special Pay", fmt(specialPayTotal) + "/mo", gold);
+      if (otherMonthlyIncome > 0) row("Other Monthly Income", fmt(otherMonthlyIncome) + "/mo", gold);
       nl(12);
 
       section("MONTHLY DEDUCTIONS");
@@ -920,8 +987,14 @@ export default function TransitioningPage() {
         y += 50; // advance past the banner so section() doesn't overlap it
         section("PROJECTED ACCOUNT BALANCES AT AGE 65");
         if (tspMonthlyDraw > 0) {
-          row("TSP Balance at 65", fmt(Math.round(tspAt65)));
-          row("TSP Monthly Draw (4% rule)", fmt(Math.round(tspMonthlyDraw)) + "/mo", gn);
+          if (isSplit) {
+            if (tspTradAt65 > 0) { row("TSP Traditional Balance at 65", fmt(Math.round(tspTradAt65))); row("TSP Traditional Draw (4% rule) — taxable", fmt(Math.round(tspTradDraw)) + "/mo", gn); }
+            if (tspRothAt65 > 0) { row("TSP Roth Balance at 65", fmt(Math.round(tspRothAt65))); row("TSP Roth Draw (4% rule) — tax-free", fmt(Math.round(tspRothDraw)) + "/mo", gn); }
+          } else {
+            if ((s.tspContribMo||0) > 0 && yearsToRetirement > 0) row("TSP at Separation (Phase 1 — after contributions)", fmt(Math.round(tspAtRetirement)));
+            row("TSP at Age 65 (Phase 2 — growth only)", fmt(Math.round(tspAt65)));
+            row(`TSP Monthly Draw (4% rule) — ${tspType === "roth" ? "tax-free" : "taxable"}`, fmt(Math.round(tspMonthlyDraw)) + "/mo", gn);
+          }
         }
         if (hysaMonthlyDraw > 0) {
           row("HYSA Balance at 65", fmt(Math.round(hysaAt65)));
@@ -936,7 +1009,10 @@ export default function TransitioningPage() {
 
         section("FULL INCOME AT AGE 65");
         row("Phase 1 Take-Home (carried from page 1)", fmt(phase1TakeHome) + "/mo", gold);
-        if (tspMonthlyDraw > 0) row("+ TSP Draw at 65", fmt(Math.round(tspMonthlyDraw)) + "/mo", gn);
+        if (tspMonthlyDraw > 0 && isSplit) {
+          if (tspTradDraw > 0) row("+ TSP Traditional Draw at 65 (taxable)", fmt(Math.round(tspTradDraw)) + "/mo", gn);
+          if (tspRothDraw > 0) row("+ TSP Roth Draw at 65 (tax-free)", fmt(Math.round(tspRothDraw)) + "/mo", gn);
+        } else if (tspMonthlyDraw > 0) row(`+ TSP Draw at 65 (${tspType === "roth" ? "tax-free" : "taxable"})`, fmt(Math.round(tspMonthlyDraw)) + "/mo", gn);
         if (hysaMonthlyDraw > 0) row("+ HYSA Draw at 65", fmt(Math.round(hysaMonthlyDraw)) + "/mo", gn);
         if (othMonthlyDraw > 0) row("+ Other Investments Draw at 65", fmt(Math.round(othMonthlyDraw)) + "/mo", gn);
         nl(6);
@@ -957,6 +1033,19 @@ export default function TransitioningPage() {
       }
       nl(4);
 
+      // Debriefed promo box on last page above disclaimer
+      if (y + 60 > 740) { doc.addPage(); hdrBar(); }
+      nl(8);
+      doc.setDrawColor(212, 160, 23); doc.setLineWidth(1);
+      doc.rect(M - 6, y - 4, PW - M * 2 + 12, 46, "S");
+      doc.setFont("helvetica", "bold"); doc.setFontSize(9); doc.setTextColor(...gold);
+      doc.text("Planning your transition?", M, y + 10);
+      doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(...mut);
+      doc.text("Translate your military experience into a civilian resume at", M, y + 24);
+      doc.setTextColor(...gold);
+      doc.text("getdebriefed.co", M, y + 36);
+      y += 54;
+
       // Footer on all pages — identical to ServingPage
       const pages = doc.getNumberOfPages();
       for (let i = 1; i <= pages; i++) {
@@ -966,20 +1055,19 @@ export default function TransitioningPage() {
       }
 
       doc.save("milcalc-transition-plan.pdf");
-      // Debriefed cross-promo — 2.5s delay, once per session; engagement popup fallback
+      calcCountRef.current += 1;
+      // Post-export Debriefed promo — 2s delay, once per session, no stacking
       try {
         if (!sessionStorage.getItem(DEBRIEF_SESSION_KEY)) {
           setTimeout(() => {
+            if (popupShownRef.current || ratingShownRef.current || pwaShownRef.current) return;
             sessionStorage.setItem(DEBRIEF_SESSION_KEY, "1");
             setShowDebriefedPromo(true);
             track("Debriefed Promo Shown", { trigger: "pdf_export" });
-          }, 2500);
-        } else if (!isPopupBlocked() && !popupShownRef.current) {
-          // Debriefed already shown — fall through to engagement popup
-          setTimeout(() => triggerPopup("pdf_export"), 2500);
+          }, 2000);
         } else {
-          // Both already shown — try PWA prompt as lowest priority
-          setTimeout(() => triggerPwa(), 2500);
+          // Debriefed already shown — try PWA as lowest priority
+          setTimeout(() => triggerPwa(), 2000);
         }
       } catch {}
       track("PDF Exported", {
@@ -993,9 +1081,6 @@ export default function TransitioningPage() {
         yos: s.yos || 0,
         pay_grade: s.grade,
         has_bah: false,
-        has_special_pays: specialPayTotal > 0,
-        special_pay_count: countSpecialPays(s.specialPays || {}),
-        special_pay_total: specialPayTotal,
         has_preretirement_comp: false,
       });
     } catch (err) {
@@ -1086,72 +1171,6 @@ export default function TransitioningPage() {
                 </select>
               </div>
             </FieldRow>
-            {/* ── Special Pay (collapsible) ── */}
-            <div style={{ marginTop: 12 }}>
-              <button type="button" onClick={() => setShowSpecialPay(!showSpecialPay)}
-                style={{ display: "flex", alignItems: "center", gap: 8, background: "none", border: "none",
-                  cursor: "pointer", fontSize: 13, fontWeight: 600, color: "#f0c14b",
-                  padding: "8px 0", WebkitTapHighlightColor: "transparent",
-                  fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
-                <span style={{ transform: showSpecialPay ? "rotate(90deg)" : "rotate(0)", transition: "transform .15s", fontSize: 11 }}>&#9654;</span>
-                Special Pay{countSpecialPays(s.specialPays || {}) > 0 ? ` (${countSpecialPays(s.specialPays || {})} active — ${fmt(specialPayTotal)}/mo)` : ""}
-              </button>
-              {showSpecialPay && (
-                <div style={{ marginTop: 8 }}>
-                  <div style={{ fontSize: 12, color: "#6b7280", lineHeight: 1.5, marginBottom: 8 }}>
-                    Special pays add to your monthly income total. These are tax-free and not included in pension calculations.
-                  </div>
-                  {SPECIAL_PAY_DEFS.map(cat => (
-                    <div key={cat.cat}>
-                      <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: ".08em", textTransform: "uppercase", color: "#f0c14b", marginTop: 14, marginBottom: 6 }}>{cat.cat}</div>
-                      {cat.items.map(item => {
-                        const sp = (s.specialPays || {})[item.id] || { on: false, amount: item.prefill };
-                        return (
-                          <div key={item.id} style={{ padding: "6px 0", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-                            <label style={{ display: "flex", alignItems: "center", gap: 10, cursor: "pointer", WebkitTapHighlightColor: "transparent" }}>
-                              <input type="checkbox" checked={!!sp.on}
-                                onChange={e => {
-                                  const updated = { ...(s.specialPays || {}), [item.id]: { on: e.target.checked, amount: sp.amount || item.prefill } };
-                                  set("specialPays", updated);
-                                  if (e.target.checked) {
-                                    track("Special Pay Entered", { pays_enabled: enabledPayIds(updated), total_monthly_special_pay: sumSpecialPays(updated), pay_count: countSpecialPays(updated) });
-                                  }
-                                }}
-                                style={{ width: 18, height: 18, accentColor: "#f0c14b", flexShrink: 0 }} />
-                              <span style={{ fontSize: 13, color: sp.on ? "#f9fafb" : "#6b7280", flex: 1, lineHeight: 1.3 }}>{item.label}</span>
-                            </label>
-                            {sp.on && (
-                              <div style={{ marginLeft: 28, marginTop: 6, display: "flex", alignItems: "center", gap: 4, justifyContent: "flex-start" }}>
-                                <span style={{ fontSize: 14, color: "#6b7280" }}>$</span>
-                                <input
-                                  className="tr-num"
-                                  type="number" min={0} placeholder="0"
-                                  value={sp.amount || ""}
-                                  onChange={e => {
-                                    const v = Number(e.target.value) || 0;
-                                    const updated = { ...(s.specialPays || {}), [item.id]: { ...sp, amount: v } };
-                                    set("specialPays", updated);
-                                  }}
-                                  onFocus={e => e.target.select()}
-                                />
-                                <span style={{ fontSize: 12, color: "#6b7280" }}>/mo</span>
-                              </div>
-                            )}
-                            {item.hint && <div style={{ marginLeft: 28, fontSize: 11, color: "#6b7280", marginTop: 2, lineHeight: 1.4 }}>{item.hint}</div>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  ))}
-                  {specialPayTotal > 0 && (
-                    <div style={{ marginTop: 14, padding: 12, background: "rgba(255,255,255,0.04)", borderRadius: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                      <span style={{ fontSize: 13, fontWeight: 600, color: "#f9fafb" }}>Total Special Pay</span>
-                      <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 16, fontWeight: 600, color: "#f0c14b" }}>{fmt(specialPayTotal)}/mo</span>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
           </InfoCard>
             </div>
             <div>
@@ -1287,8 +1306,8 @@ export default function TransitioningPage() {
             )}
             <div style={{ paddingTop: 8 }}>
               <div style={{ fontSize: 12, fontWeight: 600, color: "#6b7280", marginBottom: 6 }}>TSP Type:</div>
-              <div style={{ display:"flex", gap:8, marginBottom:8 }}>
-                {["traditional","roth"].map(t => (
+              <div style={{ display:"flex", gap:8, marginBottom:8, flexWrap:"wrap" }}>
+                {[["traditional","Traditional"],["roth","Roth"],["split","Split"]].map(([t,l]) => (
                   <button key={t} type="button"
                     onClick={() => set("tspType", t)}
                     style={{
@@ -1298,10 +1317,45 @@ export default function TransitioningPage() {
                       color: (s.tspType||"traditional") === t ? "#f0c14b" : "#9ca3af",
                       cursor:"pointer", fontFamily:"inherit",
                     }}
-                  >{t === "traditional" ? "Traditional (taxable)" : "Roth (tax-free)"}</button>
+                  >{l}</button>
                 ))}
               </div>
+              {(s.tspType||"traditional") === "split" ? (
+                <>
+                  <div className="ds-income-row">
+                    <div><div className="ds-income-lbl">Traditional Balance <span style={{fontSize:10,color:"#9ca3af"}}>(taxable)</span></div></div>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontSize:14,color:"#6b7280"}}>$</span>
+                      <input className="ret2-num" type="number" min={0} placeholder="0"
+                        value={s.tspTradBalance||""} onChange={e=>set("tspTradBalance",Number(e.target.value)||0)}
+                        onFocus={e=>e.target.select()} />
+                    </div>
+                  </div>
+                  <div className="ds-income-row">
+                    <div><div className="ds-income-lbl">Roth Balance <span style={{fontSize:10,color:"#4ade80"}}>(tax-free)</span></div></div>
+                    <div style={{display:"flex",alignItems:"center",gap:4}}>
+                      <span style={{fontSize:14,color:"#6b7280"}}>$</span>
+                      <input className="ret2-num" type="number" min={0} placeholder="0"
+                        value={s.tspRothBalance||""} onChange={e=>set("tspRothBalance",Number(e.target.value)||0)}
+                        onFocus={e=>e.target.select()} />
+                    </div>
+                  </div>
+                </>
+              ) : null}
             </div>
+            <FieldRow label="Other monthly income">
+              <div style={{ display:"flex", alignItems:"center", gap:4, justifyContent:"flex-end" }}>
+                <span style={{ fontSize:14, color:"#6b7280" }}>$</span>
+                <input className="tr-num" type="number" min={0} placeholder="0"
+                  value={s.otherMonthlyIncome || ""}
+                  onChange={e => set("otherMonthlyIncome", Number(e.target.value) || 0)}
+                  onFocus={e => e.target.select()} />
+                <span style={{ fontSize:12, color:"#6b7280" }}>/mo</span>
+              </div>
+            </FieldRow>
+            {otherMonthlyIncome > 0 && (
+              <IncomeRow label="Other Income" sub="Additional monthly income" value={fmt(otherMonthlyIncome)} color="gold" />
+            )}
           </InfoCard>
             </div>
           </div>{/* end tr-two-col */}
@@ -1313,13 +1367,28 @@ export default function TransitioningPage() {
             <div style={{ fontWeight:600, fontSize:13, color:"#9ca3af", marginBottom:8 }}>
               Thrift Savings Plan (TSP)
             </div>
+            {(s.tspType||"traditional") !== "split" && (
+              <div className="ds-income-row">
+                <div><div className="ds-income-lbl">Current Balance</div></div>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{fontSize:14,color:"#6b7280"}}>$</span>
+                  <input className="ret2-num" type="number" min={0} placeholder="0"
+                    value={s.tspBalance||""} onChange={e=>set("tspBalance",Number(e.target.value)||0)}
+                    onFocus={e=>e.target.select()} />
+                </div>
+              </div>
+            )}
             <div className="ds-income-row">
-              <div><div className="ds-income-lbl">Current Balance</div></div>
+              <div>
+                <div className="ds-income-lbl">Monthly Contribution (while serving)</div>
+                <div className="ds-income-lbl-sub">Contributions during remaining active duty service · 2026 limit $24,500/yr</div>
+              </div>
               <div style={{display:"flex",alignItems:"center",gap:4}}>
                 <span style={{fontSize:14,color:"#6b7280"}}>$</span>
                 <input className="ret2-num" type="number" min={0} placeholder="0"
-                  value={s.tspBalance||""} onChange={e=>set("tspBalance",Number(e.target.value)||0)}
+                  value={s.tspContribMo||""} onChange={e=>set("tspContribMo",Number(e.target.value)||0)}
                   onFocus={e=>e.target.select()} />
+                <span style={{fontSize:12,color:"#6b7280"}}>/mo</span>
               </div>
             </div>
             <div className="ds-income-row">
@@ -1334,17 +1403,45 @@ export default function TransitioningPage() {
                 <span style={{fontSize:13,color:"#6b7280"}}>%</span>
               </div>
             </div>
-            {tspAt65 > 100 && (
-              <IncomeRow label={`TSP at 65 (${fmt(Math.round(tspAt65))})`}
-                sub="Monthly draw at 65 (4% rule · Bengen 1994)"
+            <div className="ds-income-row">
+              <div>
+                <div className="ds-income-lbl">Years of service remaining before retirement</div>
+                <div className="ds-income-lbl-sub">Enter 0 if retiring now or within the next few months</div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <input className="ret2-num" type="text" inputMode="numeric" placeholder="0"
+                  value={s.tspYrsRemaining > 0 ? s.tspYrsRemaining : ""}
+                  onChange={e => set("tspYrsRemaining", Number(e.target.value) || 0)}
+                  onFocus={e => e.target.select()} style={{width:56}} />
+                <span style={{fontSize:13,color:"#6b7280"}}>yrs</span>
+              </div>
+            </div>
+            {(Number(s.tspYrsRemaining) || 0) > 30 && (
+              <div style={{fontSize:11,color:"#f0c14b",padding:"4px 0 2px",lineHeight:1.4}}>
+                ⚠ Over 30 years remaining — double-check this value.
+              </div>
+            )}
+            {tspAtRetirement > 100 && yearsToRetirement > 0 && (s.tspContribMo||0) > 0 && !isSplit && (
+              <IncomeRow label="TSP at Separation"
+                sub={`after ${yearsToRetirement} yr${yearsToRetirement !== 1 ? "s" : ""} of contributions · phase 1`}
+                value={fmt(Math.round(tspAtRetirement))}
+                color="green" />
+            )}
+            {tspAt65 > 100 && !isSplit && (
+              <IncomeRow label={`TSP at Age 65 (${fmt(Math.round(tspAt65))})`}
+                sub={`4% rule · ${tspType === "roth" ? "tax-free" : "taxable"}${yearsToRetirement > 0 && (s.tspContribMo||0) > 0 ? " · growth only after separation" : ""}`}
                 value={`${fmt(Math.round(tspMonthlyDraw))}/mo`}
                 color="green" />
             )}
-            {s.retType === "BRS" && (
-              <div style={{fontSize:11,color:"#9ca3af",padding:"4px 0 8px",lineHeight:1.4}}>
-                Post-separation TSP contributions are optional — you can continue contributing from civilian income.
-              </div>
+            {tspAt65 > 100 && isSplit && (
+              <>
+                {tspTradAt65 > 100 && <IncomeRow label={`TSP Traditional at 65 (${fmt(Math.round(tspTradAt65))})`} sub="4% rule · taxable" value={`${fmt(Math.round(tspTradDraw))}/mo`} color="green" />}
+                {tspRothAt65 > 100 && <IncomeRow label={`TSP Roth at 65 (${fmt(Math.round(tspRothAt65))})`} sub="4% rule · tax-free" value={`${fmt(Math.round(tspRothDraw))}/mo`} color="green" />}
+              </>
             )}
+            <div style={{fontSize:11,color:"#9ca3af",padding:"4px 0 8px",lineHeight:1.4}}>
+              Phase 1: contributions compound until separation. Phase 2: balance grows only from separation to age 65 — no further contributions assumed.
+            </div>
 
             {/* HYSA */}
             <div style={{ fontWeight:600, fontSize:13, color:"#9ca3af", margin:"12px 0 8px" }}>
@@ -1547,8 +1644,8 @@ export default function TransitioningPage() {
                 </FieldRow>
                 <FieldRow label="VGLI Coverage">
                   <div className="tr-sel">
-                    <select value={s.vgliCoverage || 400000} onChange={e => set("vgliCoverage", Number(e.target.value))}>
-                      {[50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000].map(v => (
+                    <select value={s.vgliCoverage || 500000} onChange={e => set("vgliCoverage", Number(e.target.value))}>
+                      {[50000, 100000, 150000, 200000, 250000, 300000, 350000, 400000, 450000, 500000].map(v => (
                         <option key={v} value={v}>${(v / 1000).toFixed(0)}K</option>
                       ))}
                     </select>
@@ -1556,7 +1653,7 @@ export default function TransitioningPage() {
                 </FieldRow>
                 <IncomeRow
                   label="VGLI Premium"
-                  sub={`Age ${s.vgliAge || 40} · $${((s.vgliCoverage || 400000) / 1000).toFixed(0)}K coverage`}
+                  sub={`Age ${s.vgliAge || 40} · $${((s.vgliCoverage || 500000) / 1000).toFixed(0)}K coverage`}
                   value={`−${fmt(vgliPremium)}`}
                   color="red"
                 />
@@ -1629,8 +1726,13 @@ export default function TransitioningPage() {
                     Not available at retirement — assumes continued investment growth starting at age 65.
                   </div>
                 </div>
-                {tspMonthlyDraw > 0 && (
-                  <IncomeRow label="TSP Monthly Draw" sub={`4% rule · at 65 (${fmt(Math.round(tspAt65))} bal)`} value={`+${fmt(Math.round(tspMonthlyDraw))}`} color="green" />
+                {tspMonthlyDraw > 0 && isSplit ? (
+                  <>
+                    {tspTradDraw > 0.5 && <IncomeRow label="TSP Traditional Draw" sub={`4% rule · at 65 (${fmt(Math.round(tspTradAt65))} bal) · taxable`} value={`+${fmt(Math.round(tspTradDraw))}`} color="green" />}
+                    {tspRothDraw > 0.5 && <IncomeRow label="TSP Roth Draw" sub={`4% rule · at 65 (${fmt(Math.round(tspRothAt65))} bal) · tax-free`} value={`+${fmt(Math.round(tspRothDraw))}`} color="green" />}
+                  </>
+                ) : tspMonthlyDraw > 0 && (
+                  <IncomeRow label="TSP Monthly Draw" sub={`4% rule · at 65 (${fmt(Math.round(tspAt65))} bal) · ${tspType === "roth" ? "tax-free" : "taxable"}`} value={`+${fmt(Math.round(tspMonthlyDraw))}`} color="green" />
                 )}
                 {hysaMonthlyDraw > 0 && (
                   <IncomeRow label="HYSA Monthly Draw" sub={`4% rule · at 65 (${fmt(Math.round(hysaAt65))} bal)`} value={`+${fmt(Math.round(hysaMonthlyDraw))}`} color="green" />
@@ -1649,7 +1751,25 @@ export default function TransitioningPage() {
           {/* ── INCOME GAP ── */}
           <SectionHeader>Income Gap</SectionHeader>
           <InfoCard>
-            <FieldRow label="Target monthly income">
+            <div className="ds-field-row">
+              <div style={{ display:"flex", alignItems:"center", gap:6 }}>
+                <span className="ds-field-label">Target monthly income</span>
+                <button
+                  type="button"
+                  onClick={() => setShowTargetTip(v => !v)}
+                  style={{
+                    width: 18, height: 18, borderRadius: "50%",
+                    background: showTargetTip ? "rgba(212,160,23,0.2)" : "rgba(212,160,23,0.08)",
+                    border: "1px solid rgba(212,160,23,0.35)",
+                    color: "#d4a017", fontSize: 11, fontWeight: 700,
+                    cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center",
+                    flexShrink: 0, lineHeight: 1, padding: 0, fontFamily: "inherit",
+                    WebkitTapHighlightColor: "transparent",
+                  }}
+                  aria-label="Target income info"
+                >ⓘ</button>
+              </div>
+              <div className="ds-field-value">
               <div style={{ display:"flex", alignItems:"center", gap:4, justifyContent:"flex-end" }}>
                 <span style={{ fontSize:14, color:"#6b7280" }}>$</span>
                 <input
@@ -1670,7 +1790,13 @@ export default function TransitioningPage() {
                 />
                 <span style={{ fontSize:12, color:"#6b7280" }}>/mo</span>
               </div>
-            </FieldRow>
+              </div>
+            </div>
+            {showTargetTip && (
+              <div style={{ padding: "12px 16px", background: "rgba(212,160,23,0.05)", borderBottom: "1px solid rgba(212,160,23,0.12)", fontSize: 13, lineHeight: 1.6, color: "#d1d5db", marginBottom: 4 }}>
+                This is your lifestyle target — what you need per month to maintain your standard of living in retirement. The income gap shows how much your military benefits cover vs how much you need from a civilian job or other sources.
+              </div>
+            )}
             <div style={{ fontSize: 11, color: "#6b7280", padding: "4px 0 8px" }}>
               Leave blank to use current base pay ({fmt(h3)}/mo) as target.
             </div>
@@ -1722,6 +1848,39 @@ export default function TransitioningPage() {
               <span style={{ color:"#34d399", marginLeft:4 }}>At 65: {fmt(Math.round(phase2TakeHome))}/mo (projected)</span>
             )}
           </div>
+          <button onClick={() => { track("Share Link Generated", { trigger: isFullyCovered ? "surplus" : "shortfall" }); handleShare(); }}
+            style={{ background:"none", border:"none", color:"#d4a017", fontSize:12, cursor:"pointer", padding:"4px 0 2px", textDecoration:"underline", fontFamily:"inherit" }}>
+            Share your results →
+          </button>
+
+          {/* ── DEBRIEFED CONTEXTUAL CARD ── */}
+          {!isFullyCovered ? (
+            <div style={{ border:"1.5px solid rgba(212,160,23,0.5)", borderRadius:12, padding:"14px 16px", margin:"10px 0 6px", background:"rgba(212,160,23,0.05)" }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#f0c14b", marginBottom:4 }}>Close your income gap</div>
+              <div style={{ fontSize:12, color:"#9ca3af", lineHeight:1.5, marginBottom:10 }}>
+                A civilian resume that translates your military experience can help land roles faster.
+              </div>
+              <a href="https://getdebriefed.co?utm_source=milcalc&utm_medium=shortfall_card&utm_campaign=debriefed"
+                target="_blank" rel="noopener noreferrer"
+                onClick={() => track("Debriefed Promo Clicked", { trigger: "shortfall_card" })}
+                style={{ fontSize:12, color:"#f0c14b", textDecoration:"underline", fontWeight:600 }}>
+                Build your civilian resume at getdebriefed.co →
+              </a>
+            </div>
+          ) : (
+            <div style={{ border:"1.5px solid rgba(52,211,153,0.4)", borderRadius:12, padding:"14px 16px", margin:"10px 0 6px", background:"rgba(52,211,153,0.05)" }}>
+              <div style={{ fontSize:13, fontWeight:700, color:"#34d399", marginBottom:4 }}>You're on track</div>
+              <div style={{ fontSize:12, color:"#9ca3af", lineHeight:1.5, marginBottom:10 }}>
+                Set yourself up for a strong second career — translate your military experience into a standout civilian resume.
+              </div>
+              <a href="https://getdebriefed.co?utm_source=milcalc&utm_medium=surplus_card&utm_campaign=debriefed"
+                target="_blank" rel="noopener noreferrer"
+                onClick={() => track("Debriefed Promo Clicked", { trigger: "surplus_card" })}
+                style={{ fontSize:12, color:"#34d399", textDecoration:"underline", fontWeight:600 }}>
+                Build your civilian resume at getdebriefed.co →
+              </a>
+            </div>
+          )}
 
           {/* ── SHARE + PDF BUTTONS ── */}
           <div style={{ display: "flex", gap: 6, marginBottom: 6 }}>
@@ -1833,6 +1992,17 @@ export default function TransitioningPage() {
             ]} />
           </InfoCard>
 
+          {/* ── DEBRIEFED PERSISTENT FOOTER ── */}
+          <div style={{ textAlign:"center", padding:"12px 16px", borderTop:"1px solid rgba(255,255,255,0.06)", marginTop:8 }}>
+            <span style={{ fontSize:12, color:"#6b7280" }}>Need a civilian resume? Try Debriefed → </span>
+            <a href="https://getdebriefed.co?utm_source=milcalc&utm_medium=footer&utm_campaign=footer"
+              target="_blank" rel="noopener noreferrer"
+              style={{ fontSize:12, color:"#d4a017", textDecoration:"none", fontWeight:600 }}
+              onClick={() => track("Debriefed Promo Clicked", { trigger: "footer" })}>
+              getdebriefed.co
+            </a>
+          </div>
+
           {/* ── FEEDBACK BUTTON ── */}
           <div style={{ textAlign: "center", paddingTop: 8, paddingBottom: 24 }}>
             <button
@@ -1921,10 +2091,10 @@ export default function TransitioningPage() {
       )}
 
       {/* ── DEBRIEFED CROSS-PROMO (post-export) ── */}
-      {showDebriefedPromo && (
-        <div className="sp-modal-overlay" onClick={() => { setShowDebriefedPromo(false); track("Debriefed Promo Dismissed", {}); }}>
+      {showDebriefedPromo && !showPopup && !showPwaPrompt && !showRatingPrompt && (
+        <div className="sp-modal-overlay" onClick={() => { setShowDebriefedPromo(false); track("Debriefed Promo Dismissed", { trigger: "pdf_export" }); }}>
           <div className="sp-modal" onClick={e => e.stopPropagation()}>
-            <button className="sp-modal-close" onClick={() => { setShowDebriefedPromo(false); track("Debriefed Promo Dismissed", {}); }}>✕</button>
+            <button className="sp-modal-close" onClick={() => { setShowDebriefedPromo(false); track("Debriefed Promo Dismissed", { trigger: "pdf_export" }); }}>✕</button>
             <div style={{ fontSize: 28, textAlign: "center", marginBottom: 8 }}>🎯</div>
             <div style={{ fontSize: 18, fontWeight: 700, color: "#ffffff", marginBottom: 8, textAlign: "center" }}>Planning your transition?</div>
             <div style={{ fontSize: 14, color: "#6b7280", lineHeight: 1.55, marginBottom: 20, textAlign: "center" }}>
@@ -1932,13 +2102,13 @@ export default function TransitioningPage() {
             </div>
             <a href="https://getdebriefed.co?utm_source=milcalc&utm_medium=app&utm_campaign=post-export"
               target="_blank" rel="noopener noreferrer"
-              onClick={() => { track("Debriefed Promo Clicked", {}); setShowDebriefedPromo(false); }}
+              onClick={() => { track("Debriefed Promo Clicked", { trigger: "pdf_export" }); setShowDebriefedPromo(false); }}
               style={{ display: "block", padding: "12px 28px", background: "linear-gradient(135deg,#c2782a,#e09448)",
                 color: "#0f0f14", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700,
                 cursor: "pointer", textDecoration: "none", textAlign: "center", marginBottom: 12 }}>
               Check It Out
             </a>
-            <button onClick={() => { setShowDebriefedPromo(false); track("Debriefed Promo Dismissed", {}); }}
+            <button onClick={() => { setShowDebriefedPromo(false); track("Debriefed Promo Dismissed", { trigger: "pdf_export" }); }}
               style={{ display: "block", width: "100%", background: "none", border: "none", color: "#6b7280", fontSize: 13, cursor: "pointer",
                 fontFamily: "Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" }}>
               No thanks
@@ -1951,21 +2121,29 @@ export default function TransitioningPage() {
       {showPopup && !showDebriefedPromo && (
         <div className="tr-ep-overlay" onClick={dismissPopup}>
           <div className="tr-ep-modal" onClick={e => e.stopPropagation()}>
-            <div className="tr-ep-title">Enjoying MilCalc?</div>
-            <div className="tr-ep-options">
-              <a className="tr-ep-opt" href="mailto:support@getdebriefed.co?subject=MilCalc%20Review&body=I%20wanted%20to%20share%20feedback%20about%20MilCalc%3A"
-                onClick={() => { track("Engagement Popup Review Clicked", {}); dismissPopup(); }}>
-                <span className="tr-ep-opt-ico">⭐</span><span>Leave a review</span>
-              </a>
-              <a className="tr-ep-opt" href="/share"
-                onClick={() => { track("Engagement Popup Share Clicked", {}); dismissPopup(); }}>
-                <span className="tr-ep-opt-ico">🔗</span><span>Share with a fellow veteran</span>
-              </a>
-              <button className="tr-ep-opt" style={{ background: "none", border: "none", cursor: "pointer", textAlign: "left", width: "100%", padding: 0, fontFamily: "inherit" }}
-                onClick={() => { track("Engagement Popup Feedback Clicked", {}); dismissPopup(); setShowFeedback(true); setFbSent(false); }}>
-                <span className="tr-ep-opt-ico">💬</span><span>Send feedback</span>
-              </button>
+            <div style={{ fontSize:32, textAlign:"center", marginBottom:8 }}>
+              {isFullyCovered ? "✅" : "📊"}
             </div>
+            <div className="tr-ep-title" style={{ marginBottom:6 }}>
+              Your retirement covers {coverage}% of your target
+            </div>
+            <div style={{ fontSize:13, color:"#6b7280", textAlign:"center", lineHeight:1.5, marginBottom:20 }}>
+              {isFullyCovered
+                ? `You have a ${fmt(Math.abs(incomeGap))}/mo surplus. Share your plan or export a PDF to review offline.`
+                : `You have a ${fmt(incomeGap)}/mo gap to close. Share your plan or export a PDF to review with your advisor.`}
+            </div>
+            <button onClick={() => { track("Engagement Popup Share Clicked", {}); dismissPopup(); handleShare(); }}
+              style={{ width:"100%", padding:"13px", background:"linear-gradient(135deg,#c2782a,#e09448)",
+                color:"#0f0f14", border:"none", borderRadius:10, fontSize:15, fontWeight:700,
+                cursor:"pointer", fontFamily:"Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", marginBottom:8 }}>
+              Share My Results
+            </button>
+            <button onClick={() => { track("Engagement Popup PDF Clicked", {}); dismissPopup(); generatePDF(); }}
+              style={{ width:"100%", padding:"13px", background:"rgba(212,160,23,0.12)", border:"1px solid rgba(212,160,23,0.3)",
+                color:"#f0c14b", borderRadius:10, fontSize:15, fontWeight:700,
+                cursor:"pointer", fontFamily:"Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", marginBottom:8 }}>
+              Export PDF
+            </button>
             <button className="tr-ep-dismiss" onClick={dismissPopup}>Maybe later</button>
           </div>
         </div>

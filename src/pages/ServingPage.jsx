@@ -25,7 +25,7 @@ function loadSaved() {
 const DEFAULTS = {
   svg_name: "",
   svg_payGrade: "E-7", svg_retGrade: null, svg_cYos: 10, svg_cAge: 28, svg_retType: "High-3",
-  svg_tspBal: 0, svg_tspPct: 5, svg_sepYos: 15, svg_tgtYos: 20,
+  svg_tspBal: 0, svg_tspTradBal: 0, svg_tspRothBal: 0, svg_tspType: "traditional", svg_tspPct: 5, svg_sepYos: 15, svg_tgtYos: 20,
   svg_vaRat: 0, svg_vaDep: "alone", svg_state: "Texas",
   svg_civSal: 60000, svg_civSalB: 0,
   svg_hysaBal: 0, svg_hysaMo: 0, svg_hysaApy: 4.5,
@@ -385,6 +385,7 @@ export default function ServingPage() {
   const [tt4B,   setTt4B]   = useState(false);
   const [pdfTheme, setPdfTheme] = useState("dark");
   const [showTricareInfo, setShowTricareInfo] = useState(false);
+  const [showBahInfo, setShowBahInfo] = useState(false);
 
   const set = (k, v) => setS(prev => {
     const next = { ...prev, [k]: v };
@@ -405,6 +406,11 @@ export default function ServingPage() {
   const currentAge  = s.svg_cAge      != null ? s.svg_cAge   : 28;
   const retType     = s.svg_retType   || "High-3";
   const tspBalance  = s.svg_tspBal    != null ? s.svg_tspBal : 0;
+  const tspTypeSvg  = s.svg_tspType  || "traditional";
+  const isSplitSvg  = tspTypeSvg === "split";
+  const tspTradBal  = isSplitSvg ? (s.svg_tspTradBal || 0) : (isSplitSvg ? 0 : tspBalance);
+  const tspRothBal  = isSplitSvg ? (s.svg_tspRothBal || 0) : 0;
+  const tspEffectiveBal = isSplitSvg ? tspTradBal : tspBalance;
   const tspPct      = s.svg_tspPct    != null ? s.svg_tspPct : 5;
   const vaRating    = s.svg_vaRat     || 0;
   const vaDep       = s.svg_vaDep     || "alone";
@@ -417,7 +423,7 @@ export default function ServingPage() {
   const othBal      = s.svg_othBal    != null ? s.svg_othBal  : 0;
   const othContrib  = s.svg_othMo     != null ? s.svg_othMo   : 0;
   const othRate     = s.svg_othRate   != null ? s.svg_othRate  : 7;
-  const civRetAge   = s.svg_civRetAge != null ? s.svg_civRetAge : 65;
+  const civRetAge   = (typeof s.svg_civRetAge === "number" && s.svg_civRetAge >= 40 && s.svg_civRetAge <= 90) ? s.svg_civRetAge : 65;
   const hiDeps      = s.svg_hiDeps    || "single";
   const hiCostDef   = hiDeps === "family" ? 1300 : 450;
   const hiCost      = s.svg_hiCost    != null ? s.svg_hiCost  : hiCostDef;
@@ -480,22 +486,51 @@ export default function ServingPage() {
   const pensNetFed = pensNet - fedTaxMoB;
 
   // TSP at 65 (scenario B — stay to retirement)
-  const tspAt65B = pTspBalStepped(
-    tspBalance, payGrade, currentYos, safeTgt, tspPct, isBRS, Math.max(0, 65 - retAge)
-  );
-  const tspDrawB = tspAt65B * 0.04 / 12;
+  const tspTradAt65B = pTspBalStepped(tspEffectiveBal, payGrade, currentYos, safeTgt, tspPct, isBRS, Math.max(0, 65 - retAge));
+  const tspRothAt65B = isSplitSvg ? pTspBalStepped(tspRothBal, payGrade, currentYos, safeTgt, 0, false, Math.max(0, 65 - retAge)) : 0;
+  const tspAt65B = tspTradAt65B + tspRothAt65B;
+  const tspTradDrawB = tspTradAt65B * 0.04 / 12;
+  const tspRothDrawB = tspRothAt65B * 0.04 / 12;
+  const tspDrawB = tspTradDrawB + tspRothDrawB;
 
   // TSP at 65 (scenario A — leave early)
-  const tspAt65A = pTspBalStepped(
-    tspBalance, payGrade, currentYos, safeSep, tspPct, isBRS, Math.max(0, 65 - sepAge)
-  );
-  const tspDrawA = tspAt65A * 0.04 / 12;
+  const tspTradAt65A = pTspBalStepped(tspEffectiveBal, payGrade, currentYos, safeSep, tspPct, isBRS, Math.max(0, 65 - sepAge));
+  const tspRothAt65A = isSplitSvg ? pTspBalStepped(tspRothBal, payGrade, currentYos, safeSep, 0, false, Math.max(0, 65 - sepAge)) : 0;
+  const tspAt65A = tspTradAt65A + tspRothAt65A;
+  const tspTradDrawA = tspTradAt65A * 0.04 / 12;
+  const tspRothDrawA = tspRothAt65A * 0.04 / 12;
+  const tspDrawA = tspTradDrawA + tspRothDrawA;
 
   // HYSA & other investments (same for both scenarios)
   const hysaAt65 = pTspBal(hysaBal, hysaContrib, Math.max(0, civRetAge - currentAge), Math.max(0, 65 - civRetAge), hysaApy / 100);
   const hysaDraw = hysaAt65 * 0.04 / 12;
   const othAt65  = pTspBal(othBal, othContrib, Math.max(0, civRetAge - currentAge), Math.max(0, 65 - civRetAge), othRate / 100);
   const othDraw  = othAt65 * 0.04 / 12;
+
+  // ── Reserve Transfer Scenario (Scenario C) ───────────────────────────
+  // Points: active years × 365 + remaining qualifying years in reserves × 50 (min qualifying)
+  const resActiveYrs = currentYos;
+  const resRemainingQual = Math.max(0, 20 - resActiveYrs);
+  const resPoints = resActiveYrs * 365 + resRemainingQual * 50;
+  const resEquivYrs = resPoints / 360;
+  const resMultiplier = isBRS ? 0.020 : 0.025; // 2.0% BRS, 2.5% legacy
+  const resBasePay = lookupPay(payGrade, 20) || lookupPay(payGrade, currentYos) || basePay;
+  const resRetPay = resEquivYrs * resMultiplier * resBasePay;
+  // Reserve pay starts at age 60, not at separation
+  const resAge60 = 60;
+  const yearsToAge60 = Math.max(0, resAge60 - currentAge);
+  // TSP grows from now to 60 (active contributions until they leave, then grows-only to 60)
+  const resYearsOnActive = Math.max(0, safeSep - currentYos);
+  const resSepAge = currentAge + resYearsOnActive;
+  const resGrowthYrsToAge60 = Math.max(0, resAge60 - resSepAge);
+  const resTspAt60 = pTspBalStepped(tspEffectiveBal, payGrade, currentYos, safeSep, tspPct, isBRS, resGrowthYrsToAge60);
+  const resTspAt65 = resTspAt60 * Math.pow(1.07, 5);
+  const resTspDraw60 = resTspAt60 * 0.04 / 12;
+  const resTspDraw65 = resTspAt65 * 0.04 / 12;
+  const resStateTax = resRetPay > 0 ? calcStateTax(resRetPay * 12, si, 60) / 12 : 0;
+  const resNetPay = resRetPay - resStateTax;
+  const resTotalAt60 = resNetPay + va + resTspDraw60;
+  const resTotalAt65 = resNetPay + va + resTspDraw65 + hysaDraw + othDraw;
 
   // Civilian salary B
   const civSalB = civSalBRaw > 0 ? civSalBRaw : civSalary * 0.8;
@@ -593,7 +628,9 @@ export default function ServingPage() {
     const rowsA = [
       { l: `Leave at YOS ${safeSep} · Age ${sepAge}`, v: null, color: C.gold },
       { l: "No pension", v: "$0/mo", color: C.mut },
-      { l: `TSP at 65 (${fmt(Math.round(tspAt65A))})`, v: tspDrawA > 0 ? fmt2(tspDrawA) : "$0/mo", color: tspDrawA > 0 ? C.goldL : C.mut },
+      ...(isSplitSvg && tspTradAt65A > 0 ? [{ l: `TSP Trad. at 65 (${fmt(Math.round(tspTradAt65A))})`, v: fmt2(tspTradDrawA), color: C.goldL }] : []),
+      ...(isSplitSvg && tspRothAt65A > 0 ? [{ l: `TSP Roth at 65 (${fmt(Math.round(tspRothAt65A))})·tf`, v: fmt2(tspRothDrawA), color: C.goldL }] : []),
+      ...(!isSplitSvg ? [{ l: `TSP at 65 (${fmt(Math.round(tspAt65A))})`, v: tspDrawA > 0 ? fmt2(tspDrawA) : "$0/mo", color: tspDrawA > 0 ? C.goldL : C.mut }] : []),
       { l: `HYSA at 65 (${fmt(Math.round(hysaAt65))})`, v: hysaDraw > 0 ? fmt2(hysaDraw) : "$0/mo", color: hysaDraw > 0 ? C.goldL : C.mut },
       ...(othDraw > 0 ? [{ l: "Other inv. (65+)", v: fmt2(othDraw), color: C.goldL }] : []),
       ...(va > 0 ? [{ l: `VA ${vaRating}%`, v: fmt2(va), color: C.goldL }] : []),
@@ -603,7 +640,9 @@ export default function ServingPage() {
     const rowsB = [
       { l: `Retire at YOS ${safeTgt} · Age ${retAge}`, v: null, color: C.gn },
       { l: "Monthly pension (after taxes)", v: pensNetFed > 0 ? fmt2(pensNetFed) : "—", color: pensNetFed > 0 ? C.gn : C.rd },
-      { l: `TSP at 65 (${fmt(Math.round(tspAt65B))})`, v: tspDrawB > 0 ? fmt2(tspDrawB) : "$0/mo", color: tspDrawB > 0 ? C.gn : C.mut },
+      ...(isSplitSvg && tspTradAt65B > 0 ? [{ l: `TSP Trad. at 65 (${fmt(Math.round(tspTradAt65B))})`, v: fmt2(tspTradDrawB), color: C.gn }] : []),
+      ...(isSplitSvg && tspRothAt65B > 0 ? [{ l: `TSP Roth at 65 (${fmt(Math.round(tspRothAt65B))})·tf`, v: fmt2(tspRothDrawB), color: C.gn }] : []),
+      ...(!isSplitSvg ? [{ l: `TSP at 65 (${fmt(Math.round(tspAt65B))})`, v: tspDrawB > 0 ? fmt2(tspDrawB) : "$0/mo", color: tspDrawB > 0 ? C.gn : C.mut }] : []),
       { l: `HYSA at 65 (${fmt(Math.round(hysaAt65))})`, v: hysaDraw > 0 ? fmt2(hysaDraw) : "$0/mo", color: hysaDraw > 0 ? C.gn : C.mut },
       ...(othDraw > 0 ? [{ l: "Other inv. (65+)", v: fmt2(othDraw), color: C.gn }] : []),
       ...(va > 0 ? [{ l: `VA ${vaRating}%`, v: fmt2(va), color: C.gn }] : []),
@@ -785,7 +824,7 @@ export default function ServingPage() {
         doc.setFillColor(17,24,39); doc.rect(0,3,PW,69,"F");  // dark navy header always
         doc.setFont("helvetica","bold"); doc.setFontSize(20); doc.setTextColor(...goldHdr); doc.text("MilCalc",M,44);
         doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(...hdrSub);
-        doc.text("Stay vs Go Analysis · milcalc.app",M,60);
+        doc.text(svgName ? `Transition Plan for ${svgName} · milcalc.app` : "Transition Plan · milcalc.app",M,60);
         doc.text(new Date().toLocaleDateString("en-US",{year:"numeric",month:"long",day:"numeric"}),PW-M,60,{align:"right"});
         y = 98;
       };
@@ -1007,6 +1046,18 @@ export default function ServingPage() {
       const peSl3 = doc.splitTextToSize(peSummDiff, PW-M*2);
       if (y + peSl3.length * 14 > 742) { doc.addPage(); hdrBar(); }
       doc.text(peSl3, M, y); y += peSl3.length * 14 + 16;
+
+      // Footer on all pages
+      // Debriefed promo box on last page
+      const lastPg = doc.getNumberOfPages(); doc.setPage(lastPg);
+      const promoY = 720;
+      doc.setDrawColor(...gold); doc.setLineWidth(1);
+      doc.rect(M - 6, promoY, PW - M * 2 + 12, 36, "S");
+      doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.setTextColor(...gold);
+      doc.text("Planning your transition?", M, promoY + 11);
+      doc.setFont("helvetica","normal"); doc.setFontSize(8); doc.setTextColor(...mut);
+      doc.text("Translate your military experience into a civilian resume at", M, promoY + 22);
+      doc.setTextColor(...gold); doc.text("getdebriefed.co", M, promoY + 32);
 
       // Footer on all pages
       const pages = doc.getNumberOfPages();
@@ -1241,18 +1292,20 @@ export default function ServingPage() {
 
             {/* TSP balance + contribution % — two columns (Fix 4: info tooltip on Contribution %) */}
             <div className="sp-two">
-              <div className="sp-col">
-                <span className="sp-col-lbl">TSP Balance</span>
-                <div className="sp-col-row">
-                  <span className="sp-pre">$</span>
-                  <input
-                    type="text" inputMode="numeric"
-                    value={tspBalance}
-                    onFocus={SEL}
-                    onChange={e => set("svg_tspBal", Math.max(0, parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0))}
-                  />
+              {!isSplitSvg && (
+                <div className="sp-col">
+                  <span className="sp-col-lbl">TSP Balance</span>
+                  <div className="sp-col-row">
+                    <span className="sp-pre">$</span>
+                    <input
+                      type="text" inputMode="numeric"
+                      value={tspBalance}
+                      onFocus={SEL}
+                      onChange={e => set("svg_tspBal", Math.max(0, parseInt(e.target.value.replace(/[^0-9]/g, "")) || 0))}
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
               <div className="sp-col">
                 <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 8 }}>
                   <span className="sp-col-lbl" style={{ marginBottom: 0 }}>Contribution %</span>
@@ -1288,6 +1341,47 @@ export default function ServingPage() {
                 }
               </HintBox>
             )}
+
+            {/* TSP Type toggle */}
+            <div style={{ marginTop:8, marginBottom:8 }}>
+              <div style={{ fontSize:12, fontWeight:600, color:"#6b7280", marginBottom:6 }}>TSP Type:</div>
+              <div style={{ display:"flex", gap:8, flexWrap:"wrap", marginBottom:8 }}>
+                {[["traditional","Traditional"],["roth","Roth"],["split","Split"]].map(([t,l]) => (
+                  <button key={t} type="button"
+                    onClick={() => set("svg_tspType", t)}
+                    style={{
+                      fontSize:12, fontWeight:600, padding:"3px 10px", borderRadius:6,
+                      background: tspTypeSvg === t ? "rgba(212,160,23,0.2)" : "rgba(255,255,255,0.05)",
+                      border: `1px solid ${tspTypeSvg === t ? "#d4a017" : "rgba(255,255,255,0.1)"}`,
+                      color: tspTypeSvg === t ? "#f0c14b" : "#9ca3af",
+                      cursor:"pointer", fontFamily:"inherit",
+                    }}
+                  >{l}</button>
+                ))}
+              </div>
+              {isSplitSvg && (
+                <div className="sp-two" style={{ marginBottom:0 }}>
+                  <div className="sp-col">
+                    <span className="sp-col-lbl">Traditional Bal <span style={{color:"#9ca3af",fontSize:10}}>(taxable)</span></span>
+                    <div className="sp-col-row">
+                      <span className="sp-pre">$</span>
+                      <input type="text" inputMode="numeric" value={s.svg_tspTradBal||""} onFocus={SEL}
+                        onChange={e => set("svg_tspTradBal", parseInt(e.target.value.replace(/[^0-9]/g,""))||0)}
+                        style={{ background:"transparent", border:"none", outline:"none", color:"#f9fafb", fontSize:15, fontWeight:500, fontFamily:"Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }} />
+                    </div>
+                  </div>
+                  <div className="sp-col">
+                    <span className="sp-col-lbl">Roth Bal <span style={{color:"#4ade80",fontSize:10}}>(tax-free)</span></span>
+                    <div className="sp-col-row">
+                      <span className="sp-pre">$</span>
+                      <input type="text" inputMode="numeric" value={s.svg_tspRothBal||""} onFocus={SEL}
+                        onChange={e => set("svg_tspRothBal", parseInt(e.target.value.replace(/[^0-9]/g,""))||0)}
+                        style={{ background:"transparent", border:"none", outline:"none", color:"#f9fafb", fontSize:15, fontWeight:500, fontFamily:"Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif" }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* HYSA balance + APY — two columns (Fix 4: info tooltip on APY) */}
             <div className="sp-two">
@@ -1471,14 +1565,20 @@ export default function ServingPage() {
             {/* Civilian retirement age */}
             <div className="sp-row">
               <span className="sp-row-lbl">Civilian Retirement Age</span>
-              <div className="sp-row-val">
+              <div className="sp-row-val" style={{ flexDirection:"column", alignItems:"flex-end" }}>
                 <input
                   type="text" inputMode="numeric"
-                  value={civRetAge}
-                  onFocus={SEL}
-                  onChange={e => set("svg_civRetAge", Math.min(75, Math.max(55, parseInt(e.target.value.replace(/[^0-9]/g, "")) || 65)))}
+                  value={s.svg_civRetAge ?? 65}
+                  onFocus={e => e.target.select()}
+                  onChange={e => {
+                    const raw = e.target.value.replace(/[^0-9]/g, "");
+                    if (raw === "") { set("svg_civRetAge", ""); return; }
+                    const n = parseInt(raw, 10);
+                    if (!isNaN(n)) set("svg_civRetAge", n);
+                  }}
                   style={{ width: "4ch" }}
                 />
+                {(() => { const v = s.svg_civRetAge ?? 65; return (typeof v === "number" && (v < 55 || v > 75)) ? <span style={{ fontSize:10, color:"#f59e0b", marginTop:3 }}>Typical range: 55–75</span> : null; })()}
               </div>
             </div>
 
@@ -1725,7 +1825,29 @@ export default function ServingPage() {
             <div className="sp-results">
 
               {/* ── COMPARISON CARDS — Fix 5: renamed, Fix 8: GI Bill, Fix 9: 4% tooltip ── */}
-              <SectionHeader>Side-by-Side Comparison</SectionHeader>
+              <div style={{ display:"flex", alignItems:"center", gap:6, marginTop:"1.25rem", marginBottom:10 }}>
+                <div className="ds-section-hdr" style={{ margin:0 }}>Side-by-Side Comparison</div>
+                <button
+                  type="button"
+                  onClick={() => setShowBahInfo(v => !v)}
+                  style={{
+                    width:18, height:18, borderRadius:"50%",
+                    background: showBahInfo ? "rgba(212,160,23,0.2)" : "rgba(212,160,23,0.08)",
+                    border:"1px solid rgba(212,160,23,0.35)",
+                    color:"#d4a017", fontSize:11, fontWeight:700,
+                    cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center",
+                    flexShrink:0, lineHeight:1, padding:0, fontFamily:"inherit",
+                    WebkitTapHighlightColor:"transparent",
+                  }}
+                  aria-label="Why no BAH or BAS?"
+                >ⓘ</button>
+              </div>
+              {showBahInfo && (
+                <div style={{ padding:"12px 16px", background:"rgba(212,160,23,0.05)", border:"1px solid rgba(212,160,23,0.2)", borderRadius:8, marginBottom:10, fontSize:13, lineHeight:1.6, color:"#d1d5db" }}>
+                  <div style={{ fontWeight:700, color:"#f0c14b", marginBottom:6, fontSize:12 }}>Why no BAH?</div>
+                  BAH and BAS are active duty allowances — they stop at separation and are not part of your retirement income. This calculator shows your post-separation retirement income only. Your full active duty compensation including BAH and BAS is shown in the <span style={{ color:"#f0c14b", fontWeight:600 }}>Transitioning calculator</span>.
+                </div>
+              )}
               {currentYos < 5 && (
                 <HintBox variant="gold">
                   These projections assume you stay to YOS 20+. With only {currentYos} year{currentYos === 1 ? '' : 's'} of service today, these are long-range estimates — run this again as you get closer to your decision point for more accurate numbers.
@@ -1896,6 +2018,52 @@ export default function ServingPage() {
                   <div className="sp-cmp-total">
                     <span className="sp-cmp-total-l">Phase 2 (at 65)</span>
                     <span className="sp-cmp-total-vb">{fmt(Math.round(moB_at65))}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Scenario C: Transfer to Reserves ── */}
+              <div style={{ marginTop:16, background:"rgba(99,102,241,0.06)", border:"1px solid rgba(99,102,241,0.2)", borderRadius:12, overflow:"hidden" }}>
+                <div style={{ background:"rgba(99,102,241,0.15)", padding:"8px 12px", display:"flex", alignItems:"center", justifyContent:"space-between" }}>
+                  <div>
+                    <div style={{ fontSize:13, fontWeight:700, color:"#a5b4fc" }}>Transfer to Reserves</div>
+                    <div style={{ fontSize:10, color:"#6b7280", marginTop:1 }}>20 qualifying years · Pay begins at age 60</div>
+                  </div>
+                  <div style={{ fontSize:10, color:"#818cf8", textAlign:"right", lineHeight:1.4 }}>
+                    {resEquivYrs.toFixed(1)} equiv yrs<br />{(resEquivYrs * resMultiplier * 100).toFixed(1)}% multiplier
+                  </div>
+                </div>
+                <div style={{ padding:"10px 12px" }}>
+                  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:6 }}>
+                    <span style={{ fontSize:12, color:"#9ca3af" }}>Reserve Retirement Pay</span>
+                    <span style={{ fontSize:15, fontWeight:700, color:"#a5b4fc", fontFamily:"IBM Plex Mono,monospace" }}>{fmt(Math.round(resNetPay))}/mo</span>
+                  </div>
+                  <div style={{ fontSize:10, color:"#6b7280", marginBottom:8 }}>Starts at age 60 · Based on {resPoints.toLocaleString()} total points ({resActiveYrs} active yrs + {resRemainingQual} reserve yrs min.)</div>
+                  {va > 0 && (
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:4 }}>
+                      <span style={{ fontSize:12, color:"#9ca3af" }}>VA Disability ({vaRating}%)</span>
+                      <span style={{ fontSize:13, fontWeight:600, color:"#34d399", fontFamily:"IBM Plex Mono,monospace" }}>{fmt(Math.round(va))}/mo</span>
+                    </div>
+                  )}
+                  {resTspDraw60 > 0.5 && (
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginBottom:4 }}>
+                      <span style={{ fontSize:12, color:"#9ca3af" }}>TSP Draw at 60 (4% rule)</span>
+                      <span style={{ fontSize:13, fontWeight:600, color:"#34d399", fontFamily:"IBM Plex Mono,monospace" }}>{fmt(Math.round(resTspDraw60))}/mo</span>
+                    </div>
+                  )}
+                  <div style={{ borderTop:"1px solid rgba(99,102,241,0.2)", paddingTop:8, marginTop:6 }}>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline" }}>
+                      <span style={{ fontSize:12, fontWeight:700, color:"#a5b4fc" }}>Total at Age 60</span>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#a5b4fc", fontFamily:"IBM Plex Mono,monospace" }}>{fmt(Math.round(resTotalAt60))}/mo</span>
+                    </div>
+                    <div style={{ display:"flex", justifyContent:"space-between", alignItems:"baseline", marginTop:6 }}>
+                      <span style={{ fontSize:12, fontWeight:700, color:"#818cf8" }}>Total at Age 65</span>
+                      <span style={{ fontSize:16, fontWeight:700, color:"#818cf8", fontFamily:"IBM Plex Mono,monospace" }}>{fmt(Math.round(resTotalAt65))}/mo</span>
+                    </div>
+                    <div style={{ fontSize:10, color:"#6b7280", marginTop:4 }}>Includes TSP + HYSA + other investments at 65 · 4% rule</div>
+                  </div>
+                  <div style={{ fontSize:10, color:"#6b7280", marginTop:8, lineHeight:1.5, borderTop:"1px solid rgba(255,255,255,0.04)", paddingTop:8 }}>
+                    ⚠ Reserve retirement pay starts at age 60, not at separation. No retirement income until then. Points-based estimate — consult your personnel office for an official count.
                   </div>
                 </div>
               </div>
@@ -2117,6 +2285,17 @@ export default function ServingPage() {
                 <strong style={{ color: "#ffffff" }}>Disclaimer:</strong> Projections use historical averages and 2026 official pay/VA data. Estimates only — not financial advice. Consult a fee-only financial advisor before making career decisions.
                 <br /><br />
                 <em>Assumptions: TSP at 7% w/ longevity pay steps. HYSA + other investments stop at civilian retirement age, then compound to 65. <strong>4% rule (Bengen, 1994):</strong> annual withdrawal of 4% of savings balance ÷ 12 = monthly draw. Pension: DFAS 2026 tables. High-3: 2.5% × YOS. BRS: 2.0% × YOS. VA: 2026 official rates. GI Bill MHA/stipend applies for entitlement months only.</em>
+              </div>
+
+              {/* ── DEBRIEFED PERSISTENT FOOTER ── */}
+              <div style={{ textAlign:"center", padding:"12px 16px", borderTop:"1px solid rgba(255,255,255,0.06)", marginTop:8 }}>
+                <span style={{ fontSize:12, color:"#6b7280" }}>Need a civilian resume? Try Debriefed → </span>
+                <a href="https://getdebriefed.co?utm_source=milcalc&utm_medium=footer&utm_campaign=footer"
+                  target="_blank" rel="noopener noreferrer"
+                  style={{ fontSize:12, color:"#d4a017", textDecoration:"none", fontWeight:600 }}
+                  onClick={() => track("Debriefed Promo Clicked", { trigger: "footer" })}>
+                  getdebriefed.co
+                </a>
               </div>
 
               {/* ── FEEDBACK BUTTON ── */}

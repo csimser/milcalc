@@ -10,13 +10,12 @@ import {
   TAX_BRACKETS_2026, STANDARD_DEDUCTION_2026, FILING_STATUS_LABELS,
   TRICARE_PLANS, TRICARE_RS, TRICARE_TRR, VA_PRIORITY_GROUPS, VGLI_RATES,
   ELIG_TIERS, ENROLL_OPTS, GI_BILL_ONLINE_MHA, MGIB_AD, MGIB_SR, MGIB_ENROLL_OPTS,
-  BAS_2026, SPECIAL_PAY_DEFS,
+  BAS_2026,
 } from './lib/data.js';
 import {
   lookupPay, calcVAComp, pension, pct, medicalPension, reservePension,
   pensionBySepType, reservePensionAmount, calcFederalTax, calcStateTax,
   getVAPriorityGroup, vgliRate, vgliMonthly, mgibMonthly,
-  sumSpecialPays, countSpecialPays, enabledPayIds,
   fmt, fmtYos, dk,
 } from './lib/calc.js';
 
@@ -1127,39 +1126,6 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
         </div>
       </div>
 
-      {/* Pre-retirement comp drop — only shows when user has entered BAH/special pays */}
-      {(()=>{
-        const spTotal=sumSpecialPays(state.specialPays||{});
-        const hasPre=(state.bah||0)>0||spTotal>0;
-        if(!hasPre||separationType==="veteran") return null;
-        const isEnlisted=state.payGrade&&state.payGrade.startsWith("E-");
-        const effBAS=(state.bas||0)>0?state.bas:(isEnlisted?BAS_2026.enlisted:BAS_2026.officer);
-        const preTotal=h3+(state.bah||0)+effBAS+spTotal;
-        const compDrop=totalAfterIns-preTotal;
-        return(
-          <div className="card dash-full" style={{marginBottom:14}}>
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline",marginBottom:8}}>
-              <div className="cttl" style={{marginBottom:0}}>Compensation Drop</div>
-              <button onClick={()=>{set("planSection","gap");go("planning");}} style={{background:"none",border:"none",color:"var(--nvm)",fontSize:12,fontWeight:600,cursor:"pointer"}}>Details {"\u2192"}</button>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8}}>
-              <div style={{textAlign:"center"}}>
-                <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color:"var(--fnt)",marginBottom:4}}>Active Duty</div>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:15,fontWeight:600,color:"var(--ink)"}}>{fmt(preTotal)}</div>
-              </div>
-              <div style={{textAlign:"center"}}>
-                <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color:"var(--fnt)",marginBottom:4}}>Retired</div>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:15,fontWeight:600,color:"var(--gn)"}}>{fmt(totalAfterIns)}</div>
-              </div>
-              <div style={{textAlign:"center"}}>
-                <div style={{fontSize:9,fontWeight:700,textTransform:"uppercase",letterSpacing:".06em",color:"var(--fnt)",marginBottom:4}}>Drop</div>
-                <div style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:15,fontWeight:600,color:"var(--rd)"}}>{fmt(compDrop)}</div>
-              </div>
-            </div>
-            {spTotal>0&&<div style={{fontSize:11,color:"var(--mut)",marginTop:8}}>Incl. {fmt(spTotal)}/mo special pay ({countSpecialPays(state.specialPays)} items)</div>}
-          </div>
-        );
-      })()}
 
       {/* Status badges */}
       <div className="dash-full" style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
@@ -1253,9 +1219,9 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
         return null;
       })()}
 
-      {/* ── COL CALLOUT — elevated prominence ── */}
-      {isConfigured&&(
-        <button onClick={()=>{set("planSection","col");go("planning");track("COL Banner Tapped",{source:"dashboard"});}}
+      {/* ── COL CALLOUT — contextual after state selected ── */}
+      {isConfigured&&selectedState&&(
+        <button onClick={()=>{set("planSection","col");go("planning");track("COL Banner Tapped",{source:"dashboard",state:selectedState});}}
           style={{display:"flex",alignItems:"center",gap:14,width:"100%",padding:"18px 16px",marginBottom:16,
             background:"linear-gradient(135deg,rgba(26,60,110,.08),rgba(26,60,110,.03))",
             border:"1px solid rgba(26,60,110,.2)",borderRadius:12,cursor:"pointer",
@@ -1265,8 +1231,8 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
           onMouseLeave={e=>{e.currentTarget.style.borderColor="rgba(26,60,110,.2)";e.currentTarget.style.boxShadow="none";}}>
           <span style={{fontSize:28,width:40,textAlign:"center",flexShrink:0}}>{"\u{1F4CD}"}</span>
           <div style={{flex:1,minWidth:0}}>
-            <div style={{fontSize:15,fontWeight:700,color:"var(--ink)",marginBottom:3}}>See how your pay compares across cities</div>
-            <div style={{fontSize:13,color:"var(--mut)",lineHeight:1.4}}>Your {fmt(totalSchool)}/mo may stretch further — or less — depending on where you settle.</div>
+            <div style={{fontSize:15,fontWeight:700,color:"var(--ink)",marginBottom:3}}>You selected {selectedState}.</div>
+            <div style={{fontSize:13,color:"var(--mut)",lineHeight:1.4}}>See how your retirement income compares across cities →</div>
           </div>
           <span style={{fontSize:20,color:"var(--nvm)",flexShrink:0,fontWeight:700}}>{"\u2192"}</span>
         </button>
@@ -1541,7 +1507,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
         doc.setFont("helvetica","bold");doc.setFontSize(14);setC(doc,GOLD_B);
         doc.text("MILCALC",M,27);
         doc.setFont("helvetica","normal");doc.setFontSize(8);setC(doc,HDR_SUB);
-        doc.text("Military Retirement Financial Summary",M+70,27);
+        doc.text(state.userName?`Transition Plan for ${state.userName} · milcalc.app`:"Transition Plan · milcalc.app",M+70,27);
         doc.text(`Generated ${date}`,W-M,20,{align:"right"});
       };
 
@@ -1734,19 +1700,17 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
           const sal2=gap2>0?(gap2/0.75):0;
           const cov2=desiredIncome>0?Math.min(100,(totalForGap2/(desiredIncome||1))*100):0;
 
-          // Pre-retirement compensation comparison (if user entered BAH/special pays)
-          const pdfSpTotal=sumSpecialPays(state.specialPays||{});
-          const pdfHasPre=(state.bah||0)>0||pdfSpTotal>0;
+          // Pre-retirement compensation comparison (if user entered BAH)
+          const pdfHasPre=(state.bah||0)>0;
           if(pdfHasPre&&separationType!=="veteran"){
             const pdfIsEnlisted=payGrade&&payGrade.startsWith("E-");
             const pdfEffBAS=(state.bas||0)>0?state.bas:(pdfIsEnlisted?BAS_2026.enlisted:BAS_2026.officer);
-            const pdfPreTotal=h3+(state.bah||0)+pdfEffBAS+pdfSpTotal;
+            const pdfPreTotal=h3+(state.bah||0)+pdfEffBAS;
             const pdfCompDrop=totalForGap2-pdfPreTotal;
             sectionHead("PRE-RETIREMENT COMPENSATION");
             dataRow("Base Pay",fmt(h3)+"/mo");
             if((state.bah||0)>0) dataRow("BAH",fmt(state.bah)+"/mo");
             dataRow("BAS",fmt(pdfEffBAS)+"/mo");
-            if(pdfSpTotal>0) dataRow("Special & Incentive Pay",fmt(pdfSpTotal)+"/mo",{valueColor:GOLD_P});
             dataRow("Total Active Duty Comp",fmt(pdfPreTotal)+"/mo",{highlight:true,valueColor:GOLD_P});
             y+=4;
             dataRow("Post-Retirement Income",fmt(totalForGap2)+"/mo");
@@ -1797,6 +1761,17 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
       doc.setFont("helvetica","bold");doc.setFontSize(9);setC(doc,GOLD_P);
       doc.text("Update your numbers anytime at milcalc.app",W/2,y+18,{align:"center"});
 
+      // Debriefed promo box on last page
+      {const lp=doc.getNumberOfPages();doc.setPage(lp);
+      const pY=720;
+      doc.setDrawColor(...GOLD_P);doc.setLineWidth(1);
+      doc.rect(M-6,pY,cw+12,36,"S");
+      doc.setFont("helvetica","bold");doc.setFontSize(8);doc.setTextColor(...GOLD_P);
+      doc.text("Planning your transition?",M,pY+11);
+      doc.setFont("helvetica","normal");doc.setFontSize(8);doc.setTextColor(MUT[0],MUT[1],MUT[2]);
+      doc.text("Translate your military experience into a civilian resume at",M,pY+22);
+      doc.setTextColor(...GOLD_P);doc.text("getdebriefed.co",M,pY+32);}
+
       // Add page numbers
       totalPages=doc.getNumberOfPages();
       for(let i=1;i<=totalPages;i++){
@@ -1812,8 +1787,6 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
       // Track
       const sectionLabels={dashboard:"Dashboard Summary",pension:"Pension Breakdown",va:"VA Disability Details",tax:"Tax Analysis",col:"Cost of Living Comparison",gap:"Income Gap Analysis"};
       const included=Object.entries(exportSections).filter(([,v])=>v).map(([k])=>sectionLabels[k]||k);
-      const spTotal=sumSpecialPays(state.specialPays||{});
-      const spCount=countSpecialPays(state.specialPays||{});
       track("PDF Exported",{
         sections_included:included,
         section_count:included.length,
@@ -1825,10 +1798,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
         yos:yos||0,
         pay_grade:usePayGrade?payGrade:"",
         has_bah:(state.bah||0)>0,
-        has_special_pays:spCount>0,
-        special_pay_count:spCount,
-        special_pay_total:spTotal,
-        has_preretirement_comp:(state.bah||0)>0||spCount>0,
+        has_preretirement_comp:(state.bah||0)>0,
       });
 
       setShowExportModal(false);
@@ -2226,8 +2196,8 @@ function BenefitsTab({state,isConfigured,go}){
             <table className="dt">
               <thead><tr><th>Age</th><th>Rate/$1k</th><th>Your cost/mo</th></tr></thead>
               <tbody>
-                {[[29,"Under 29"],[34,"30-34"],[39,"35-39"],[44,"40-44"],[49,"45-49"],
-                  [54,"50-54"],[59,"55-59"],[64,"60-64"],[69,"65-69"],[74,"70-74"],[99,"75+"]
+                {[[29,"Under 30"],[34,"30-34"],[39,"35-39"],[44,"40-44"],[49,"45-49"],
+                  [54,"50-54"],[59,"55-59"],[64,"60-64"],[69,"65-69"],[74,"70-74"],[79,"75-79"],[99,"80+"]
                 ].map(([bracket,label])=>{
                   const rate=VGLI_RATES[bracket];
                   const mo=Math.round((state.vgliCoverage/1000)*rate);
@@ -2241,7 +2211,7 @@ function BenefitsTab({state,isConfigured,go}){
                 })}
               </tbody>
             </table>
-            <div style={{fontSize:11,color:"var(--mut)",marginTop:8}}>Source: VA.gov VGLI rate tables · 2026</div>
+            <div style={{fontSize:11,color:"var(--mut)",marginTop:8}}>Source: VA.gov VGLI rate tables · Effective July 1, 2025 · Max $500,000</div>
           </Reveal>
         )}
       </div>
@@ -2528,10 +2498,8 @@ function PlanningTab({state,set,go}){
             const isEnlisted=payGrade&&payGrade.startsWith("E-");
             const autoBAS=isEnlisted?BAS_2026.enlisted:BAS_2026.officer;
             const effectiveBAS=(state.bas||0)>0?state.bas:autoBAS;
-            const spTotal=sumSpecialPays(state.specialPays||{});
-            const spCount=countSpecialPays(state.specialPays||{});
             const basePay=h3;
-            const preRetTotal=basePay+(state.bah||0)+effectiveBAS+spTotal;
+            const preRetTotal=basePay+(state.bah||0)+effectiveBAS;
             const postRetTotal=totalInc;
             const compGap=postRetTotal-preRetTotal;
             const autoCity=STATE_DEFAULT_CITY[selectedState];
@@ -2559,7 +2527,6 @@ function PlanningTab({state,set,go}){
                   <DR label="Base Pay" value={fmt(basePay)} sub={usePayGrade?GRADE_LABELS[payGrade]||payGrade:`High-36 avg`}/>
                   <DR label="BAH" value={(state.bah||0)>0?fmt(state.bah):"Not set"} color={(state.bah||0)>0?"ink":"red"} sub="Tax-free allowance"/>
                   <DR label="BAS" value={fmt(effectiveBAS)} sub={`${isEnlisted?"Enlisted":"Officer"} 2026 rate · tax-free`}/>
-                  {spTotal>0&&<DR label={`Special Pay (${spCount} items)`} value={fmt(spTotal)} color="navy" sub="Tax-free"/>}
                   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"10px 0",borderTop:"1px solid var(--br)"}}>
                     <span style={{fontSize:14,fontWeight:600,color:"var(--ink)"}}>Total Active Comp</span>
                     <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:18,fontWeight:600,color:"var(--nvm)"}}>{fmt(preRetTotal)}</span>
@@ -2584,12 +2551,6 @@ function PlanningTab({state,set,go}){
                   </div>
                 </div>
 
-                {/* Nudge if no special pays entered */}
-                {spCount===0&&(state.bah||0)===0&&(
-                  <div className="ib ib-gd" style={{marginBottom:14,fontSize:13,lineHeight:1.5}}>
-                    <strong>Add pre-retirement pay details</strong> for a more accurate gap calculation. Flight pay, sea pay, and hazard pay can add $500\u2013$2,000/mo to your pre-retirement income.
-                  </div>
-                )}
               </div>
             ):null;
           })()}
@@ -2985,63 +2946,12 @@ function ProfileTab({state,set,isConfigured,go}){
           <NF label="BAS (Monthly)" value={(state.bas||0)>0?state.bas:(payGrade&&payGrade.startsWith("E-")?BAS_2026.enlisted:BAS_2026.officer)} onChange={v=>set("bas",v)} pre="$" min={0} max={1000} step={10}
             hint={`Auto-filled: ${payGrade&&payGrade.startsWith("E-")?"Enlisted":"Officer"} 2026 rate. Adjust if needed.`}/>
 
-          {/* Special & Incentive Pay — collapsible */}
-          <Reveal label={`Special & Incentive Pay${countSpecialPays(state.specialPays||{})>0?` (${countSpecialPays(state.specialPays||{})} active — ${fmt(sumSpecialPays(state.specialPays||{}))}/mo)`:""}`}>
-            <div style={{marginTop:8}}>
-              <div style={{fontSize:12,color:"var(--fnt)",lineHeight:1.5,marginBottom:8}}>Add special pays to improve gap accuracy. All special pays are tax-free and NOT included in pension calculations.</div>
-              {SPECIAL_PAY_DEFS.map(cat=>(
-                <div key={cat.cat}>
-                  <div style={{fontSize:10,fontWeight:700,letterSpacing:".08em",textTransform:"uppercase",color:"var(--nvm)",marginTop:14,marginBottom:6}}>{cat.cat}</div>
-                  {cat.items.map(item=>{
-                    const sp=(state.specialPays||{})[item.id]||{on:false,amount:item.prefill};
-                    return(
-                      <div key={item.id} style={{padding:"6px 0",borderBottom:"1px solid var(--sub)"}}>
-                        <label style={{display:"flex",alignItems:"center",gap:10,cursor:"pointer",WebkitTapHighlightColor:"transparent"}}>
-                          <input type="checkbox" checked={!!sp.on}
-                            onChange={e=>{
-                              const updated={...(state.specialPays||{}),[item.id]:{on:e.target.checked,amount:sp.amount||item.prefill}};
-                              set("specialPays",updated);
-                              if(e.target.checked){
-                                track("Special Pay Entered",{pays_enabled:enabledPayIds(updated),total_monthly_special_pay:sumSpecialPays(updated),pay_count:countSpecialPays(updated)});
-                              }
-                            }}
-                            style={{width:18,height:18,accentColor:"var(--nv)",flexShrink:0}}/>
-                          <span style={{fontSize:13,color:sp.on?"var(--ink)":"var(--mut)",flex:1,lineHeight:1.3}}>{item.label}</span>
-                        </label>
-                        {sp.on&&(
-                          <div style={{marginLeft:28,marginTop:6}}>
-                            <NF value={sp.amount||0} onChange={v=>{
-                              const updated={...(state.specialPays||{}),[item.id]:{...sp,amount:v}};
-                              set("specialPays",updated);
-                            }} pre="$" min={0} max={10000} step={25}/>
-                          </div>
-                        )}
-                        {item.hint&&<div style={{marginLeft:28,fontSize:11,color:"var(--fnt)",marginTop:2,lineHeight:1.4}}>{item.hint}</div>}
-                      </div>
-                    );
-                  })}
-                </div>
-              ))}
-              {sumSpecialPays(state.specialPays||{})>0&&(
-                <div style={{marginTop:14,padding:12,background:"var(--sub)",borderRadius:8}}>
-                  <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                    <span style={{fontSize:13,fontWeight:600,color:"var(--ink)"}}>Total Special Pay</span>
-                    <span style={{fontFamily:"'IBM Plex Mono',monospace",fontSize:16,fontWeight:600,color:"var(--nvm)"}}>{fmt(sumSpecialPays(state.specialPays||{}))}/mo</span>
-                  </div>
-                </div>
-              )}
-              <div className="ib ib-nv" style={{marginTop:14,fontSize:12}}>
-                Special pays count toward TSP annual contribution limits ($23,500 for 2026). If contributing to TSP from special pay, factor this into your savings plan.
-              </div>
-            </div>
-          </Reveal>
 
           {/* Total active comp summary */}
           {(()=>{
             const isEnl=payGrade&&payGrade.startsWith("E-");
             const effBAS=(state.bas||0)>0?state.bas:(isEnl?BAS_2026.enlisted:BAS_2026.officer);
-            const spTot=sumSpecialPays(state.specialPays||{});
-            const total=h3Prof+(state.bah||0)+effBAS+spTot;
+            const total=h3Prof+(state.bah||0)+effBAS;
             return total>0?(
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"12px 0",marginTop:8,borderTop:"2px solid var(--nvm)"}}>
                 <span style={{fontSize:14,fontWeight:700,color:"var(--ink)"}}>Total Active Duty Comp</span>
@@ -4363,8 +4273,8 @@ export default function App(){
     giUsing:false,giType:"post911",giEligPct:100,giSchoolCity:"Austin, TX",giEnroll:1.0,giOnline:false,giMonthsPerYear:9,
     mgibEnroll:"full",mgibServiceYears:"3+",
     tricareplan:"prime",tricareFamSize:"self",tricareGroup:"A",
-    useVgli:true,vgliCoverage:400000,vgliAge:45,otherLifePremium:0,
-    bah:0,bas:0,specialPays:{},
+    useVgli:true,vgliCoverage:500000,vgliAge:45,otherLifePremium:0,
+    bah:0,bas:0,
     civHiDeps:"single",civHiCost:null,
     _hasVisitedMyInfo:false,
     _hasVisitedBenefits:false,

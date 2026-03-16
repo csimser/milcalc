@@ -17,8 +17,24 @@ function trackNav(to) {
   track("Path Selected", { path: to.replace("/", "") || "home", source: src });
 }
 
+async function handleShare(setToast) {
+  const url = "https://milcalc.app";
+  const text = "Free military retirement calculator — milcalc.app";
+  track("CTA Clicked", { location: "nav_share_milcalc" });
+  if (navigator.share) {
+    try { await navigator.share({ title: "MilCalc", text, url }); } catch {}
+  } else {
+    try {
+      await navigator.clipboard.writeText(url);
+      setToast(true);
+      setTimeout(() => setToast(false), 2000);
+    } catch {}
+  }
+}
+
 export default function NavHeader() {
   const [open, setOpen] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   return (
     <>
@@ -90,6 +106,26 @@ export default function NavHeader() {
         }
         .nh2-mob-off { color: #9ca3af; }
         .nh2-mob-on  { color: #d4a017; background: rgba(212,160,23,0.07); }
+        .nh2-share {
+          display: inline-flex; align-items: center; gap: 5px;
+          padding: 5px 11px;
+          font-size: 12px; font-weight: 500;
+          border-radius: 7px; border: 1px solid rgba(212,160,23,0.4);
+          background: transparent; color: #d4a017;
+          cursor: pointer; white-space: nowrap; min-height: 36px;
+          transition: background 0.13s;
+          -webkit-tap-highlight-color: transparent;
+        }
+        .nh2-share:hover { background: rgba(212,160,23,0.12); }
+        .nh2-mob-share {
+          display: flex; align-items: center; gap: 8px;
+          padding: 0 1.25rem;
+          font-size: 15px; font-weight: 600;
+          min-height: 52px; color: #d4a017;
+          background: none; border: none; width: 100%;
+          cursor: pointer; text-align: left;
+          -webkit-tap-highlight-color: transparent;
+        }
 
         /* Desktop: show nav, hide burger */
         @media (min-width: 520px) {
@@ -125,6 +161,9 @@ export default function NavHeader() {
               {label}
             </NavLink>
           ))}
+          <button className="nh2-share" onClick={() => handleShare(setCopied)}>
+            {copied ? "Copied!" : "↗ Share"}
+          </button>
         </nav>
 
         {/* Mobile hamburger */}
@@ -153,6 +192,12 @@ export default function NavHeader() {
               {label}
             </NavLink>
           ))}
+          <button
+            className="nh2-mob-share"
+            onClick={() => { handleShare(setCopied); setOpen(false); }}
+          >
+            ↗ {copied ? "Copied!" : "Share MilCalc"}
+          </button>
         </div>
       )}
     </>

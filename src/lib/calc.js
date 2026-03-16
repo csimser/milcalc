@@ -183,6 +183,7 @@ export function vgliRate(age) {
   if (age < 65) return VGLI_RATES[64];
   if (age < 70) return VGLI_RATES[69];
   if (age < 75) return VGLI_RATES[74];
+  if (age < 80) return VGLI_RATES[79];
   return VGLI_RATES[99];
 }
 

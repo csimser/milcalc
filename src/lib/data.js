@@ -706,12 +706,13 @@ export const VA_PRIORITY_GROUPS = [
 ];
 
 // ── VGLI RATE TABLE ──────────────────────────────────────────────────
-// Source: va.gov/life-insurance/options-eligibility/vgli/ — Monthly cost per $1,000 of coverage
+// Source: va.gov/life-insurance/options-eligibility/vgli/ — Effective July 1, 2025
+// Monthly cost per $1,000 of coverage. Max coverage: $500,000.
 // Keyed by upper age of bracket (29 = "under 30", 34 = "30-34", etc.)
 export const VGLI_RATES = {
-  29: 0.07, 34: 0.09, 39: 0.13, 44: 0.20,
-  49: 0.33, 54: 0.52, 59: 0.80, 64: 1.20,
-  69: 2.10, 74: 3.30, 99: 4.50,
+  29: 0.06, 34: 0.08, 39: 0.10, 44: 0.14,
+  49: 0.19, 54: 0.29, 59: 0.50, 64: 0.85,
+  69: 1.38, 74: 2.15, 79: 3.85, 99: 4.40,
 };
 
 // ── GI BILL ELIGIBILITY TIERS ────────────────────────────────────────
