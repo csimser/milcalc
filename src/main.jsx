@@ -1,7 +1,11 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
-import App from './App.jsx'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { initAnalytics, captureUtm, track } from './analytics.js'
+import TransitioningPage from './pages/TransitioningPage.jsx'
+import ServingPage from './pages/ServingPage.jsx'
+import RetiredPage from './pages/RetiredPage.jsx'
+import { SharePage } from './App.jsx'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -43,15 +47,45 @@ class ErrorBoundary extends React.Component {
   }
 }
 
+// Unhide body once React has mounted (counterpart to `body { visibility: hidden }` in index.html)
+function AppShell({ children }) {
+  useEffect(() => { document.body.style.visibility = 'visible'; }, []);
+  return children;
+}
+
 initAnalytics();
 // Delay UTM capture to next tick so Mixpanel is fully initialized
 setTimeout(captureUtm, 0);
 
+// Track direct URL access (user typed the URL or followed an external link).
+// Nav-click tracking is handled by NavHeader. This fires only for the initial page load.
+(function trackInitialPath() {
+  const seg = window.location.pathname.replace(/^\//, '').split('/')[0];
+  if (['serving', 'transitioning', 'retired'].includes(seg)) {
+    setTimeout(() => track("Path Selected", { path: seg, source: "direct" }), 0);
+  }
+})();
+
 const root = document.getElementById('root');
 ReactDOM.createRoot(root).render(
   React.createElement(React.StrictMode, null,
-    React.createElement(ErrorBoundary, null,
-      React.createElement(App)
+    React.createElement(AppShell, null,
+      React.createElement(ErrorBoundary, null,
+        React.createElement(BrowserRouter, null,
+          React.createElement(Routes, null,
+            // Root redirect: / → /transitioning until the real landing page is built
+            React.createElement(Route, { path: "/", element: React.createElement(Navigate, { to: "/transitioning", replace: true }) }),
+            React.createElement(Route, { path: "/transitioning", element: React.createElement(TransitioningPage) }),
+            React.createElement(Route, { path: "/serving", element: React.createElement(ServingPage) }),
+            React.createElement(Route, { path: "/retired", element: React.createElement(RetiredPage) }),
+            // Share page + legacy /partners redirect
+            React.createElement(Route, { path: "/share", element: React.createElement(SharePage) }),
+            React.createElement(Route, { path: "/partners", element: React.createElement(Navigate, { to: "/share", replace: true }) }),
+            // Fallback: unknown paths → transitioning
+            React.createElement(Route, { path: "*", element: React.createElement(Navigate, { to: "/transitioning", replace: true }) })
+          )
+        )
+      )
     )
   )
 )

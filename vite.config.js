@@ -5,8 +5,10 @@ export default defineConfig({
   plugins: [react()],
   build: {
     outDir: 'dist',
-    // Capacitor needs relative paths
-    base: './',
+    // base changed from './' to '/' to enable React Router browser routing (HTML5 history API).
+    // Capacitor native builds (iOS/Android) require base: './' — restore if building for native.
+    // Web (Vercel) works with '/' because vercel.json rewrites all paths to index.html.
+    base: '/',
     sourcemap: false,
     rollupOptions: {
       output: {

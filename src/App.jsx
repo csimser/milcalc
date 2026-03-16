@@ -5,1006 +5,29 @@ import { track, r100 } from "./analytics.js";
 import { version as APP_VERSION } from "../package.json";
 import { jsPDF } from "jspdf";
 
-// ── DFAS 2026 BASIC PAY TABLES (Effective January 1, 2026) ─────────────
-// Source: DFAS.mil — Page updated Jan/Feb 2026 (3.8% raise per FY2026 NDAA)
-// Columns = cumulative YOS breakpoints: ≤2, >2, >3, >4, >6, >8, >10, >12, >14, >16, >18, >20, >22, >24, >26, >28, >30, >32, >34, >36, >38, >40
-const YOS_BREAKS = [0,2,3,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40];
+import {
+  PAY2026, YOS_BREAKS, GRADE_LABELS, GRADE_GROUPS, VA, STATES, COL, MHA_CITIES,
+  TAX_BRACKETS_2026, STANDARD_DEDUCTION_2026, FILING_STATUS_LABELS,
+  TRICARE_PLANS, TRICARE_RS, TRICARE_TRR, VA_PRIORITY_GROUPS, VGLI_RATES,
+  ELIG_TIERS, ENROLL_OPTS, GI_BILL_ONLINE_MHA, MGIB_AD, MGIB_SR, MGIB_ENROLL_OPTS,
+  BAS_2026, SPECIAL_PAY_DEFS,
+} from './lib/data.js';
+import {
+  lookupPay, calcVAComp, pension, pct, medicalPension, reservePension,
+  pensionBySepType, reservePensionAmount, calcFederalTax, calcStateTax,
+  getVAPriorityGroup, vgliRate, vgliMonthly, mgibMonthly,
+  sumSpecialPays, countSpecialPays, enabledPayIds,
+  fmt, fmtYos, dk,
+} from './lib/calc.js';
 
-const PAY2026 = {
-  // ENLISTED
-  "E-1": [2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20],
-  "E-2": [2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90,2697.90],
-  "E-3": [2836.80,3015.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00,3198.00],
-  "E-4": [3142.20,3303.00,3482.40,3658.50,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40,3815.40],
-  "E-5": [3342.90,3598.20,3775.80,3946.80,4110.00,4299.90,4395.30,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70,4421.70],
-  "E-6": [3401.10,3743.10,3908.10,4068.90,4235.70,4612.80,4759.50,5043.30,5130.30,5193.60,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70,5267.70],
-  "E-7": [3932.10,4291.50,4456.20,4673.10,4843.80,5135.70,5300.40,5591.70,5835.00,6000.90,6177.30,6245.70,6475.20,6598.20,7067.40,7067.40,7067.40,7067.40,7067.40,7067.40,7067.40,7067.40],
-  "E-8": [null,null,null,null,null,5656.50,5907.00,6061.80,6247.20,6448.20,6811.20,6995.40,7308.30,7481.70,7908.90,7908.90,8067.30,8067.30,8067.30,8067.30,8067.30,8067.30],
-  "E-9": [null,null,null,null,null,null,6910.20,7066.50,7263.60,7496.10,7730.70,8105.10,8423.10,8756.70,9267.90,9267.90,9730.20,9730.20,10217.40,10217.40,10729.20,10729.20],
-  // WARRANT OFFICERS
-  "W-1": [4056.60,4493.70,4611.00,4859.10,5152.20,5584.20,5786.10,6069.30,6346.50,6564.90,6766.20,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10,7010.10],
-  "W-2": [4621.80,5058.90,5193.30,5286.00,5585.40,6051.00,6282.60,6509.40,6787.50,7005.00,7201.50,7437.00,7591.50,7714.20,7714.20,7714.20,7714.20,7714.20,7714.20,7714.20,7714.20,7714.20],
-  "W-3": [5223.30,5440.50,5664.30,5736.90,5970.90,6431.10,6910.50,7136.40,7397.70,7665.90,8150.40,8476.50,8671.80,8879.70,9162.60,9162.60,9162.60,9162.60,9162.60,9162.60,9162.60,9162.60],
-  "W-4": [5719.80,6152.10,6328.50,6502.20,6801.90,7098.00,7398.00,7848.30,8243.70,8619.90,8928.60,9228.90,9669.60,10032.00,10445.40,10445.40,10653.60,10653.60,10653.60,10653.60,10653.60,10653.60],
-  "W-5": [null,null,null,null,null,null,null,null,null,null,null,10169.70,10685.70,11070.30,11495.10,11495.10,12070.80,12070.80,12673.50,12673.50,13308.30,13308.30],
-  // COMMISSIONED OFFICERS
-  "O-1": [4150.20,4320.00,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40,5222.40],
-  "O-2": [4782.00,5446.20,6272.40,6484.50,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70,6617.70],
-  "O-3": [5534.10,6273.90,6770.40,7382.70,7737.00,8125.50,8375.70,8788.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20,9004.20],
-  // COMMISSIONED OFFICERS WITH PRIOR ENLISTED SERVICE (4+ YOS required)
-  "O-1E":[null,null,null,5222.40,5576.70,5783.10,5993.70,6200.70,6484.50,6484.50,6484.50,6484.50,6484.50,6484.50,6484.50,6484.50,6484.50,6484.50,6484.50,6484.50,6484.50,6484.50],
-  "O-2E":[null,null,null,6484.50,6617.70,6828.00,7183.80,7458.90,7663.50,7663.50,7663.50,7663.50,7663.50,7663.50,7663.50,7663.50,7663.50,7663.50,7663.50,7663.50,7663.50,7663.50],
-  "O-3E":[null,null,null,7382.70,7737.00,8125.50,8375.70,8788.20,9137.10,9336.90,9609.60,9609.60,9609.60,9609.60,9609.60,9609.60,9609.60,9609.60,9609.60,9609.60,9609.60,9609.60],
-  "O-4": [6294.60,7286.40,7773.60,7881.00,8332.20,8816.40,9420.00,9888.30,10214.40,10401.60,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90,10509.90],
-  "O-5": [7295.40,8218.20,8787.00,8894.10,9249.60,9461.40,9928.50,10271.70,10715.10,11391.30,11713.80,12032.70,12394.80,12394.80,12394.80,12394.80,12394.80,12394.80,12394.80,12394.80,12394.80,12394.80],
-  "O-6": [8751.30,9613.80,10245.00,10245.00,10284.30,10725.00,10783.50,10783.50,11396.40,12479.70,13115.40,13751.10,14112.90,14479.20,15188.70,15188.70,15408.30,15408.30,15408.30,15408.30,15408.30,15408.30],
-  "O-7": [11540.10,12076.20,12324.30,12522.00,12878.70,13231.80,13639.20,14045.70,14454.30,15735.30,16817.70,16817.70,16817.70,16817.70,16904.40,16904.40,17242.20,17242.20,17242.20,17242.20,17242.20,17242.20],
-  "O-8": [13888.50,14343.90,14645.40,14729.40,15106.50,15735.30,15882.00,16479.60,16651.80,17166.60,17911.80,18598.20,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90],
-  "O-9": [null,null,null,null,null,null,null,null,null,null,null,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90],
-  "O-10":[null,null,null,null,null,null,null,null,null,null,null,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90,18999.90],
-};
-
-// Rank titles for display
-const GRADE_LABELS = {
-  "E-1":"E-1 (Pvt/SR/Amn Basic)","E-2":"E-2 (PV2/SA/Amn)","E-3":"E-3 (PFC/SN/A1C)",
-  "E-4":"E-4 (SPC/CPL/PO3/SrA)","E-5":"E-5 (SGT/PO2/SSgt)","E-6":"E-6 (SSG/PO1/TSgt)",
-  "E-7":"E-7 (SFC/CPO/MSgt)","E-8":"E-8 (MSG/SCPO/SMSgt)","E-9":"E-9 (SGM/CSM/MCPO/CMSgt)",
-  "W-1":"W-1 (WO1)","W-2":"W-2 (CW2)","W-3":"W-3 (CW3)","W-4":"W-4 (CW4)","W-5":"W-5 (CW5)",
-  "O-1":"O-1 (2LT/ENS/2ndLt)","O-2":"O-2 (1LT/LTJG/1stLt)","O-3":"O-3 (CPT/LT/Capt)",
-  "O-1E":"O-1E (2LT w/Prior Enlisted)","O-2E":"O-2E (1LT w/Prior Enlisted)","O-3E":"O-3E (CPT w/Prior Enlisted)",
-  "O-4":"O-4 (MAJ/LCDR/Maj)","O-5":"O-5 (LTC/CDR/LtCol)","O-6":"O-6 (COL/CAPT/Col)",
-  "O-7":"O-7 (BG/RDML/BGen)","O-8":"O-8 (MG/RADM/MajGen)",
-  "O-9":"O-9 (LTG/VADM/LtGen)","O-10":"O-10 (GEN/ADM/Gen)",
-};
-
-const GRADE_GROUPS = [
-  {label:"Enlisted",grades:["E-1","E-2","E-3","E-4","E-5","E-6","E-7","E-8","E-9"]},
-  {label:"Warrant Officer",grades:["W-1","W-2","W-3","W-4","W-5"]},
-  {label:"Officer",grades:["O-1","O-2","O-3","O-4","O-5","O-6","O-7","O-8","O-9","O-10"]},
-  {label:"Officer (Prior Enlisted)",grades:["O-1E","O-2E","O-3E"]},
-];
-
-// Look up 2026 monthly basic pay for a given grade + total YOS
-function lookupPay(grade, yos) {
-  const row = PAY2026[grade];
-  if (!row) return null;
-  // Find the highest applicable column index
-  let idx = 0;
-  for (let i = 0; i < YOS_BREAKS.length; i++) {
-    if (yos > YOS_BREAKS[i]) idx = i;
-  }
-  return row[idx] || null;
-}
-
-const VA = {
-  10:{s:180.42}, 20:{s:356.66},
-  30:{s:552.47,sp:617.47,spc:666.47,c:596.47,ac:32.00},
-  40:{s:795.84,sp:882.84,spc:947.84,c:853.84,ac:43.00},
-  50:{s:1132.90,sp:1241.90,spc:1322.90,c:1205.90,ac:54.00},
-  60:{s:1435.02,sp:1566.02,spc:1663.02,c:1523.02,ac:65.00},
-  70:{s:1808.45,sp:1961.45,spc:2073.98,c:1910.45,ac:76.00},
-  80:{s:2102.15,sp:2277.15,spc:2406.15,c:2219.15,ac:87.00},
-  90:{s:2362.30,sp:2559.30,spc:2704.30,c:2494.30,ac:98.00},
-  100:{s:3938.58,sp:4158.17,spc:4318.99,c:4085.43,ac:109.11},
-};
-
-const STATES = {
-  // ── NO STATE INCOME TAX ──
-  "Alaska":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
-  "Florida":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
-  "Nevada":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
-  "New Hampshire":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
-  "South Dakota":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
-  "Tennessee":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
-  "Texas":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
-  "Washington":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
-  "Wyoming":{ok:true,label:"Tax-Free (No State Income Tax)",note:"No state income tax"},
-  // ── INCOME TAX — FULLY EXEMPT MILITARY RETIREMENT ──
-  "Alabama":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Arizona":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Arkansas":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Connecticut":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Hawaii":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Illinois":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Indiana":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Iowa":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Kansas":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Louisiana":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Maine":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Massachusetts":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Michigan":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Minnesota":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Mississippi":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Missouri":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Nebraska":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "New Jersey":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "New York":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "North Carolina":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt (Bailey Exclusion)"},
-  "North Dakota":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Ohio":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Pennsylvania":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "South Carolina":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "West Virginia":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  "Wisconsin":{ok:true,label:"Tax-Free (Military Exempt)",note:"Fully exempt"},
-  // ── PARTIAL EXEMPTIONS ──
-  "California":{ok:false,rate:9.3,exempt:20000,label:"Partial Exemption — first $20k exempt (income limits apply)",note:"Up to $20k exempt for AGI ≤$125k (single/HOH) / $250k (joint) · 2025–2029 · also applies to SBP annuities"},
-  "Colorado":{ok:false,rate:4.4,exempt:20000,label:"Partial Exemption — age-based",note:"Under 55: $15k exempt · 55–64: $20k exempt · 65+: $24k exempt"},
-  "Delaware":{ok:false,rate:6.6,exempt:12500,label:"Partial Exemption — first $12,500 exempt",note:"Up to $12,500 exempt any age · taxed above"},
-  "Georgia":{ok:false,rate:5.49,exempt:65000,label:"Partial Exemption — first $65k exempt",note:"Starting 2026: up to $65,000 exempt any age"},
-  "Idaho":{ok:false,rate:5.8,exempt:0,label:"Exempt (age 62+ or disabled)",note:"Tax-free for disabled retirees and age 62+ · all others fully taxable"},
-  "Kentucky":{ok:false,rate:4.0,exempt:31110,label:"Partial Exemption — up to $31,110",note:"Pre-1997 retirees fully exempt · post-1997: first $31,110 exempt"},
-  "Maryland":{ok:false,rate:5.75,exempt:12500,label:"Partial Exemption — age-based",note:"Under 55: $12,500 exempt · 55+: $20,000 exempt"},
-  "Montana":{ok:false,rate:6.5,exempt:0,label:"Partial Exemption — 50% up to 5 years",note:"50% deductible for first 5 years of eligibility · age 65+: additional $5,500 subtraction"},
-  "New Mexico":{ok:false,rate:4.9,exempt:30000,label:"Partial Exemption — first $30k exempt",note:"Up to $30,000 exempt (2024–2026) · age 100+: fully exempt"},
-  "Oklahoma":{ok:false,rate:4.75,exempt:10000,pctExempt:75,label:"Partial Exemption — 75% or $10k (whichever greater)",note:"Up to 75% OR $10,000 exempt, whichever is greater"},
-  "Oregon":{ok:false,rate:9.9,exempt:0,label:"Exempt (pre-Oct 1991 service only)",note:"Service before Oct 1, 1991: fully exempt · after: fully taxable · mixed: prorated"},
-  "Rhode Island":{ok:false,rate:5.99,exempt:0,label:"Partial Exemption — exempt age 59½+",note:"Exempt for retirees age 59½ and older · fully taxable below age 59½"},
-  "Utah":{ok:false,rate:0.05,exempt:0,label:"Tax Credit Offset",note:"4.55% flat tax offset by non-refundable credit of 4.5% of retirement pay · effective rate ≈ 0%"},
-  "Vermont":{ok:false,rate:6.6,exempt:0,label:"Exempt (AGI ≤ $125k) / Partial above",note:"AGI ≤$125k: fully exempt · $125k–$175k: partial (prorated) · above $175k: fully taxable"},
-  "Virginia":{ok:false,rate:5.75,exempt:40000,label:"Partial Exemption — first $40k exempt",note:"$40,000 exemption (2025+) · remainder taxed at VA marginal rates"},
-  // ── FULLY TAXABLE ──
-  "District of Columbia":{ok:false,rate:8.95,exempt:0,label:"Fully Taxable",note:"No military retirement tax exemption"},
-};
-
-const COL = {
-  // ── ALABAMA ──
-  "Anniston, AL":82,"Auburn, AL":88,"Birmingham, AL":87,"Dothan, AL":82,
-  "Huntsville, AL":90,"Mobile, AL":86,"Montgomery, AL":84,"Tuscaloosa, AL":87,
-  // ── ALASKA ──
-  "Anchorage, AK":130,"Fairbanks, AK":135,"Juneau, AK":140,"Kodiak, AK":138,
-  // ── ARIZONA ──
-  "Flagstaff, AZ":108,"Phoenix, AZ":103,"Sierra Vista, AZ":91,"Tucson, AZ":95,"Yuma, AZ":95,
-  // ── ARKANSAS ──
-  "Fayetteville, AR":88,"Fort Smith, AR":82,"Little Rock, AR":86,"Pine Bluff, AR":80,
-  // ── CALIFORNIA ──
-  "Bakersfield, CA":106,"Barstow, CA":105,"Fresno, CA":112,"Los Angeles, CA":158,
-  "Monterey, CA":172,"Oakland, CA":162,"Riverside, CA":130,"Sacramento, CA":122,
-  "San Bernardino, CA":118,"San Diego, CA":152,"San Francisco, CA":190,
-  "San Jose, CA":182,"Santa Barbara, CA":168,"Stockton, CA":118,"Ventura, CA":145,
-  // ── COLORADO ──
-  "Colorado Springs, CO":100,"Denver, CO":115,"Fort Collins, CO":108,
-  "Grand Junction, CO":99,"Pueblo, CO":91,
-  // ── CONNECTICUT ──
-  "Bridgeport, CT":132,"Groton, CT":120,"Hartford, CT":118,"New Haven, CT":122,
-  // ── DELAWARE ──
-  "Dover, DE":105,"Wilmington, DE":112,
-  // ── FLORIDA ──
-  "Destin/Fort Walton Beach, FL":100,"Fort Lauderdale, FL":116,"Gainesville, FL":97,
-  "Jacksonville, FL":93,"Key West, FL":145,"Melbourne, FL":98,"Miami, FL":118,
-  "Orlando, FL":100,"Panama City, FL":97,"Pensacola, FL":94,"Port St. Lucie, FL":102,
-  "Tallahassee, FL":95,"Tampa, FL":101,"West Palm Beach, FL":112,
-  // ── GEORGIA ──
-  "Albany, GA":80,"Athens, GA":91,"Atlanta, GA":106,"Augusta, GA":88,
-  "Columbus, GA":84,"Hinesville, GA":84,"Macon, GA":83,"Savannah, GA":92,
-  "Valdosta, GA":82,"Warner Robins, GA":85,
-  // ── HAWAII ──
-  "Hilo, HI":182,"Kailua-Kona, HI":185,"Maui, HI":201,"Oahu, HI":196,
-  // ── IDAHO ──
-  "Boise, ID":104,"Coeur d'Alene, ID":107,"Idaho Falls, ID":93,"Mountain Home, ID":90,
-  // ── ILLINOIS ──
-  "Chicago, IL":115,"Peoria, IL":90,"Rockford, IL":90,"Springfield, IL":88,
-  // ── INDIANA ──
-  "Evansville, IN":86,"Fort Wayne, IN":86,"Indianapolis, IN":92,"South Bend, IN":89,
-  // ── IOWA ──
-  "Cedar Rapids, IA":88,"Des Moines, IA":90,"Sioux City, IA":87,
-  // ── KANSAS ──
-  "Junction City/Fort Riley, KS":84,"Kansas City, KS":88,"Topeka, KS":83,"Wichita, KS":86,
-  // ── KENTUCKY ──
-  "Elizabethtown/Fort Campbell, KY":85,"Hopkinsville, KY":82,"Lexington, KY":90,
-  "Louisville, KY":88,"Richmond, KY":84,
-  // ── LOUISIANA ──
-  "Baton Rouge, LA":90,"Bossier City/Barksdale, LA":86,"New Orleans, LA":97,
-  "Shreveport, LA":85,
-  // ── MAINE ──
-  "Augusta, ME":101,"Bangor, ME":96,"Brunswick, ME":108,"Portland, ME":112,
-  // ── MARYLAND ──
-  "Annapolis, MD":120,"Baltimore, MD":115,"College Park, MD":130,
-  "Frederick, MD":118,"Hagerstown, MD":100,
-  // ── MASSACHUSETTS ──
-  "Boston, MA":162,"Cape Cod, MA":142,"Lowell, MA":130,"Springfield, MA":112,"Worcester, MA":120,
-  // ── MICHIGAN ──
-  "Ann Arbor, MI":108,"Detroit, MI":98,"Grand Rapids, MI":96,"Lansing, MI":91,
-  "Sault Ste. Marie, MI":89,
-  // ── MINNESOTA ──
-  "Duluth, MN":96,"Minneapolis-St. Paul, MN":106,"Rochester, MN":99,"St. Cloud, MN":93,
-  // ── MISSISSIPPI ──
-  "Biloxi/Keesler, MS":85,"Columbus, MS":79,"Gulfport, MS":86,"Hattiesburg, MS":82,
-  "Jackson, MS":83,
-  // ── MISSOURI ──
-  "Columbia, MO":90,"Jefferson City, MO":88,"Kansas City, MO":88,
-  "Springfield, MO":85,"St. Louis, MO":91,
-  // ── MONTANA ──
-  "Billings, MT":97,"Bozeman, MT":110,"Great Falls, MT":91,"Helena, MT":96,"Missoula, MT":105,
-  // ── NEBRASKA ──
-  "Lincoln, NE":89,"Offutt/Omaha, NE":89,
-  // ── NEVADA ──
-  "Las Vegas, NV":104,"Reno, NV":107,
-  // ── NEW HAMPSHIRE ──
-  "Concord, NH":112,"Manchester, NH":116,"Portsmouth, NH":118,
-  // ── NEW JERSEY ──
-  "Atlantic City, NJ":120,"Camden, NJ":115,"Jersey City, NJ":148,"Newark, NJ":145,
-  "Trenton, NJ":118,
-  // ── NEW MEXICO ──
-  "Alamogordo/Holloman, NM":87,"Albuquerque, NM":93,"Clovis/Cannon, NM":84,
-  "Las Cruces, NM":88,"Santa Fe, NM":112,
-  // ── NEW YORK ──
-  "Albany, NY":106,"Buffalo, NY":95,"Ithaca, NY":108,"New York, NY":187,
-  "Rochester, NY":99,"Syracuse, NY":98,"Watertown/Fort Drum, NY":94,
-  // ── NORTH CAROLINA ──
-  "Asheville, NC":103,"Camp Lejeune/Jacksonville, NC":86,"Charlotte, NC":98,
-  "Durham, NC":106,"Fayetteville/Fort Liberty, NC":86,"Goldsboro/Seymour Johnson, NC":84,
-  "Greensboro, NC":92,"Raleigh, NC":102,"Wilmington, NC":98,"Winston-Salem, NC":90,
-  // ── NORTH DAKOTA ──
-  "Bismarck, ND":93,"Fargo, ND":94,"Grand Forks, ND":91,"Minot, ND":90,
-  // ── OHIO ──
-  "Akron, OH":89,"Cincinnati, OH":95,"Cleveland, OH":94,"Columbus, OH":96,
-  "Dayton/Wright-Patterson, OH":91,"Toledo, OH":89,"Youngstown, OH":86,
-  // ── OKLAHOMA ──
-  "Enid/Vance, OK":80,"Lawton/Fort Sill, OK":81,"Oklahoma City, OK":86,"Tulsa, OK":87,
-  // ── OREGON ──
-  "Bend, OR":118,"Eugene, OR":112,"Medford, OR":108,"Portland, OR":130,"Salem, OR":108,
-  // ── PENNSYLVANIA ──
-  "Allentown, PA":105,"Erie, PA":91,"Harrisburg, PA":99,"Philadelphia, PA":118,
-  "Pittsburgh, PA":96,"Reading, PA":101,"Scranton, PA":91,
-  // ── RHODE ISLAND ──
-  "Newport, RI":128,"Providence, RI":122,
-  // ── SOUTH CAROLINA ──
-  "Beaufort/Parris Island, SC":96,"Charleston, SC":104,"Columbia, SC":91,
-  "Greenville, SC":94,"Myrtle Beach, SC":95,"Sumter/Shaw, SC":88,
-  // ── SOUTH DAKOTA ──
-  "Rapid City, SD":92,"Sioux Falls, SD":93,
-  // ── TENNESSEE ──
-  "Chattanooga, TN":92,"Clarksville/Fort Campbell, TN":85,"Jackson, TN":85,
-  "Knoxville, TN":91,"Memphis, TN":88,"Nashville, TN":102,
-  // ── TEXAS ──
-  "Abilene/Dyess, TX":83,"Amarillo, TX":84,"Austin, TX":102,"Beaumont, TX":88,
-  "Corpus Christi, TX":90,"Dallas, TX":100,"El Paso/Fort Bliss, TX":85,
-  "Fort Worth, TX":98,"Houston, TX":95,"Killeen/Fort Cavazos, TX":83,
-  "Laredo, TX":83,"Lubbock, TX":85,"Midland-Odessa, TX":97,"San Antonio, TX":91,
-  "Texarkana, TX":81,"Waco, TX":88,"Wichita Falls/Sheppard, TX":82,
-  // ── UTAH ──
-  "Logan, UT":96,"Ogden, UT":100,"Provo, UT":104,"Salt Lake City, UT":108,
-  "St. George, UT":103,
-  // ── VERMONT ──
-  "Burlington, VT":118,
-  // ── VIRGINIA ──
-  "Charlottesville, VA":114,"Fredericksburg, VA":118,"Hampton Roads/Norfolk, VA":100,
-  "Harrisonburg, VA":96,"Northern Virginia (DC area)":132,"Quantico, VA":122,
-  "Richmond, VA":95,"Roanoke, VA":91,"Virginia Beach, VA":98,
-  // ── WASHINGTON ──
-  "Bremerton, WA":120,"Everett, WA":130,"Olympia, WA":116,"Seattle, WA":145,
-  "Spokane/Fairchild, WA":96,"Tacoma/Joint Base Lewis-McChord, WA":118,"Yakima, WA":95,
-  // ── WEST VIRGINIA ──
-  "Charleston, WV":85,"Huntington, WV":82,"Morgantown, WV":90,
-  // ── WISCONSIN ──
-  "Green Bay, WI":92,"Madison, WI":104,"Milwaukee, WI":98,
-  // ── WYOMING ──
-  "Casper, WY":95,"Cheyenne, WY":94,
-  // ── DC ──
-  "Washington DC":158,
-  // ── OVERSEAS (CONUS-indexed) ──
-  "Baumholder, Germany":108,"Kaiserslautern, Germany":105,"Ramstein, Germany":110,
-  "Stuttgart, Germany":115,"Grafenwöhr, Germany":107,
-  "Aviano, Italy":112,"Naples, Italy":118,"Sigonella, Italy":108,"Vicenza, Italy":114,
-  "Rota, Spain":106,"Mildenhall/Lakenheath, UK":138,"Alconbury, UK":135,
-  "Yokota, Japan":128,"Kadena, Okinawa":118,"Sasebo, Japan":120,"Misawa, Japan":115,
-  "Camp Humphreys, South Korea":112,"Osan, South Korea":110,
-  "Guam (Andersen/Naval Base)":138,
-};
-
-const MHA_CITIES = {
-  // 2026 E-5 with dependents BAH rates — official DTMO table (effective Jan 1, 2026)
-  // GI Bill MHA uses these 2026 rates starting Aug 1, 2026.
-  // Current GI Bill cycle (Aug 2025–Jul 2026) uses 2025 rates (~4.2% lower on average).
-  // ── ALABAMA ──
-  "Anniston/Fort McClellan, AL":    1185,
-  "Auburn, AL":                     1707,
-  "Birmingham, AL":                 2439,
-  "Fort Rucker/Enterprise, AL":     1572,
-  "Huntsville, AL":                 1797,
-  "Mobile, AL":                     1887,
-  "Montgomery, AL":                 1683,
-  // ── ALASKA ──
-  "Anchorage, AK":                  2874,
-  "Fairbanks, AK":                  2436,
-  "Juneau, AK":                     3354,
-  "Kodiak Island, AK":              2865,
-  "Ketchikan, AK":                  2868,
-  "Sitka, AK":                      3210,
-  // ── ARIZONA ──
-  "Phoenix, AZ":                    2289,
-  "Fort Huachuca/Sierra Vista, AZ": 1719,
-  "Tucson/Davis-Monthan, AZ":       1905,
-  "Yuma, AZ":                       1695,
-  // ── ARKANSAS ──
-  "Fayetteville, AR":               1782,
-  "Fort Smith/Fort Chaffee, AR":    1263,
-  "Little Rock, AR":                1848,
-  // ── CALIFORNIA ──
-  "Barstow/Fort Irwin, CA":         2001,
-  "Beale AFB/Marysville, CA":       2967,
-  "Camp Pendleton/Oceanside, CA":   3963,
-  "China Lake/Ridgecrest, CA":      1563,
-  "Edwards AFB/Palmdale, CA":       2658,
-  "El Centro, CA":                  1986,
-  "Fresno, CA":                     2439,
-  "Humboldt County, CA":            1827,
-  "Lemoore NAS/Hanford, CA":        2139,
-  "Los Angeles, CA":                3882,
-  "Marin/Sonoma County, CA":        3303,
-  "Monterey, CA":                   3465,
-  "Oakland/Alameda, CA":            3759,
-  "Riverside, CA":                  3351,
-  "Sacramento, CA":                 2904,
-  "San Bernardino, CA":             3288,
-  "San Diego, CA":                  3975,
-  "San Francisco, CA":              5127,
-  "San Jose/Santa Clara County, CA":4659,
-  "San Luis Obispo, CA":            3198,
-  "Santa Barbara/Ventura, CA":      3537,
-  "Stockton, CA":                   2553,
-  "Travis AFB/Fairfield, CA":       3369,
-  "Twenty-Nine Palms MCB, CA":      1980,
-  "Vandenberg SFB/Santa Maria, CA": 3333,
-  // ── COLORADO ──
-  "Boulder, CO":                    2754,
-  "Colorado Springs, CO":           2358,
-  "Denver, CO":                     2841,
-  "Fort Collins, CO":               2268,
-  // ── CONNECTICUT ──
-  "Hartford, CT":                   2901,
-  "New Haven/Fairfield, CT":        3069,
-  "New London/Groton, CT":          2580,
-  // ── DELAWARE ──
-  "Dover AFB/Rehoboth, DE":         2277,
-  // ── FLORIDA ──
-  "Eglin AFB/Fort Walton Beach, FL":2433,
-  "Florida Keys, FL":               3969,
-  "Fort Myers Beach, FL":           2694,
-  "Fort Pierce, FL":                2691,
-  "Gainesville, FL":                2040,
-  "Jacksonville, FL":               2181,
-  "Miami/Fort Lauderdale, FL":      3660,
-  "Ocala, FL":                      2370,
-  "Orlando, FL":                    2658,
-  "Panama City/Tyndall, FL":        2163,
-  "Patrick SFB/Melbourne, FL":      2502,
-  "Pensacola, FL":                  1863,
-  "Tallahassee, FL":                1824,
-  "Tampa/MacDill, FL":              2709,
-  "Volusia County/Daytona, FL":     2286,
-  "West Palm Beach, FL":            3423,
-  // ── GEORGIA ──
-  "Albany, GA":                     1371,
-  "Atlanta, GA":                    2388,
-  "Augusta/Fort Eisenhower, GA":    1890,
-  "Brunswick/Kings Bay, GA":        2133,
-  "Columbus/Fort Moore, GA":        1716,
-  "Dahlonega, GA":                  2208,
-  "Hinesville/Fort Stewart, GA":    2310,
-  "Savannah, GA":                   2415,
-  "Valdosta/Moody AFB, GA":         1524,
-  "Warner Robins/Robins AFB, GA":   1800,
-  // ── HAWAII ──
-  "Oahu/Honolulu, HI":              3663,
-  "Maui County, HI":                4329,
-  "Hawaii County/Hilo, HI":         3594,
-  "Kauai County, HI":               3798,
-  // ── IDAHO ──
-  "Boise, ID":                      1926,
-  "Mountain Home AFB, ID":          1605,
-  // ── ILLINOIS ──
-  "Chicago, IL":                    3438,
-  "Great Lakes/North Chicago, IL":  2427,
-  "Peoria, IL":                     1572,
-  "Rock Island/Moline, IL":         1908,
-  "Scott AFB/Belleville, IL":       1542,
-  "Springfield/Decatur, IL":        1527,
-  // ── INDIANA ──
-  "Fort Wayne, IN":                 1947,
-  "Indianapolis, IN":               1875,
-  // ── IOWA ──
-  "Des Moines, IA":                 1770,
-  // ── KANSAS ──
-  "Fort Leavenworth, KS":           1815,
-  "Fort Riley/Junction City, KS":   1314,
-  "Topeka, KS":                     1626,
-  "Wichita/McConnell AFB, KS":      1377,
-  // ── KENTUCKY ──
-  "Fort Campbell/Clarksville, KY":  1815,
-  "Fort Knox, KY":                  1647,
-  "Lexington, KY":                  1875,
-  "Louisville, KY":                 1989,
-  // ── LOUISIANA ──
-  "Baton Rouge, LA":                1875,
-  "Fort Polk/Leesville, LA":        1218,
-  "New Orleans, LA":                1905,
-  "Shreveport/Barksdale AFB, LA":   1845,
-  "Lafayette, LA":                  1584,
-  // ── MAINE ──
-  "Bangor, ME":                     1893,
-  "Brunswick, ME":                  2205,
-  "Portland, ME":                   3252,
-  // ── MARYLAND ──
-  "Annapolis, MD":                  2928,
-  "Baltimore, MD":                  2610,
-  "Fort Detrick/Frederick, MD":     2682,
-  "Fort Meade/Laurel, MD":          2901,
-  "Indian Head/Waldorf, MD":        3249,
-  "Patuxent River NAS, MD":         2406,
-  "Washington DC Metro (MD)":       3132,
-  // ── MASSACHUSETTS ──
-  "Boston, MA":                     4791,
-  "Cape Cod/Plymouth, MA":          3924,
-  "Essex County/Salem, MA":         3477,
-  "Hanscom AFB/Bedford, MA":        4188,
-  "Nantucket, MA":                  4344,
-  "Springfield/Holyoke, MA":        2388,
-  "Worcester, MA":                  2919,
-  // ── MICHIGAN ──
-  "Ann Arbor, MI":                  2559,
-  "Detroit, MI":                    2361,
-  "Grand Rapids, MI":               2148,
-  "Lansing, MI":                    1806,
-  "Sault Ste. Marie, MI":           1536,
-  // ── MINNESOTA ──
-  "Duluth, MN":                     2064,
-  "Minneapolis/St. Paul, MN":       2541,
-  // ── MISSISSIPPI ──
-  "Columbus AFB, MS":               1398,
-  "Gulfport/Keesler, MS":           1602,
-  "Hattiesburg/Camp Shelby, MS":    1395,
-  "Jackson, MS":                    1920,
-  "Meridian NAS, MS":               1290,
-  // ── MISSOURI ──
-  "Fort Leonard Wood/Rolla, MO":    1479,
-  "Kansas City, MO":                1986,
-  "Springfield, MO":                1389,
-  "St. Louis/Scott AFB, MO":        2436,
-  "Whiteman AFB/Sedalia, MO":       1611,
-  // ── MONTANA ──
-  "Great Falls/Malmstrom, MT":      1608,
-  "Helena, MT":                     1887,
-  // ── NEBRASKA ──
-  "Lincoln, NE":                    1788,
-  "Omaha/Offutt AFB, NE":           2085,
-  // ── NEVADA ──
-  "Las Vegas/Nellis AFB, NV":       2070,
-  "Reno/Carson City, NV":           2391,
-  // ── NEW HAMPSHIRE ──
-  "Manchester/Concord, NH":         3177,
-  "Portsmouth/Pease, NH":           3321,
-  // ── NEW JERSEY ──
-  "Atlantic City/Egg Harbor, NJ":   2655,
-  "Cape May NWS, NJ":               2754,
-  "Fort Dix/McGuire/Lakehurst, NJ": 2823,
-  "Fort Monmouth/Earle NWS, NJ":    3549,
-  "Northern New Jersey, NJ":        4749,
-  "Trenton, NJ":                    3465,
-  // ── NEW MEXICO ──
-  "Albuquerque/Kirtland AFB, NM":   2211,
-  "Cannon AFB/Clovis, NM":          1365,
-  "Holloman AFB/Alamogordo, NM":    1590,
-  "Las Cruces/White Sands, NM":     1701,
-  "Santa Fe/Los Alamos, NM":        2964,
-  // ── NEW YORK ──
-  "Albany, NY":                     2634,
-  "Buffalo, NY":                    2214,
-  "Fort Drum/Watertown, NY":        1665,
-  "Long Island, NY":                4425,
-  "New York City, NY":              5070,
-  "Rochester, NY":                  2214,
-  "Rome/Griffiss AFB, NY":          2109,
-  "Staten Island, NY":              3735,
-  "Syracuse, NY":                   2049,
-  "West Point, NY":                 3468,
-  "Westchester County, NY":         4479,
-  // ── NORTH CAROLINA ──
-  "Asheville, NC":                  2214,
-  "Camp Lejeune/Jacksonville, NC":  1584,
-  "Charlotte, NC":                  2169,
-  "Cherry Point MCAS/Morehead, NC": 1851,
-  "Durham/Chapel Hill, NC":         2118,
-  "Elizabeth City, NC":             2508,
-  "Fort Liberty/Fayetteville, NC":  1806,
-  "Greensboro, NC":                 1809,
-  "Outer Banks, NC":                2604,
-  "Raleigh, NC":                    2091,
-  "Seymour Johnson AFB/Goldsboro, NC":1521,
-  "Wilmington, NC":                 2040,
-  // ── NORTH DAKOTA ──
-  "Bismarck, ND":                   1596,
-  "Fargo, ND":                      1707,
-  "Grand Forks AFB, ND":            1731,
-  "Minot AFB, ND":                  1548,
-  // ── OHIO ──
-  "Akron, OH":                      1581,
-  "Cincinnati, OH":                 2283,
-  "Cleveland, OH":                  1998,
-  "Columbus, OH":                   1875,
-  "Dayton/Wright-Patterson, OH":    1650,
-  "Toledo, OH":                     2031,
-  // ── OKLAHOMA ──
-  "Altus AFB, OK":                  1254,
-  "Fort Sill/Lawton, OK":           1233,
-  "Oklahoma City/Tinker, OK":       1644,
-  "Tulsa, OK":                      1638,
-  "Vance AFB/Enid, OK":             1200,
-  // ── OREGON ──
-  "Corvallis, OR":                  2388,
-  "Eugene, OR":                     2187,
-  "Portland, OR":                   2379,
-  "Salem, OR":                      2004,
-  // ── PENNSYLVANIA ──
-  "Allentown/Bethlehem, PA":        2373,
-  "Carlisle Barracks, PA":          2076,
-  "Erie, PA":                       1464,
-  "Philadelphia, PA":               2691,
-  "Pittsburgh, PA":                 2283,
-  "State College, PA":              1791,
-  "Wilkes-Barre/Scranton, PA":      1740,
-  "Willow Grove/Philadelphia suburbs, PA": 2934,
-  // ── RHODE ISLAND ──
-  "Newport/NWS Newport, RI":        2847,
-  "Providence, RI":                 3195,
-  // ── SOUTH CAROLINA ──
-  "Beaufort/Parris Island, SC":     2403,
-  "Charleston, SC":                 2385,
-  "Columbia/Fort Jackson, SC":      1878,
-  "Greenville, SC":                 1923,
-  "Myrtle Beach, SC":               2097,
-  "Sumter/Shaw AFB, SC":            1503,
-  // ── SOUTH DAKOTA ──
-  "Rapid City/Ellsworth AFB, SD":   1986,
-  "Sioux Falls, SD":                1554,
-  // ── TENNESSEE ──
-  "Chattanooga, TN":                1986,
-  "Johnson City/Kingsport, TN":     1548,
-  "Knoxville, TN":                  2184,
-  "Memphis, TN":                    2154,
-  "Nashville, TN":                  2268,
-  // ── TEXAS ──
-  "Abilene/Dyess AFB, TX":          1554,
-  "Austin, TX":                     2241,
-  "Beaumont, TX":                   1518,
-  "College Station, TX":            1758,
-  "Corpus Christi NAS, TX":         1788,
-  "Dallas, TX":                     2469,
-  "Del Rio/Laughlin AFB, TX":       1470,
-  "El Paso/Fort Bliss, TX":         1809,
-  "Fort Worth/NAS JRB, TX":         2118,
-  "Houston, TX":                    2193,
-  "Killeen/Fort Cavazos, TX":       1695,
-  "Lubbock, TX":                    1476,
-  "San Angelo/Goodfellow AFB, TX":  1578,
-  "San Antonio, TX":                1869,
-  "Waco, TX":                       1755,
-  "Wichita Falls/Sheppard AFB, TX": 1491,
-  // ── UTAH ──
-  "Hill AFB/Ogden, UT":             2118,
-  "Provo, UT":                      2058,
-  "Salt Lake City, UT":             2130,
-  // ── VERMONT ──
-  "Burlington, VT":                 3120,
-  // ── VIRGINIA ──
-  "Charlottesville, VA":            2373,
-  "Dahlgren/Fort A.P. Hill, VA":    2313,
-  "Fort Belvoir/Quantico, VA":      2955,
-  "Hampton/Newport News/Langley, VA":2274,
-  "Norfolk/Portsmouth/NAS Oceana, VA":2430,
-  "Richmond/Fort Gregg-Adams, VA":  2358,
-  "Roanoke, VA":                    1911,
-  "Washington DC Metro (VA)":       3132,
-  "Warrenton/Culpeper, VA":         3066,
-  // ── WASHINGTON ──
-  "Bremerton/NB Kitsap, WA":        2364,
-  "Everett/NAS Whidbey Island, WA": 2748,
-  "Seattle, WA":                    3135,
-  "Spokane/Fairchild AFB, WA":      2184,
-  "Tacoma/JBLM, WA":                2556,
-  "Yakima, WA":                     1923,
-  // ── WASHINGTON DC ──
-  "Washington DC":                  3132,
-  // ── WEST VIRGINIA ──
-  "Charleston, WV":                 1404,
-  "Morgantown, WV":                 1641,
-  // ── WISCONSIN ──
-  "Madison, WI":                    2655,
-  "Milwaukee, WI":                  2607,
-  // ── WYOMING ──
-  "Cheyenne/F.E. Warren, WY":       1653,
-};
-
-const fmt = n => {const v=Number(n);if(!isFinite(v)||isNaN(v))return "$0";return (v<0?"-$":"$")+Math.abs(Math.round(v)).toLocaleString("en-US");};
-const fmtYos = y => y%1===0?`${y}`:`${y.toFixed(1)}`;
-const dk = dep => ({Single:"s",Spouse:"sp","Spouse + Child":"spc","Child Only":"c"}[dep]||"s");
-
-// Calculate total VA compensation including additional children under 18
-// children = total number of children under 18 (0 = none, 1 = included in base spc/c rate, 2+ = adds per-child amount)
-function calcVAComp(rating, depsKey, children) {
-  const entry = VA[rating];
-  if (!entry) return 0;
-  // 10% and 20% ratings: veteran-alone rate only (no dependent compensation)
-  if (rating <= 20) return entry.s || 0;
-  // Determine base rate from dependency status
-  let baseKey = depsKey;
-  // If they have children, use the child-inclusive base rate
-  if (children > 0 && baseKey === "s") baseKey = "c";        // single + children = child only
-  if (children > 0 && baseKey === "sp") baseKey = "spc";     // spouse + children = spouse + child
-  const base = entry[baseKey] || entry.s || 0;
-  // Additional children beyond the first
-  const extraChildren = Math.max(0, children - 1);
-  const perChild = entry.ac || 0;
-  return base + extraChildren * perChild;
-}
-
-function pension(rt, yos, h3) {
-  if (!h3 || h3 <= 0 || !yos || yos <= 0) return 0;
-  if (rt==="REDUX") return Math.max(0, h3 * Math.min(0.40+Math.max(0,yos-20)*0.035, 0.75));
-  return Math.max(0, h3 * (rt==="BRS"?0.020:0.025) * Math.min(yos,40));
-}
-function pct(rt, yos) {
-  const y = yos || 0;
-  if (rt==="REDUX") return Math.min(40+Math.max(0,y-20)*3.5,75);
-  return Math.min(y*(rt==="BRS"?2.0:2.5),100);
-}
-
-
-// ── MEDICAL RETIREMENT (PDRL/TDRL) — Chapter 61 ──────────────────────
-// Source: 10 USC § 1201/§ 1202; congress.gov/crs-product/IF10483
-// PDRL: DOD rating ≥ 30% OR YOS ≥ 20 → permanent disability retired list
-//   Pay = HIGHER of (DOD% × High-3) or (YOS × multiplier × High-3), capped at 75%
-// TDRL: DOD rating < 30% AND YOS < 20 → temporary list, minimum 50% applied
-//   Pay = 50% × High-3 (minimum floor)
-// BRS members get 2.0% for the YOS leg (NOT 2.5%) — confirmed by DoD Defense Primer
-// Severance: DOD < 30% AND YOS < 20 AND not TDRL → no retirement, severance only
-function medicalPension(yos, h3, dodPct, tdrl, retType) {
-  const yosMult = yos * (retType === "BRS" ? 2.0 : 2.5);
-  const isPDRL = dodPct >= 30 || yos >= 20;
-  const isTDRL = !isPDRL && tdrl;
-  const isSeverance = !isPDRL && !tdrl;
-  const disabMult = isTDRL ? Math.max(dodPct, 50) : dodPct;
-  const finalMult = isPDRL ? Math.min(Math.max(yosMult, disabMult), 75) : isTDRL ? 50 : 0;
-  const method = isPDRL ? (disabMult >= yosMult ? "disability" : "yos") : isTDRL ? "tdrl" : "severance";
-  const severancePay = isSeverance ? 2 * h3 * yos : 0;
-  return { pay: h3 * (finalMult / 100), mult: finalMult, yosMult, disabMult, isPDRL, isTDRL, isSeverance, method, severancePay };
-}
-
-// ── RESERVE/GUARD RETIREMENT ────────────────────────────────────────────
-// Source: 10 USC § 12733; militarypay.defense.gov/Pay/Retirement/Reserve.aspx
-// Formula: (totalPoints ÷ 360) × multiplier × High-3
-// BRS: 2.0% multiplier. High-3/Final Pay: 2.5% multiplier.
-// Verified: 3200 pts, $6000 High-3, High-3 system → (3200/360)×0.025×6000 = $1,333/mo ✓
-function reservePension(points, h3, rt) {
-  if (!points || points <= 0 || !h3 || h3 <= 0) return { pay: 0, equivYOS: 0, multPct: 0 };
-  const equivYOS = points / 360;
-  const mult = rt === "BRS" ? 0.020 : 0.025;
-  const pay = Math.max(0, h3 * mult * equivYOS);
-  return { pay, equivYOS, multPct: mult * 100 };
-}
-
-// Helper: compute pension by separation type — always returns >= 0
-function pensionBySepType(separationType, retType, yos, h3, medDodPct, tdrl, reservePoints, currentAge, payStartAge) {
-  let result = 0;
-  if (separationType === "active") result = pension(retType, yos || 0, h3 || 0);
-  else if (separationType === "medical") result = medicalPension(yos || 0, h3 || 0, medDodPct || 0, tdrl, retType).pay;
-  else if (separationType === "reserve") result = (currentAge >= payStartAge) ? reservePension(reservePoints || 0, h3 || 0, retType).pay : 0;
-  return Math.max(0, result || 0);
-}
-
-// Helper: compute reserve pension amount regardless of age eligibility (for display/export)
-function reservePensionAmount(reservePoints, h3, retType) {
-  return Math.max(0, reservePension(reservePoints || 0, h3 || 0, retType).pay || 0);
-}
-
-// ── 2026 FEDERAL INCOME TAX — Progressive Brackets ───────────────────
-// Source: IRS Rev. Proc. 2025-28 + One Big Beautiful Bill (OBBB) adjustments
-// 2026 IRS figures — standard deductions: $16,100 single/MFS / $32,200 MFJ / $24,150 HOH
-const TAX_BRACKETS_2026 = {
-  single: [
-    { rate: 0.10, min: 0,       max: 11925 },
-    { rate: 0.12, min: 11925,   max: 48475 },
-    { rate: 0.22, min: 48475,   max: 103350 },
-    { rate: 0.24, min: 103350,  max: 197300 },
-    { rate: 0.32, min: 197300,  max: 250525 },
-    { rate: 0.35, min: 250525,  max: 626350 },
-    { rate: 0.37, min: 626350,  max: Infinity },
-  ],
-  mfj: [
-    { rate: 0.10, min: 0,       max: 23850 },
-    { rate: 0.12, min: 23850,   max: 96950 },
-    { rate: 0.22, min: 96950,   max: 206700 },
-    { rate: 0.24, min: 206700,  max: 394600 },
-    { rate: 0.32, min: 394600,  max: 501050 },
-    { rate: 0.35, min: 501050,  max: 751600 },
-    { rate: 0.37, min: 751600,  max: Infinity },
-  ],
-  hoh: [
-    { rate: 0.10, min: 0,       max: 17000 },
-    { rate: 0.12, min: 17000,   max: 64850 },
-    { rate: 0.22, min: 64850,   max: 103350 },
-    { rate: 0.24, min: 103350,  max: 197300 },
-    { rate: 0.32, min: 197300,  max: 250500 },
-    { rate: 0.35, min: 250500,  max: 626350 },
-    { rate: 0.37, min: 626350,  max: Infinity },
-  ],
-};
-TAX_BRACKETS_2026.mfs = TAX_BRACKETS_2026.single; // MFS uses single brackets
-
-const STANDARD_DEDUCTION_2026 = { single: 16100, mfj: 32200, hoh: 24150, mfs: 16100 };
-
-const FILING_STATUS_LABELS = { single:"Single", mfj:"MFJ", hoh:"Head of Household", mfs:"Married Filing Separately" };
-
-// Returns { annualTax, monthlyTax, effectiveRate, totalDeduction }
-// taxableAnnualGross = all taxable income (pension + other) — VA comp excluded
-// filingStatus = "single" | "mfj" | "hoh" | "mfs"
-// age65Plus = boolean (filer is 65+), spouseAge65Plus = boolean (spouse is 65+, MFJ only)
-function calcFederalTax(taxableAnnualGross, filingStatus, age65Plus, spouseAge65Plus) {
-  const gross = Number(taxableAnnualGross) || 0;
-  if (gross <= 0) return { annualTax: 0, monthlyTax: 0, effectiveRate: 0, totalDeduction: 0 };
-  let deduction = STANDARD_DEDUCTION_2026[filingStatus] ?? 16100;
-  // Additional standard deduction for age 65+ or blind
-  if (age65Plus) {
-    deduction += (filingStatus === "mfj") ? 1650 : 2050;
-  }
-  if (spouseAge65Plus && filingStatus === "mfj") {
-    deduction += 1650;
-  }
-  // OBBB senior deduction (2025–2028): additional $6,000 for age 65+
-  // Phases out above $75,000 AGI (single/HOH/MFS) / $150,000 (MFJ)
-  if (age65Plus) {
-    const obbThreshold = (filingStatus === "mfj") ? 150000 : 75000;
-    if (gross <= obbThreshold) deduction += 6000;
-  }
-  const taxableIncome = Math.max(0, gross - deduction);
-  const brackets = TAX_BRACKETS_2026[filingStatus] ?? TAX_BRACKETS_2026.single;
-
-  let annualTax = 0;
-  for (const bracket of brackets) {
-    if (taxableIncome <= bracket.min) break;
-    const taxableInBracket = Math.min(taxableIncome, bracket.max) - bracket.min;
-    annualTax += taxableInBracket * bracket.rate;
-  }
-
-  const effectiveRate = gross > 0
-    ? annualTax / gross
-    : 0;
-
-  return {
-    annualTax: Math.round(annualTax),
-    monthlyTax: Math.round(annualTax / 12),
-    effectiveRate,
-    totalDeduction: deduction,
-  };
-}
-
-// ── STATE TAX HELPER ─────────────────────────────────────────────────
-// Calculates estimated state tax on military retirement pay
-function calcStateTax(annualPension, stateInfo) {
-  if (!stateInfo || stateInfo.ok) return 0;
-  const pension = Math.max(0, annualPension);
-  const exemptDollar = stateInfo.exempt || 0;
-  const exemptPct = (stateInfo.pctExempt || 0) / 100;
-  const exemptAmt = Math.max(exemptDollar, pension * exemptPct);
-  const taxable = Math.max(0, pension - exemptAmt);
-  return Math.round(taxable * ((stateInfo.rate || 0) / 100));
-}
-
-// ── TRICARE 2026 PREMIUM RATES (Monthly, Retiree Enrollment Fees) ────
-// Source: tricare.mil/costs — CY2026 rates (effective Jan 1, 2026)
-// Group A = entered service before Jan 1, 2018; Group B = on/after Jan 1, 2018
-const TRICARE_PLANS = {
-  prime: {
-    label: "TRICARE Prime",
-    note: "Lowest out-of-pocket for retirees < 65. Network only, PCM required.",
-    medicare_b: 0,
-    groupA: { self: 31.83, family: 63.75 },
-    groupB: { self: 38.58, family: 77.25 },
-  },
-  select: {
-    label: "TRICARE Select",
-    note: "Freedom to see any provider. Higher cost-shares, no referral needed.",
-    medicare_b: 0,
-    groupA: { self: 15.58, family: 31.25 },
-    groupB: { self: 49.58, family: 99.25 },
-  },
-  tfl: {
-    label: "TRICARE For Life",
-    note: "Wraps around Medicare for retirees 65+. Requires Medicare Part B enrollment.",
-    medicare_b: 185.00,
-    groupA: { self: 0, family: 0 },
-    groupB: { self: 0, family: 0 },
-  },
-  select_overseas: {
-    label: "TRICARE Select Overseas",
-    note: "Select plan for retirees living overseas. Similar cost-shares to stateside Select.",
-    medicare_b: 0,
-    groupA: { self: 15.58, family: 31.25 },
-    groupB: { self: 49.58, family: 99.25 },
-  },
-};
-
-// TRICARE Reserve Select
-// Source: tricare.mil 2026 Costs & Fees PDF — effective Jan 1, 2026
-const TRICARE_RS = {
-  individual: 57.88,
-  family:     286.66,
-  note: "TRICARE Reserve Select · Available to Selected Reserve (drilling) members only. Lost if you stop drilling."
-};
-
-// TRICARE Retired Reserve (gray area retirees not yet drawing pay)
-// Source: tricare.mil 2026 Costs & Fees PDF — effective Jan 1, 2026
-const TRICARE_TRR = {
-  individual: 645.90,
-  family:     1548.30,
-  note: "TRICARE Retired Reserve · Available if you've retired from the Reserve but aren't yet drawing retirement pay. Compare with ACA marketplace — premiums are significant."
-};
-
-// VA Healthcare Priority Groups
-// Source: va.gov/health-care/eligibility/priority-groups/ (verified March 2026)
-const VA_PRIORITY_GROUPS = [
-  { group: 1, who: "50%+ service-connected disability; TDIU (unemployability); or Medal of Honor", copay: "None for SC conditions", free: true },
-  { group: 2, who: "30–40% service-connected disability", copay: "None for SC conditions", free: true },
-  { group: 3, who: "10–20% service-connected disability; Purple Heart; former POW; or discharged for disability", copay: "None for SC conditions", free: true },
-  { group: 4, who: "Receiving VA Aid & Attendance or Housebound benefits; or catastrophically disabled", copay: "Reduced or no copays", free: false },
-  { group: 5, who: "0% non-compensable or non-SC disability with income below VA threshold; or VA pension recipients", copay: "Reduced copays", free: false },
-  { group: 6, who: "Combat veterans (post-9/11, 10-yr window); PACT Act toxic exposure; Camp Lejeune; Vietnam/Gulf War exposures; 0% SC compensable", copay: "$0 for related conditions; $30/visit for others", free: false },
-  { group: 7, who: "Income above VA threshold but below geographic (GMT) threshold — agrees to copays", copay: "Standard copays", free: false },
-  { group: 8, who: "Income above all thresholds, no qualifying SC disability — agrees to copays", copay: "Standard copays", free: false },
-];
-
-function getVAPriorityGroup(vaRating) {
-  if (vaRating >= 50) return 1;
-  if (vaRating >= 30) return 2;
-  if (vaRating >= 10) return 3;
-  return 5;
-}
-
-// ── VGLI RATE TABLE ──────────────────────────────────────────────────
-// Source: va.gov/life-insurance/options-eligibility/vgli/ — Monthly cost per $1,000 of coverage
-// Keyed by upper age of bracket (29 = "under 30", 34 = "30-34", etc.)
-const VGLI_RATES = {
-  29: 0.07, 34: 0.09, 39: 0.13, 44: 0.20,
-  49: 0.33, 54: 0.52, 59: 0.80, 64: 1.20,
-  69: 2.10, 74: 3.30, 99: 4.50,
-};
-
-function vgliRate(age) {
-  if (age < 30) return VGLI_RATES[29];
-  if (age < 35) return VGLI_RATES[34];
-  if (age < 40) return VGLI_RATES[39];
-  if (age < 45) return VGLI_RATES[44];
-  if (age < 50) return VGLI_RATES[49];
-  if (age < 55) return VGLI_RATES[54];
-  if (age < 60) return VGLI_RATES[59];
-  if (age < 65) return VGLI_RATES[64];
-  if (age < 70) return VGLI_RATES[69];
-  if (age < 75) return VGLI_RATES[74];
-  return VGLI_RATES[99];
-}
-
-function vgliMonthly(coverage, age) {
-  return (coverage / 1000) * vgliRate(age);
-}
-
-// ── GI BILL ELIGIBILITY TIERS ────────────────────────────────────────
-// Source: va.gov/education/about-gi-bill-benefits/post-9-11/
-const ELIG_TIERS = [
-  { pct: 100, label: "100% — 36+ months active duty" },
-  { pct: 90,  label: "90% — 30 months" },
-  { pct: 80,  label: "80% — 24 months" },
-  { pct: 70,  label: "70% — 18 months" },
-  { pct: 60,  label: "60% — 12 months" },
-  { pct: 50,  label: "50% — 6 months" },
-  { pct: 40,  label: "40% — 90 days" },
-];
-
-const ENROLL_OPTS = [
-  { v: 1.0,  l: "Full-Time (100%)" },
-  { v: 0.75, l: "¾ Time (75%)" },
-  { v: 0.5,  l: "Half-Time (50%)" },
-  { v: 0.25, l: "¼ Time (25%)" },
-];
-
-// Post-9/11 GI Bill online-only MHA rate for the 2026 academic year cycle
-// Source: va.gov/education/benefit-rates — Aug 2026–Jul 2027 cycle
-const GI_BILL_ONLINE_MHA = 1261;
-
-// ── MGIB Chapter 30 (Active Duty) rates — Oct 1 2025–Sep 30 2026 ────
-// Source: va.gov/education/benefit-rates/montgomery-active-duty-rates
-// Note: MGIB pays directly to student and IS taxable income (unlike Post-9/11)
-const MGIB_AD = {
-  "3+": { full: 2518.00, three_quarter: 1888.50, half: 1259.00, quarter: 629.50 },
-  "2-3": { full: 2043.00, three_quarter: 1532.25, half: 1021.50, quarter: 510.75 },
-};
-
-// ── MGIB Chapter 1606 (Selected Reserve) rates — Oct 1 2025–Sep 30 2026 ──
-// Source: va.gov/education/benefit-rates/montgomery-selected-reserve-rates
-const MGIB_SR = { full: 493.00, three_quarter: 369.00, half: 246.00, quarter: 123.25 };
-
-const MGIB_ENROLL_OPTS = [
-  { v: "full", l: "Full-Time" },
-  { v: "three_quarter", l: "¾ Time" },
-  { v: "half", l: "Half-Time" },
-  { v: "quarter", l: "¼ Time or Less" },
-];
-
-function mgibMonthly(giType, mgibEnroll, mgibServiceYears) {
-  if (giType === "ch30") return (MGIB_AD[mgibServiceYears] || MGIB_AD["3+"])[mgibEnroll] || 0;
-  if (giType === "ch1606") return MGIB_SR[mgibEnroll] || 0;
-  return 0;
-}
-
-// ── 2026 BAS (Basic Allowance for Subsistence) ─────────────────────────
-// Source: DFAS — adjusted annually per USDA Cost of Food at Home data
-// BAS does NOT increase by the same % as base pay; separate calculation
-const BAS_2026 = { enlisted: 471.84, officer: 325.58 };
-
-// ── SPECIAL & INCENTIVE PAY DEFINITIONS ────────────────────────────────
-// Source: 37 U.S.C. Chapter 5; DoD Financial Management Regulation Vol. 7A
-// Note: Special pays are TAX-FREE and NOT included in High-3/pension calculations
-// They DO count toward TSP contribution limits (annual elective deferral)
-const SPECIAL_PAY_DEFS = [
-  { cat: "Hazardous Duty / Aviation", items: [
-    { id: "acip", label: "Aviation Career Incentive Pay (ACIP)", prefill: 0, hint: "Up to $1,000/mo based on years of aviation service" },
-    { id: "hdip", label: "Hazardous Duty Incentive Pay (HDIP)", prefill: 150, hint: "Parachute, demolitions, experimental stress duty" },
-    { id: "jumpPay", label: "Jump Pay (Static Line / HALO)", prefill: 150 },
-    { id: "divePay", label: "Dive Pay", prefill: 240 },
-    { id: "hfp", label: "Hostile Fire / Combat Pay (IDP/HFP)", prefill: 225 },
-  ]},
-  { cat: "Submarine & Sea", items: [
-    { id: "subPay", label: "Submarine Pay", prefill: 0, hint: "Varies by grade and years of sub service" },
-    { id: "seaPay", label: "Career Sea Pay", prefill: 0, hint: "Varies by grade and years at sea" },
-    { id: "seaPayPrem", label: "Career Sea Pay Premium", prefill: 100, hint: "36+ consecutive months at sea" },
-  ]},
-  { cat: "Nuclear", items: [
-    { id: "nuclearPay", label: "Nuclear Career Incentive Pay", prefill: 0, hint: "Varies significantly by position" },
-    { id: "nuclearBonus", label: "Nuclear Career Annual Bonus (\u00F712)", prefill: 0, hint: "Enter annual bonus \u00F7 12 for monthly" },
-  ]},
-  { cat: "Medical / Professional", items: [
-    { id: "medOfficer", label: "Medical Officer Special Pay", prefill: 0 },
-    { id: "dentalOfficer", label: "Dental Officer Special Pay", prefill: 0 },
-    { id: "vetOfficer", label: "Veterinary Officer Special Pay", prefill: 0 },
-    { id: "boardCert", label: "Board Certified Pay", prefill: 0 },
-    { id: "optometry", label: "Optometry Special Pay", prefill: 0 },
-  ]},
-  { cat: "Retention / Incentive", items: [
-    { id: "csrb", label: "Critical Skills Retention Bonus (\u00F712)", prefill: 0, hint: "Enter annual CSRB \u00F7 12" },
-    { id: "reenlistBonus", label: "Reenlistment Bonus (\u00F7 months)", prefill: 0, hint: "Bonus amount \u00F7 remaining obligated months" },
-  ]},
-  { cat: "Other", items: [
-    { id: "hdpLoc", label: "Hardship Duty Pay \u2014 Location", prefill: 100, hint: "$50\u2013$150/mo depending on location" },
-    { id: "hdpMission", label: "Hardship Duty Pay \u2014 Mission", prefill: 150 },
-    { id: "flpp", label: "Foreign Language Proficiency Pay", prefill: 0, hint: "Up to $500/mo based on language and proficiency" },
-    { id: "sdap", label: "Special Duty Assignment Pay (SDAP)", prefill: 0, hint: "Varies by duty position (SD-1 through SD-6)" },
-    { id: "recruiterDrill", label: "Recruiter / Drill Sergeant Pay", prefill: 375 },
-    { id: "otherSpecial", label: "Other Special Pay", prefill: 0, hint: "Any other special or incentive pay" },
-  ]},
-];
-
-function sumSpecialPays(sp) {
-  if (!sp || typeof sp !== "object") return 0;
-  return Object.values(sp).reduce((sum, p) => sum + (p && p.on ? (Number(p.amount) || 0) : 0), 0);
-}
-
-function countSpecialPays(sp) {
-  if (!sp || typeof sp !== "object") return 0;
-  return Object.values(sp).filter(p => p && p.on && (Number(p.amount) || 0) > 0).length;
-}
-
-function enabledPayIds(sp) {
-  if (!sp || typeof sp !== "object") return [];
-  return Object.entries(sp).filter(([, p]) => p && p.on && (Number(p.amount) || 0) > 0).map(([k]) => k);
-}
-
-const FONTS=`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:wght@700&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');`;
-const CSS=`
+export const FONTS=`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:wght@700&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');`;
+export const CSS=`
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
-  --bg:#151c2e;--card:#1f2d45;--sub:#1f2d45;--ink:#f0ece4;--mut:#8a9ab5;--fnt:#8a9ab5;
-  --nv:#c2782a;--nvm:#e09448;--nvl:rgba(194,120,42,.12);
-  --gn:#5a9e6f;--gnb:rgba(90,158,111,.12);--rd:#c0392b;--rdb:rgba(192,57,43,.12);
-  --gd:#e09448;--gdb:rgba(224,148,72,.12);--br:#2a3a55;--brm:#2a3a55;
+  --bg:#0b1120;--card:#111827;--sub:#111827;--ink:#cbd5e1;--mut:#6b7fa3;--fnt:#6b7fa3;
+  --nv:#d4a017;--nvm:#f0c14b;--nvl:rgba(212,160,23,.12);
+  --gn:#4ade80;--gnb:rgba(74,222,128,.12);--rd:#f87171;--rdb:rgba(248,113,113,.12);
+  --gd:#d4a017;--gdb:rgba(212,160,23,.12);--br:rgba(255,255,255,0.1);--brm:rgba(255,255,255,0.1);
   --sh:56px;--tabh:64px;
   --safe-b:env(safe-area-inset-bottom,0px);
   --safe-t:env(safe-area-inset-top,0px);
@@ -1487,6 +510,28 @@ hr{border:none;border-top:1px solid var(--br);margin:16px 0}
   margin-top:14px}
 .share-footer{margin-top:40px;text-align:center;font-size:12px;color:#7A8AA0}
 .share-footer a{color:#C9913A;text-decoration:none}
+
+/* ── STAY VS GO TAB ── */
+.svgc-cards{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+@media(max-width:400px){.svgc-cards{grid-template-columns:1fr}}
+.svgc-card{background:var(--card);border:1px solid var(--br);border-radius:12px;padding:16px 14px}
+.svgc-card-a{border-top:3px solid var(--nv)}
+.svgc-card-b{border-top:3px solid var(--gn)}
+.svgc-ttl{font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-bottom:12px;line-height:1.4}
+.svgc-ttl-a{color:var(--nvm)}.svgc-ttl-b{color:var(--gn)}
+.svgc-row{display:flex;justify-content:space-between;align-items:baseline;padding:6px 0;border-bottom:1px solid var(--br)}
+.svgc-rl{font-size:12px;color:var(--mut);line-height:1.4;min-width:0;flex:1}
+.svgc-rv{font-family:'IBM Plex Mono',monospace;font-size:13px;font-weight:500;text-align:right;flex-shrink:0;margin-left:8px}
+.svgc-total{padding:10px 0;margin-top:10px;display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--br)}
+.svgc-total-l{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--mut)}
+.svgc-total-v{font-family:'IBM Plex Mono',monospace;font-size:18px;font-weight:700}
+.svgc-total-a .svgc-total-v{color:var(--nvm)}.svgc-total-b .svgc-total-v{color:var(--gn)}
+.svgc-be{text-align:center;padding:18px 16px;border-radius:12px}
+.svgc-be.gn{background:var(--gnb);border:1px solid var(--gn)}
+.svgc-be.am{background:var(--gdb);border:1px solid var(--gd)}
+.svgc-be.rd{background:var(--rdb);border:1px solid var(--rd)}
+.svgc-be-num{font-family:'IBM Plex Mono',monospace;font-size:48px;font-weight:700;line-height:1}
+.svgc-be-lbl{font-size:13px;color:var(--mut);margin-top:4px;line-height:1.5}
 `;
 
 // ── DEBRIEFED CTA CARDS ───────────────────────────────────────────────
@@ -1765,6 +810,33 @@ function Reveal({label,children}){
   );
 }
 
+// ── STAY VS GO: PROJECT TSP BALANCE ───────────────────────────────────
+// Compound monthly at rate (default 7% annual), then grow-only phase
+function pTspBal(initBal, monthlyContrib, contribYrs, growthYrs, rate=0.07) {
+  const mr = rate / 12;
+  let b = Math.max(0, initBal);
+  const cm = Math.round(Math.max(0, contribYrs) * 12);
+  for (let i = 0; i < cm; i++) b = b * (1 + mr) + monthlyContrib;
+  if (growthYrs > 0) b *= Math.pow(1 + rate, growthYrs);
+  return Math.max(0, b);
+}
+
+function pTspBalStepped(initBal, payGrade, startYos, endYos, tspPct, isBRS, growthYrs, rate=0.07) {
+  const mr = rate / 12;
+  let b = Math.max(0, initBal);
+  for (let yos = startYos; yos < endYos; yos++) {
+    const bp = lookupPay(payGrade, yos) || lookupPay(payGrade, startYos) || 5000;
+    const memberAmt = bp * (tspPct / 100);
+    const autoAmt   = isBRS ? bp * 0.01 : 0;
+    const matchT1   = isBRS ? Math.min(memberAmt, bp * 0.03) : 0;
+    const matchT2   = isBRS ? Math.min(Math.max(0, memberAmt - bp * 0.03), bp * 0.02) * 0.5 : 0;
+    const contrib   = memberAmt + autoAmt + matchT1 + matchT2;
+    for (let m = 0; m < 12; m++) b = b * (1 + mr) + contrib;
+  }
+  if (growthYrs > 0) b *= Math.pow(1 + rate, growthYrs);
+  return Math.max(0, b);
+}
+
 // ── TAB 1: DASHBOARD (pure output — home screen) ──────────────────────
 function UnconfiguredBanner({go}){
   return(
@@ -1828,7 +900,8 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
     const mp=state.tricareplan==="tfl"?(state.tricareFamSize==="family"?370:185):0;
     return (gr[state.tricareFamSize]||gr.self)+mp;
   })();
-  const insuranceMo=Math.round(healthPrem+(state.useVgli?vgliMonthly(state.vgliCoverage,state.vgliAge):0)+(state.otherLifePremium||0));
+  const civHiCost=state.civHiCost!=null?state.civHiCost:0;
+  const insuranceMo=Math.round(healthPrem+(state.useVgli?vgliMonthly(state.vgliCoverage,state.vgliAge):0)+(state.otherLifePremium||0)+civHiCost);
   const totalAfterInsRaw=totalSchool-insuranceMo;
   const deductionsExceedIncome=totalAfterInsRaw<0&&(insuranceMo+sbpC)>0;
   const totalAfterIns=Math.max(0,totalAfterInsRaw);
@@ -1858,6 +931,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
     const deductRows=[];
     if(sbpC>0) deductRows.push({label:"SBP Premium",val:sbpC});
     if(healthPrem>0) deductRows.push({label:"TRICARE Premium",val:healthPrem});
+    if(civHiCost>0) deductRows.push({label:"Civilian Health Ins.",val:civHiCost});
     if(vgliPrem>0||otherLifePrem>0) deductRows.push({label:"Life Insurance",val:Math.round(vgliPrem+otherLifePrem)});
     const totalIncome=incomeRows.reduce((s,r)=>s+r.val,0);
     const totalDeductions=deductRows.reduce((s,r)=>s+r.val,0);
@@ -2302,48 +1376,54 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
         <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",
             background:"rgba(0,0,0,.7)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)"}}
           onClick={()=>setShowExportModal(false)}>
-          <div style={{position:"relative",background:"var(--card)",borderRadius:16,padding:24,maxWidth:480,width:"90%",
-              border:"1px solid var(--br)",maxHeight:"85vh",overflowY:"auto",paddingBottom:40}}
+          <div style={{position:"relative",background:"var(--card)",borderRadius:16,maxWidth:480,width:"90%",
+              border:"1px solid var(--br)",maxHeight:"85vh",display:"flex",flexDirection:"column",overflow:"hidden"}}
               onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:18,fontWeight:700,color:"var(--ink)",marginBottom:16}}>Export My Plan</div>
-            <div style={{fontSize:13,color:"var(--mut)",marginBottom:16}}>Choose sections to include in your PDF:</div>
-            {[
-              {key:"dashboard",label:"Dashboard Summary",locked:true},
-              {key:"pension",label:"Pension Breakdown"},
-              {key:"va",label:"VA Disability Details"},
-              {key:"tax",label:"Tax Analysis"},
-              {key:"col",label:"Cost of Living Comparison"},
-              {key:"gap",label:"Income Gap Analysis"},
-            ].map(s=>(
-              <label key={s.key} style={{display:"flex",alignItems:"center",gap:10,padding:"8px 0",cursor:s.locked?"default":"pointer",borderBottom:"1px solid var(--sub)"}}>
-                <input type="checkbox" checked={exportSections[s.key]} disabled={s.locked}
-                  onChange={e=>setExportSections(p=>({...p,[s.key]:e.target.checked}))}
-                  style={{width:18,height:18,accentColor:"var(--nv)"}}/>
-                <span style={{fontSize:14,color:s.locked?"var(--mut)":"var(--ink)"}}>{s.label}{s.locked?" (always included)":""}</span>
-              </label>
-            ))}
-            <div style={{marginTop:16,marginBottom:4}}>
-              <div style={{fontSize:13,color:"var(--mut)",marginBottom:8}}>PDF Style:</div>
-              <div style={{display:"flex",gap:8}}>
-                {[{v:"dark",l:"Dark"},{v:"light",l:"Print Friendly"}].map(t=>(
-                  <button key={t.v} onClick={()=>setPdfTheme(t.v)}
-                    style={{flex:1,padding:"10px 12px",borderRadius:8,fontSize:13,fontWeight:600,cursor:"pointer",
-                      fontFamily:"Barlow,sans-serif",border:pdfTheme===t.v?"2px solid var(--gd)":"1px solid var(--br)",
-                      background:pdfTheme===t.v?"var(--sub)":"transparent",color:pdfTheme===t.v?"var(--ink)":"var(--mut)"}}>
-                    {t.l}
-                  </button>
-                ))}
+            {/* Scrollable content */}
+            <div style={{flex:1,overflowY:"auto",padding:"24px 24px 0"}}>
+              <div style={{fontSize:18,fontWeight:700,color:"var(--ink)",marginBottom:16}}>Export My Plan</div>
+              <div style={{fontSize:13,color:"var(--mut)",marginBottom:16}}>Choose sections to include in your PDF:</div>
+              {[
+                {key:"dashboard",label:"Dashboard Summary",locked:true},
+                {key:"pension",label:"Pension Breakdown"},
+                {key:"va",label:"VA Disability Details"},
+                {key:"tax",label:"Tax Analysis"},
+                {key:"col",label:"Cost of Living Comparison"},
+                {key:"gap",label:"Income Gap Analysis"},
+              ].map(s=>(
+                <label key={s.key} style={{display:"flex",alignItems:"center",gap:10,padding:"10px 0",cursor:s.locked?"default":"pointer",borderBottom:"1px solid var(--sub)"}}>
+                  <input type="checkbox" checked={exportSections[s.key]} disabled={s.locked}
+                    onChange={e=>setExportSections(p=>({...p,[s.key]:e.target.checked}))}
+                    style={{width:18,height:18,accentColor:"var(--nv)",flexShrink:0}}/>
+                  <span style={{fontSize:14,color:s.locked?"var(--mut)":"var(--ink)"}}>{s.label}{s.locked?" (always included)":""}</span>
+                </label>
+              ))}
+              <div style={{marginTop:16,paddingBottom:16}}>
+                <div style={{fontSize:13,color:"var(--mut)",marginBottom:8}}>PDF Style:</div>
+                <div style={{display:"flex",gap:8}}>
+                  {[{v:"dark",l:"Dark"},{v:"light",l:"Print Friendly"}].map(t=>(
+                    <button key={t.v} onClick={()=>setPdfTheme(t.v)}
+                      style={{flex:1,minHeight:44,padding:"10px 12px",borderRadius:8,fontSize:14,fontWeight:600,cursor:"pointer",
+                        fontFamily:"Barlow,sans-serif",border:pdfTheme===t.v?"2px solid var(--gd)":"1px solid var(--br)",
+                        background:pdfTheme===t.v?"var(--sub)":"transparent",color:pdfTheme===t.v?"var(--ink)":"var(--mut)"}}>
+                      {t.l}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
-            <button onClick={()=>{generatePDF();}} disabled={exporting}
-              style={{width:"100%",marginTop:12,padding:"14px 20px",background:exporting?"var(--sub)":"linear-gradient(135deg,#c2782a,#e09448)",
-                color:exporting?"var(--mut)":"#0A0E1A",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:exporting?"wait":"pointer",
-                fontFamily:"Barlow,sans-serif"}}>
-              {exporting?"Generating...":"Generate PDF"}
-            </button>
-            <button onClick={()=>setShowExportModal(false)}
-              style={{width:"100%",marginTop:8,padding:"10px",background:"none",border:"none",
-                color:"var(--mut)",fontSize:13,cursor:"pointer",fontFamily:"Barlow,sans-serif"}}>Cancel</button>
+            {/* Sticky footer with action buttons */}
+            <div style={{padding:"16px 24px 24px",background:"var(--card)",borderTop:"1px solid var(--sub)",flexShrink:0}}>
+              <button onClick={()=>{generatePDF();}} disabled={exporting}
+                style={{width:"100%",padding:"14px 20px",background:exporting?"var(--sub)":"linear-gradient(135deg,#c2782a,#e09448)",
+                  color:exporting?"var(--mut)":"#0A0E1A",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:exporting?"wait":"pointer",
+                  fontFamily:"Barlow,sans-serif",minHeight:50}}>
+                {exporting?"Generating...":"Generate PDF"}
+              </button>
+              <button onClick={()=>setShowExportModal(false)}
+                style={{width:"100%",marginTop:8,padding:"10px",background:"none",border:"none",
+                  color:"var(--mut)",fontSize:13,cursor:"pointer",fontFamily:"Barlow,sans-serif",minHeight:44}}>Cancel</button>
+            </div>
           </div>
         </div>,document.body
       )}
@@ -2526,7 +1606,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
       y=56;
 
       // Name and rank info
-      const displayName=userName||"";
+      const displayName=(userName||"").trim();
       if(displayName){
         doc.setFont("helvetica","bold");doc.setFontSize(16);setC(doc,TXT);
         doc.text(displayName,M,y+14);
@@ -2686,7 +1766,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
           checkSpace(24);
           doc.setFont("helvetica","normal");doc.setFontSize(7.5);setC(doc,ROWLBL);
           doc.text("Benefits Coverage",M+8,y+8);
-          progressBar(M+100,cw-160,cov2,gap2<=0?GRN:GOLD_P);
+          progressBar(M+100,cw-160,cov2,gap2<=0?(isLight?GOLD_P:GRN):GOLD_P);
           y+=6;
         }
       }
@@ -3215,6 +2295,18 @@ function PlanningTab({state,set,go}){
          medDodPct,tdrl,reservePoints,currentAge,payStartAge,
          giUsing,giType,giEligPct,giSchoolCity,giEnroll,giOnline,
          mgibEnroll,mgibServiceYears}=state;
+  const planHysaBal=state.svg_hysaBal!=null?state.svg_hysaBal:0;
+  const planHysaMo=state.svg_hysaMo!=null?state.svg_hysaMo:0;
+  const planHysaApy=state.svg_hysaApy!=null?state.svg_hysaApy:4.5;
+  const planOthBal=state.svg_othBal!=null?state.svg_othBal:0;
+  const planOthMo=state.svg_othMo!=null?state.svg_othMo:0;
+  const planOthRate=state.svg_othRate!=null?state.svg_othRate:7;
+  const planSsaMo=state.plan_ssaMo!=null?state.plan_ssaMo:0;
+  const planAge=currentAge>0?currentAge:45;
+  const planHysaAt65=pTspBal(planHysaBal,planHysaMo,Math.max(0,65-planAge),0,planHysaApy/100);
+  const planHysaDraw=planHysaAt65*0.04/12;
+  const planOthAt65=pTspBal(planOthBal,planOthMo,Math.max(0,65-planAge),0,planOthRate/100);
+  const planOthDraw=planOthAt65*0.04/12;
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
   const key=dk(vaDeps);
   const nKids=vaChildren||0;
@@ -3257,7 +2349,7 @@ function PlanningTab({state,set,go}){
   ];
 
   // Gap — compute from My Info data automatically
-  const totalBase=atP+vaM+otherMo;
+  const totalBase=atP+vaM+otherMo+planHysaDraw+planOthDraw+planSsaMo;
   const totalIncRaw=totalBase+mhaMo;
   const totalInc=Math.max(0,totalIncRaw);
   const gap=desiredIncome-totalInc;
@@ -4062,6 +3154,35 @@ function ProfileTab({state,set,isConfigured,go}){
         )}
       </div>
 
+      {/* ── CIVILIAN HEALTH INSURANCE ── */}
+      <div className="card">
+        <div className="cttl">Civilian Health Insurance</div>
+        <div style={{fontSize:12,color:"var(--mut)",marginBottom:12}}>
+          {separationType==="veteran"?"VA Healthcare covers medical care but not all civilian insurance costs. Estimate your premium below.":"For comparison — retirees typically use TRICARE. Enter $0 if using TRICARE only."}
+        </div>
+        <div className="field">
+          <label className="flbl">Coverage Level</label>
+          <div className="tg">
+            {[{v:"single",l:"Single"},{v:"family",l:"Family"}].map(o=>(
+              <button key={o.v} className={"tb"+((state.civHiDeps||"single")===o.v?" on":"")}
+                onClick={()=>{set("civHiDeps",o.v);set("civHiCost",o.v==="family"?1300:450);}}>
+                {o.l}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field" style={{marginBottom:0}}>
+          <label className="flbl">Est. civilian health insurance premium</label>
+          <div className="iwrap">
+            <span className="ipre">$</span>
+            <input className="nf pre" type="number" min={0} value={state.civHiCost!=null?state.civHiCost:0}
+              onFocus={e=>e.target.select()}
+              onChange={e=>set("civHiCost",Math.max(0,parseInt(e.target.value)||0))}/>
+          </div>
+          <div className="fhint">Monthly deduction. Default: Single $450/mo · Family $1,300/mo. Enter $0 if covered by TRICARE or employer plan.</div>
+        </div>
+      </div>
+
       {/* ── INSURANCE ── */}
       <div className="card">
         <div className="cttl">{separationType==="veteran"?"VA Healthcare":separationType==="reserve"&&currentAge<payStartAge?"Reserve Healthcare":"TRICARE"}</div>
@@ -4327,7 +3448,7 @@ function PrivacyScreen({onClose}){
 
 // ── SHARE PAGE (unified: personal link + org builder + blurb + orgs) ──
 const SHARE_ORGS=["VFW","DAV","AMVETS","American Legion","MOAA","Military OneSource","USO","r/MilitaryFinance"];
-function SharePage(){
+export function SharePage(){
   const [name,setName]=useState("");
   const [copied,setCopied]=useState(false);
   const [orgOpen,setOrgOpen]=useState(false);
@@ -4420,11 +3541,716 @@ function SharePage(){
 // ── GI BILL MHA DATA ───────────────────────────────────────────────────
 // (data constants end here — section components replaced by 4-tab architecture above)
 
+
+// ── TAB 5: STAY VS GO CALCULATOR ──────────────────────────────────────
+export function StayVsGoTab({state,set}){
+  const SEL = e => e.target.select();
+  // Read inputs from global state with safe defaults
+  const payGrade    = state.svg_payGrade  || "E-7";
+  const currentYos  = state.svg_cYos      != null ? state.svg_cYos   : 10;
+  const currentAge  = state.svg_cAge      != null ? state.svg_cAge   : 28;
+  const retType     = state.svg_retType   || "High-3";
+  const tspBalance  = state.svg_tspBal    != null ? state.svg_tspBal : 0;
+  const tspPct      = state.svg_tspPct    != null ? state.svg_tspPct : 5;
+  const sepYos      = state.svg_sepYos    != null ? state.svg_sepYos : Math.min(19, Math.max(currentYos+1, 15));
+  const targetYos   = state.svg_tgtYos    != null ? state.svg_tgtYos : Math.max(currentYos+1, 20);
+  const vaRating    = state.svg_vaRat     || 0;
+  const selState    = state.svg_state     || "Texas";
+  const civSalary   = state.svg_civSal    != null ? state.svg_civSal  : 60000;
+  const civSalBRaw  = state.svg_civSalB   != null ? state.svg_civSalB : 0;
+  const hysaBal     = state.svg_hysaBal   != null ? state.svg_hysaBal : 0;
+  const hysaContrib = state.svg_hysaMo    != null ? state.svg_hysaMo  : 0;
+  const hysaApy     = state.svg_hysaApy   != null ? state.svg_hysaApy : 4.5;
+  const othBal      = state.svg_othBal    != null ? state.svg_othBal  : 0;
+  const othContrib  = state.svg_othMo     != null ? state.svg_othMo   : 0;
+  const othRate     = state.svg_othRate   != null ? state.svg_othRate  : 7;
+  const civRetAge   = state.svg_civRetAge != null ? state.svg_civRetAge : 65;
+  const svgVaDep    = state.svg_vaDep    || "alone";
+  const svgGiUse    = state.svg_giUse    || false;
+  const svgGiMonths = state.svg_giMonths != null ? state.svg_giMonths : 36;
+  const svgHiDeps   = state.svg_hiDeps   || "single";
+  const svgHiCostDefault = svgHiDeps === "family" ? 1300 : 450;
+  const svgHiCost   = state.svg_hiCost   != null ? state.svg_hiCost : svgHiCostDefault;
+
+  const isBRS = retType === "BRS";
+  const basePay = lookupPay(payGrade, currentYos) || 5000;
+
+  // VA dependency mapping
+  const SVG_DEP_MAP = {
+    alone:{key:"s",ch:0},spouse:{key:"sp",ch:0},
+    sp_1c:{key:"sp",ch:1},sp_2c:{key:"sp",ch:2},sp_3c:{key:"sp",ch:3},
+    s_1c:{key:"s",ch:1},s_2c:{key:"s",ch:2},s_3c:{key:"s",ch:3},
+  };
+  const {key:vaDepsKey,ch:vaDepChildren} = SVG_DEP_MAP[svgVaDep] || SVG_DEP_MAP.alone;
+  const va = calcVAComp(vaRating, vaDepsKey, vaDepChildren);
+
+  // BRS government contribution breakdown at current pay (for display/warning)
+  const memberAmt = basePay * (tspPct / 100);
+  const autoAmt   = isBRS ? basePay * 0.01 : 0;
+  const matchT1   = isBRS ? Math.min(memberAmt, basePay * 0.03) : 0;
+  const matchT2   = isBRS ? Math.min(Math.max(0, memberAmt - basePay * 0.03), basePay * 0.02) * 0.5 : 0;
+  const totalContrib = memberAmt + autoAmt + matchT1 + matchT2;
+  const showBrsWarn  = isBRS && tspPct < 5;
+
+  // Constrained slider values
+  const safeSep = Math.max(currentYos+1, Math.min(19, sepYos));
+  const safeTgt = Math.max(currentYos+1, Math.min(30, targetYos));
+
+  // Ages at separation / retirement
+  const sepAge = currentAge + Math.max(0, safeSep - currentYos);
+  const retAge = currentAge + Math.max(0, safeTgt - currentYos);
+
+  // ── TSP Projections (stepped: uses longevity pay increases year-by-year) ──
+  const tspAt65A = pTspBalStepped(tspBalance, payGrade, currentYos, safeSep, tspPct, isBRS, Math.max(0, 65-sepAge));
+  const tspDrawA = tspAt65A * 0.04 / 12;
+  const tspAt65B = pTspBalStepped(tspBalance, payGrade, currentYos, safeTgt, tspPct, isBRS, Math.max(0, 65-retAge));
+  const tspDrawB = tspAt65B * 0.04 / 12;
+
+  // ── HYSA Projection — contributions stop at civRetAge, then pure growth to 65 ──
+  const hysaAt65 = pTspBal(hysaBal, hysaContrib, Math.max(0, civRetAge-currentAge), Math.max(0, 65-civRetAge), hysaApy/100);
+  const hysaDraw = hysaAt65 * 0.04 / 12;
+
+  // ── Other Investments Projection — contributions stop at civRetAge, then pure growth to 65 ──
+  const othAt65 = pTspBal(othBal, othContrib, Math.max(0, civRetAge-currentAge), Math.max(0, 65-civRetAge), othRate/100);
+  const othDraw = othAt65 * 0.04 / 12;
+
+  // ── GI Bill (Scenario A only) — reuse existing GI Bill state from main app ──
+  const giMhaBase = state.giOnline ? GI_BILL_ONLINE_MHA : (MHA_CITIES[state.giSchoolCity] || 0);
+  const giMhaMo = svgGiUse ? Math.round(giMhaBase * ((state.giEligPct||100) / 100) * (state.giEnroll ?? 1.0)) : 0;
+  const giEndAge = sepAge + Math.ceil(svgGiMonths / 12);
+
+  // ── Pension (Scenario B, High-3 or BRS, needs ≥20 YOS) ──
+  const retPay    = lookupPay(payGrade, safeTgt) || basePay;
+  const pensMult  = isBRS ? 0.02 : 0.025;
+  const pensGross = safeTgt >= 20 ? retPay * pensMult * Math.min(safeTgt, 40) : 0;
+  const si = STATES[selState] || {ok:true};
+  const pensNet = pensGross - calcStateTax(pensGross * 12, si) / 12;
+
+  // Civilian salary for Scenario B (default 80% of A, user-overrideable)
+  const civSalB = civSalBRaw > 0 ? civSalBRaw : civSalary * 0.8;
+  const civSalBDisplay = civSalBRaw > 0 ? civSalBRaw : Math.round(civSalary * 0.8);
+
+  // ── Monthly totals ──
+  // Scenario A: deduct civilian health insurance; Scenario B: TRICARE ($0 deduction)
+  const moA_at65  = civSalary/12 + tspDrawA + va + hysaDraw + othDraw - svgHiCost;
+  const moB_at65  = pensNet + tspDrawB + va + civSalB/12 + hysaDraw + othDraw;
+  const moB_pre65 = pensNet + va + civSalB/12;
+
+  // ── Break-even: cumulative earnings year-by-year ──
+  const milAnn   = basePay * 12;
+  const chartEnd = Math.max(85, retAge + 25);
+  let cumA=0, cumB=0, breakEvenAge=null;
+  const chartData=[];
+  for(let age=currentAge; age<=chartEnd; age++){
+    const civA  = age < civRetAge ? civSalary : 0;
+    const civBa = age < civRetAge ? civSalB   : 0;
+    const post65 = age >= 65 ? hysaDraw*12 + othDraw*12 : 0;
+    // Scenario A: include GI Bill income during entitlement period, subtract health insurance
+    const annA = age<sepAge  ? milAnn
+               : (svgGiUse && age<giEndAge) ? civA + va*12 + giMhaMo*12 - svgHiCost*12
+               : age<65      ? civA + va*12 - svgHiCost*12
+               :               civA + va*12 + tspDrawA*12 + post65 - svgHiCost*12;
+    const annB = age<retAge  ? milAnn
+               : age<65      ? pensNet*12 + va*12 + civBa
+               :               pensNet*12 + va*12 + civBa + tspDrawB*12 + post65;
+    cumA+=annA; cumB+=annB;
+    chartData.push({age,cumA,cumB});
+    if(!breakEvenAge && age>retAge && cumB>=cumA) breakEvenAge=age;
+  }
+
+  // ── Share modal ──
+  const [showShareModal,setShowShareModal]=useState(false);
+  const [shareImgURL,setShareImgURL]=useState(null);
+  const shareBlobRef=useRef(null);
+
+  const buildCanvas=()=>{
+    const C={bg:"#0a1628",card:"#1e3a5f",gold:"#d4a017",goldL:"#f0c14b",mut:"#8a9bb0",lt:"#cbd5e1",wh:"#ffffff",gn:"#5a9e6f",disc:"#111f35"};
+    const W=400,PAD=20,RH=36,RG=6,SG=16,RR=8;
+    const fmtD=v=>"$"+Math.round(v).toLocaleString();
+    const rrFn=(ctx,x,y,w,h,r)=>{ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+w-r,y);ctx.quadraticCurveTo(x+w,y,x+w,y+r);ctx.lineTo(x+w,y+h-r);ctx.quadraticCurveTo(x+w,y+h,x+w-r,y+h);ctx.lineTo(x+r,y+h);ctx.quadraticCurveTo(x,y+h,x,y+h-r);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.closePath();};
+    const rowsA=[[`Civilian Salary`,civSalary/12],[`TSP Draw (65+)`,tspDrawA],[`VA Disability`,va],[`HYSA (65+)`,hysaDraw],[`Other Inv. (65+)`,othDraw]].filter(r=>r[1]>0.5);
+    const deductA=svgHiCost>0?[[`Health Insurance`,-svgHiCost]]:[];
+    const rowsB=[[`Pension (net)`,pensNet],[`TSP Draw (65+)`,tspDrawB],[`VA Disability`,va],[`Civilian Salary`,civSalB/12],[`HYSA (65+)`,hysaDraw],[`Other Inv. (65+)`,othDraw]].filter(r=>r[1]>0.5);
+    let h=PAD+30+SG+16+8+(rowsA.length+deductA.length)*(RH+RG)+SG+16+8+rowsB.length*(RH+RG)+SG+46+SG+46+SG+46+SG+52+SG+20+PAD;
+    const canvas=document.createElement("canvas");
+    canvas.width=W*2; canvas.height=h*2;
+    const ctx=canvas.getContext("2d"); ctx.scale(2,2);
+    ctx.fillStyle=C.bg; ctx.fillRect(0,0,W,h);
+    let y=PAD;
+    // Header
+    rrFn(ctx,PAD,y,26,26,6); ctx.fillStyle="#0A0E1A"; ctx.fill(); ctx.strokeStyle=C.gold; ctx.lineWidth=1; ctx.stroke();
+    ctx.fillStyle=C.goldL; ctx.font="bold 16px system-ui,sans-serif"; ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("M",PAD+13,y+13);
+    ctx.fillStyle=C.goldL; ctx.font="500 14px system-ui,sans-serif"; ctx.textAlign="left"; ctx.fillText("MilCalc",PAD+34,y+13);
+    ctx.fillStyle=C.mut; ctx.font="11px system-ui,sans-serif"; ctx.textAlign="right"; ctx.fillText("Stay vs Go",W-PAD,y+13);
+    y+=30+SG;
+    const secLbl=(text,sy,col)=>{ctx.fillStyle=col||C.gold;ctx.font="bold 10px system-ui,sans-serif";ctx.textAlign="left";ctx.textBaseline="top";try{ctx.letterSpacing="1.5px";}catch{}ctx.fillText(text.toUpperCase(),PAD,sy);try{ctx.letterSpacing="0px";}catch{}return sy+16+8;};
+    const cardRow=(lbl,val,ry)=>{const isNeg=val<0;rrFn(ctx,PAD,ry,W-PAD*2,RH,RR);ctx.fillStyle=C.card;ctx.fill();ctx.fillStyle=C.lt;ctx.font="12px system-ui,sans-serif";ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(lbl,PAD+12,ry+RH/2);ctx.fillStyle=isNeg?"#f87171":C.wh;ctx.font="500 13px system-ui,sans-serif";ctx.textAlign="right";ctx.fillText((isNeg?"-$":"")+Math.abs(Math.round(val)).toLocaleString()+"/mo",W-PAD-12,ry+RH/2);return ry+RH+RG;};
+    y=secLbl(`Scenario A — Leave at ${safeSep} years`,y);
+    for(const[l,v] of rowsA) y=cardRow(l,v,y);
+    for(const[l,v] of deductA) y=cardRow(l,v,y);
+    y+=SG-RG;
+    y=secLbl(`Scenario B — Stay to ${safeTgt} years`,y,C.gn);
+    for(const[l,v] of rowsB) y=cardRow(l,v,y);
+    y+=SG-RG;
+    // Total A
+    rrFn(ctx,PAD,y,W-PAD*2,46,RR);ctx.fillStyle=C.card;ctx.fill();ctx.strokeStyle=C.gold;ctx.lineWidth=1.5;rrFn(ctx,PAD,y,W-PAD*2,46,RR);ctx.stroke();
+    ctx.fillStyle=C.gold;ctx.font="500 12px system-ui,sans-serif";ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(`Leave ${safeSep}yrs — Monthly @ 65`,PAD+12,y+23);
+    ctx.fillStyle=C.goldL;ctx.font="500 19px system-ui,sans-serif";ctx.textAlign="right";ctx.fillText(fmtD(moA_at65),W-PAD-12,y+23);
+    y+=46+SG;
+    // Total B
+    rrFn(ctx,PAD,y,W-PAD*2,46,RR);ctx.fillStyle=C.card;ctx.fill();ctx.strokeStyle=C.gn;ctx.lineWidth=1.5;rrFn(ctx,PAD,y,W-PAD*2,46,RR);ctx.stroke();
+    ctx.fillStyle=C.gn;ctx.font="500 12px system-ui,sans-serif";ctx.textAlign="left";ctx.textBaseline="middle";ctx.fillText(`Stay ${safeTgt}yrs — Monthly @ 65`,PAD+12,y+23);
+    ctx.fillStyle=C.wh;ctx.font="500 19px system-ui,sans-serif";ctx.textAlign="right";ctx.fillText(fmtD(moB_at65),W-PAD-12,y+23);
+    y+=46+SG;
+    // Break-even panel
+    const beCol=breakEvenAge?(breakEvenAge<=65?C.gn:"#e09448"):"#f87171";
+    const beTxt=breakEvenAge?`Break-even age: ${breakEvenAge}`:`Break-even: not before age ${chartEnd}`;
+    rrFn(ctx,PAD,y,W-PAD*2,46,RR);ctx.fillStyle=C.disc;ctx.fill();ctx.strokeStyle=beCol;ctx.lineWidth=1.5;rrFn(ctx,PAD,y,W-PAD*2,46,RR);ctx.stroke();
+    ctx.fillStyle=beCol;ctx.font="bold 14px system-ui,sans-serif";ctx.textAlign="center";ctx.textBaseline="middle";ctx.fillText(beTxt,W/2,y+23);
+    y+=46+SG;
+    // Disclaimer
+    rrFn(ctx,PAD,y,W-PAD*2,52,RR);ctx.fillStyle=C.disc;ctx.fill();
+    ctx.fillStyle=C.mut;ctx.font="10px system-ui,sans-serif";ctx.textAlign="left";ctx.textBaseline="top";
+    const disc="Estimates only. TSP at 7% w/ pay steps. HYSA at user APY. 4% rule (Bengen, 1994). Not financial advice.";
+    const mW=W-PAD*2-24;let ln="",lnY=y+10;
+    for(const w of disc.split(" ")){const t=ln?ln+" "+w:w;if(ctx.measureText(t).width>mW&&ln){ctx.fillText(ln,PAD+12,lnY);lnY+=14;ln=w;}else ln=t;}
+    if(ln)ctx.fillText(ln,PAD+12,lnY);
+    y+=52+SG;
+    // Footer
+    ctx.fillStyle=C.mut;ctx.font="11px system-ui,sans-serif";ctx.textAlign="left";ctx.textBaseline="top";ctx.fillText("Calculate yours free",PAD,y);
+    ctx.fillStyle=C.goldL;ctx.font="500 12px system-ui,sans-serif";ctx.textAlign="right";const fT="milcalc.app";ctx.fillText(fT,W-PAD,y);
+    const fW=ctx.measureText(fT).width;ctx.strokeStyle=C.goldL;ctx.lineWidth=1;ctx.beginPath();ctx.moveTo(W-PAD-fW,y+15);ctx.lineTo(W-PAD,y+15);ctx.stroke();
+    return canvas;
+  };
+
+  const handleShare=()=>{
+    setShowShareModal(true);
+    track("SVG Share Modal Opened",{});
+    requestAnimationFrame(()=>{
+      const canvas=buildCanvas();
+      canvas.toBlob(blob=>{
+        if(!blob)return;
+        shareBlobRef.current=blob;
+        setShareImgURL(URL.createObjectURL(blob));
+      },"image/png");
+    });
+  };
+  const closeShareModal=()=>{
+    setShowShareModal(false);
+    if(shareImgURL){URL.revokeObjectURL(shareImgURL);setShareImgURL(null);}
+    shareBlobRef.current=null;
+  };
+  const canNativeShare=(()=>{try{return !!navigator.canShare&&navigator.canShare({files:[new File([],"t.png",{type:"image/png"})]});}catch{return false;}})();
+  const doShare=async()=>{
+    if(!shareBlobRef.current)return;
+    const file=new File([shareBlobRef.current],"milcalc-stayvsgo.png",{type:"image/png"});
+    if(canNativeShare){
+      try{await navigator.share({files:[file],title:"My Stay vs Go — MilCalc"});track("SVG Infographic Shared",{method:"native"});}catch(e){}
+    }else{
+      const url=URL.createObjectURL(shareBlobRef.current);
+      const a=document.createElement("a");a.href=url;a.download="milcalc-stayvsgo.png";document.body.appendChild(a);a.click();document.body.removeChild(a);URL.revokeObjectURL(url);
+      track("SVG Infographic Shared",{method:"download"});
+    }
+  };
+
+  // Break-even display
+  const beColor=breakEvenAge?(breakEvenAge<=65?"gn":"am"):"rd";
+  const beMsg=breakEvenAge
+    ?`Staying to ${safeTgt} yrs breaks even with leaving at ${safeSep} yrs at age ${breakEvenAge}`
+    :`Staying to ${safeTgt} yrs does not break even before age ${chartEnd}`;
+
+  // Chart geometry
+  const CW=320,CH=160,PL=52,PR=12,PT=10,PB=28;
+  const iW=CW-PL-PR,iH=CH-PT-PB;
+  const maxCum=Math.max(1,...chartData.map(d=>Math.max(d.cumA,d.cumB)));
+  const xS=age=>PL+((age-currentAge)/(chartEnd-currentAge))*iW;
+  const yS=val=>PT+iH-(val/maxCum)*iH;
+  const pathA=chartData.map((d,i)=>`${i===0?"M":"L"}${xS(d.age).toFixed(1)},${yS(d.cumA).toFixed(1)}`).join(" ");
+  const pathB=chartData.map((d,i)=>`${i===0?"M":"L"}${xS(d.age).toFixed(1)},${yS(d.cumB).toFixed(1)}`).join(" ");
+  const fmtM=v=>v>=1e6?`$${(v/1e6).toFixed(1)}M`:`$${(v/1000).toFixed(0)}k`;
+  const yTicks=[0.25,0.5,0.75,1.0].map(p=>maxCum*p);
+  const ageTks=[];for(let a=Math.ceil(currentAge/5)*5;a<=chartEnd;a+=5)ageTks.push(a);
+
+  return(
+    <div className="fu">
+      <div className="sh2">
+        <h2>Stay vs Go</h2>
+        <p>Compare leaving early against staying to retirement eligibility.</p>
+      </div>
+
+      {/* ── INPUTS: YOUR SITUATION ── */}
+      <div className="card">
+        <div className="cttl">Your Situation</div>
+        <div className="field">
+          <label className="flbl">Pay Grade</label>
+          <select value={payGrade} onChange={e=>set("svg_payGrade",e.target.value)}>
+            {GRADE_GROUPS.map(g=>(
+              <optgroup key={g.label} label={g.label}>
+                {g.grades.map(gd=><option key={gd} value={gd}>{GRADE_LABELS[gd]}</option>)}
+              </optgroup>
+            ))}
+          </select>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">Current YOS</label>
+            <input className="nf" type="number" min={1} max={29} value={currentYos}
+              onFocus={SEL}
+              onChange={e=>set("svg_cYos",Math.min(29,Math.max(1,parseInt(e.target.value)||1)))}/>
+          </div>
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">Current Age</label>
+            <input className="nf" type="number" min={18} max={65} value={currentAge}
+              onFocus={SEL}
+              onChange={e=>set("svg_cAge",Math.min(65,Math.max(18,parseInt(e.target.value)||18)))}/>
+          </div>
+        </div>
+        <div className="field" style={{marginTop:16,marginBottom:0}}>
+          <label className="flbl">Retirement System</label>
+          <div className="tg">
+            {["High-3","BRS"].map(rt=>(
+              <button key={rt} className={"tb"+(retType===rt?" on":"")} onClick={()=>set("svg_retType",rt)}>{rt}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* ── INPUTS: TSP ── */}
+      <div className="card">
+        <div className="cttl">TSP &amp; Contributions</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12,marginBottom:showBrsWarn||isBRS?12:0}}>
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">Current Balance</label>
+            <div className="iwrap">
+              <span className="ipre">$</span>
+              <input className="nf pre" type="number" min={0} value={tspBalance}
+                onFocus={SEL}
+                onChange={e=>set("svg_tspBal",Math.max(0,parseInt(e.target.value)||0))}/>
+            </div>
+          </div>
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">Contribution %</label>
+            <div className="iwrap">
+              <input className="nf suf" type="number" min={0} max={100} step={0.5} value={tspPct}
+                onFocus={SEL}
+                onChange={e=>set("svg_tspPct",Math.min(100,Math.max(0,parseFloat(e.target.value)||0)))}/>
+              <span className="isuf">%</span>
+            </div>
+          </div>
+        </div>
+        {showBrsWarn&&(
+          <div className="ib ib-rd" style={{fontSize:13,marginBottom:8}}>
+            You're leaving free money on the table. Contributing 5% gets you the full government match (+{fmt(Math.round(basePay*0.04))}/mo automatic).
+          </div>
+        )}
+        {isBRS&&(
+          <div style={{fontSize:12,color:"var(--mut)",lineHeight:1.5}}>
+            Total monthly TSP: {fmt(Math.round(totalContrib))} — {fmt(Math.round(memberAmt))} yours + {fmt(Math.round(autoAmt))} auto + {fmt(Math.round(matchT1+matchT2))} match
+          </div>
+        )}
+      </div>
+
+      {/* ── INPUTS: SEPARATION SCENARIOS ── */}
+      <div className="card">
+        <div className="cttl">Separation Scenarios</div>
+        <div className="field">
+          <label className="flbl">
+            Leave Early at YOS {safeSep}
+            <span style={{color:"var(--mut)",fontWeight:400,textTransform:"none",letterSpacing:0,fontSize:11}}> · age {sepAge}</span>
+          </label>
+          <input type="range" min={currentYos+1} max={19} step={1} value={safeSep}
+            onChange={e=>set("svg_sepYos",parseInt(e.target.value))}
+            style={{width:"100%",accentColor:"var(--nv)",marginTop:4}}/>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--mut)",marginTop:2}}>
+            <span>YOS {currentYos+1}</span><span>YOS 19 (max before pension)</span>
+          </div>
+        </div>
+        <div className="field" style={{marginBottom:0}}>
+          <label className="flbl">
+            Stay to YOS {safeTgt}
+            <span style={{color:"var(--mut)",fontWeight:400,textTransform:"none",letterSpacing:0,fontSize:11}}> · age {retAge}</span>
+            {safeTgt<20&&<span style={{color:"var(--rd)",fontWeight:700,marginLeft:6}}>⚠ No pension</span>}
+          </label>
+          <input type="range" min={currentYos+1} max={30} step={1} value={safeTgt}
+            onChange={e=>set("svg_tgtYos",parseInt(e.target.value))}
+            style={{width:"100%",accentColor:"var(--gn)",marginTop:4}}/>
+          <div style={{display:"flex",justifyContent:"space-between",fontSize:11,color:"var(--mut)",marginTop:2}}>
+            <span>YOS {currentYos+1}</span><span>YOS 30</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── INPUTS: INCOME ── */}
+      <div className="card">
+        <div className="cttl">Income Inputs</div>
+        <div className="field">
+          <label className="flbl">Scenario A — Civilian Salary (if leaving early)</label>
+          <div className="iwrap">
+            <span className="ipre">$</span>
+            <input className="nf pre" type="number" min={0} value={civSalary}
+              onFocus={SEL}
+              onChange={e=>set("svg_civSal",Math.max(0,parseInt(e.target.value)||0))}/>
+          </div>
+          <div className="fhint">Annual gross. Used for Scenario A post-separation income.</div>
+        </div>
+        <div className="field">
+          <label className="flbl">Scenario B — Civilian Salary after Military Retirement</label>
+          <div className="iwrap">
+            <span className="ipre">$</span>
+            <input className="nf pre" type="number" min={0} value={civSalBDisplay}
+              onFocus={SEL}
+              onChange={e=>set("svg_civSalB",Math.max(0,parseInt(e.target.value)||0))}/>
+          </div>
+          <div className="fhint">Annual gross. Defaults to 80% of Scenario A ({fmt(Math.round(civSalary*0.8/12))}/mo). Override to set your own estimate.</div>
+        </div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">VA Rating</label>
+            <select value={vaRating} onChange={e=>set("svg_vaRat",parseInt(e.target.value))}>
+              {[0,10,20,30,40,50,60,70,80,90,100].map(r=><option key={r} value={r}>{r}%</option>)}
+            </select>
+          </div>
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">State</label>
+            <select value={selState} onChange={e=>set("svg_state",e.target.value)}>
+              {Object.keys(STATES).sort().map(s=><option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+        </div>
+        {vaRating >= 30 && (
+          <div className="field" style={{marginTop:12,marginBottom:0}}>
+            <label className="flbl">VA Dependency Status</label>
+            <select value={svgVaDep} onChange={e=>set("svg_vaDep",e.target.value)}>
+              <option value="alone">Veteran alone</option>
+              <option value="spouse">Veteran + spouse</option>
+              <option value="sp_1c">Veteran + spouse + 1 child</option>
+              <option value="sp_2c">Veteran + spouse + 2 children</option>
+              <option value="sp_3c">Veteran + spouse + 3+ children</option>
+              <option value="s_1c">Single veteran + 1 child</option>
+              <option value="s_2c">Single veteran + 2 children</option>
+              <option value="s_3c">Single veteran + 3+ children</option>
+            </select>
+            <div className="fhint">VA comp: {fmt(Math.round(va))}/mo · Dependency adjustments apply at 30%+.</div>
+          </div>
+        )}
+      </div>
+
+      {/* ── INPUTS: HYSA ── */}
+      <div className="card">
+        <div className="cttl">HYSA</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">Current Balance</label>
+            <div className="iwrap">
+              <span className="ipre">$</span>
+              <input className="nf pre" type="number" min={0} value={hysaBal}
+                onFocus={SEL}
+                onChange={e=>set("svg_hysaBal",Math.max(0,parseInt(e.target.value)||0))}/>
+            </div>
+          </div>
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">Monthly Contribution</label>
+            <div className="iwrap">
+              <span className="ipre">$</span>
+              <input className="nf pre" type="number" min={0} value={hysaContrib}
+                onFocus={SEL}
+                onChange={e=>set("svg_hysaMo",Math.max(0,parseInt(e.target.value)||0))}/>
+            </div>
+          </div>
+        </div>
+        <div className="field" style={{marginTop:12,marginBottom:0}}>
+          <label className="flbl">Expected APY</label>
+          <div className="iwrap">
+            <input className="nf suf" type="number" min={0} max={20} step={0.1} value={hysaApy}
+              onFocus={SEL}
+              onChange={e=>set("svg_hysaApy",Math.min(20,Math.max(0,parseFloat(e.target.value)||0)))}/>
+            <span className="isuf">%</span>
+          </div>
+          <div className="fhint">Projected HYSA @ 65: {fmt(Math.round(hysaAt65))} · {fmt(Math.round(hysaDraw))}/mo income (4% rule)</div>
+        </div>
+      </div>
+
+      {/* ── INPUTS: OTHER INVESTMENTS ── */}
+      <div className="card">
+        <div className="cttl">Other Investments</div>
+        <div style={{fontSize:12,color:"var(--mut)",marginBottom:12}}>Brokerage, Roth IRA, Traditional IRA, etc.</div>
+        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:12}}>
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">Combined Balance</label>
+            <div className="iwrap">
+              <span className="ipre">$</span>
+              <input className="nf pre" type="number" min={0} value={othBal}
+                onFocus={SEL}
+                onChange={e=>set("svg_othBal",Math.max(0,parseInt(e.target.value)||0))}/>
+            </div>
+          </div>
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">Monthly Contribution</label>
+            <div className="iwrap">
+              <span className="ipre">$</span>
+              <input className="nf pre" type="number" min={0} value={othContrib}
+                onFocus={SEL}
+                onChange={e=>set("svg_othMo",Math.max(0,parseInt(e.target.value)||0))}/>
+            </div>
+          </div>
+        </div>
+        <div className="field" style={{marginTop:12,marginBottom:0}}>
+          <label className="flbl">Expected Annual Return</label>
+          <div className="iwrap">
+            <input className="nf suf" type="number" min={0} max={30} step={0.1} value={othRate}
+              onFocus={SEL}
+              onChange={e=>set("svg_othRate",Math.min(30,Math.max(0,parseFloat(e.target.value)||0)))}/>
+            <span className="isuf">%</span>
+          </div>
+          <div className="fhint">Projected balance @ 65: {fmt(Math.round(othAt65))} · {fmt(Math.round(othDraw))}/mo income (4% rule)</div>
+        </div>
+      </div>
+
+      {/* ── INPUTS: CIVILIAN RETIREMENT ── */}
+      <div className="card">
+        <div className="cttl">Civilian Retirement</div>
+        <div className="field" style={{marginBottom:0}}>
+          <label className="flbl">Civilian Retirement Age</label>
+          <input className="nf" type="number" min={55} max={75} value={civRetAge}
+            onFocus={SEL}
+            onChange={e=>set("svg_civRetAge",Math.min(75,Math.max(55,parseInt(e.target.value)||65)))}/>
+          <div className="fhint">Civilian salary and investment contributions stop at this age. Balance grows to 65.</div>
+        </div>
+      </div>
+
+      {/* ── INPUTS: GI BILL (Scenario A only) ── */}
+      <div className="card">
+        <div className="cttl">GI Bill After Separation <span style={{fontSize:10,fontWeight:400,color:"var(--mut)",textTransform:"none",letterSpacing:0}}>(Scenario A only)</span></div>
+        <div className="field">
+          <label className="flbl">Using GI Bill after separation?</label>
+          <div className="tg">
+            {[{v:true,l:"Yes"},{v:false,l:"No"}].map(o=>(
+              <button key={String(o.v)} className={"tb"+(svgGiUse===o.v?" on":"")} onClick={()=>set("svg_giUse",o.v)}>{o.l}</button>
+            ))}
+          </div>
+        </div>
+        {svgGiUse&&(
+          <div className="field" style={{marginBottom:0}}>
+            <label className="flbl">Months of entitlement remaining</label>
+            <input className="nf" type="number" min={1} max={36} value={svgGiMonths}
+              onFocus={SEL}
+              onChange={e=>set("svg_giMonths",Math.min(36,Math.max(1,parseInt(e.target.value)||36)))}/>
+            {giMhaMo>0
+              ?<div className="fhint">GI Bill MHA: {fmt(giMhaMo)}/mo for {svgGiMonths} months — using your school city from GI Bill settings. Go to <em>My Info → GI Bill</em> to change school location.</div>
+              :<div className="fhint" style={{color:"var(--gd)"}}>No MHA calculated. Set your GI Bill school city in My Info → GI Bill tab.</div>
+            }
+          </div>
+        )}
+      </div>
+
+      {/* ── INPUTS: CIVILIAN HEALTH INSURANCE ── */}
+      <div className="card">
+        <div className="cttl">Civilian Health Insurance</div>
+        <div className="ib ib-nv" style={{fontSize:12,marginBottom:12}}>
+          <strong>Scenario A:</strong> Civilian insurance replaces TRICARE. <strong>Scenario B:</strong> TRICARE eligible at retirement ($0).
+        </div>
+        <div className="field">
+          <label className="flbl">Coverage Level</label>
+          <div className="tg">
+            {[{v:"single",l:"Single ($450/mo)"},{v:"family",l:"Family ($1,300/mo)"}].map(o=>(
+              <button key={o.v} className={"tb"+(svgHiDeps===o.v?" on":"")}
+                onClick={()=>{set("svg_hiDeps",o.v);set("svg_hiCost",o.v==="family"?1300:450);}}>
+                {o.l}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="field" style={{marginBottom:0}}>
+          <label className="flbl">Est. civilian health insurance premium</label>
+          <div className="iwrap">
+            <span className="ipre">$</span>
+            <input className="nf pre" type="number" min={0} value={svgHiCost}
+              onFocus={SEL}
+              onChange={e=>set("svg_hiCost",Math.max(0,parseInt(e.target.value)||0))}/>
+          </div>
+          <div className="fhint">Monthly deduction in Scenario A. Override with your actual premium.</div>
+        </div>
+      </div>
+
+      {/* ── SCENARIO CARDS ── */}
+      <div className="cttl" style={{marginBottom:12,marginTop:4}}>Side-by-Side Comparison</div>
+      <div className="svgc-cards">
+        <div className="svgc-card svgc-card-a">
+          <div className="svgc-ttl svgc-ttl-a">Scenario A<br/>Leave at {safeSep} yrs</div>
+          <div className="svgc-row"><span className="svgc-rl">Civ. Salary</span><span className="svgc-rv">{fmt(Math.round(civSalary/12))}/mo</span></div>
+          {va>0&&<div className="svgc-row"><span className="svgc-rl">VA ({vaRating}%)</span><span className="svgc-rv">{fmt(Math.round(va))}/mo</span></div>}
+          {svgGiUse&&giMhaMo>0&&<div className="svgc-row"><span className="svgc-rl" style={{fontSize:11}}>GI Bill MHA ({svgGiMonths} mo)</span><span className="svgc-rv" style={{fontSize:12}}>{fmt(giMhaMo)}/mo</span></div>}
+          {tspDrawA>0&&<div className="svgc-row"><span className="svgc-rl">TSP draw (65+)</span><span className="svgc-rv">{fmt(Math.round(tspDrawA))}/mo</span></div>}
+          {hysaDraw>0&&<div className="svgc-row"><span className="svgc-rl">HYSA (65+)</span><span className="svgc-rv">{fmt(Math.round(hysaDraw))}/mo</span></div>}
+          {othDraw>0&&<div className="svgc-row"><span className="svgc-rl">Other inv. (65+)</span><span className="svgc-rv">{fmt(Math.round(othDraw))}/mo</span></div>}
+          {svgHiCost>0&&<div className="svgc-row"><span className="svgc-rl" style={{color:"var(--rd)"}}>Health Ins.</span><span className="svgc-rv" style={{color:"var(--rd)"}}>-{fmt(Math.round(svgHiCost))}/mo</span></div>}
+          <div className="svgc-row" style={{borderBottom:"none"}}><span className="svgc-rl" style={{fontSize:11}}>TSP bal @ 65</span><span className="svgc-rv" style={{fontSize:12,color:"var(--mut)"}}>{fmt(Math.round(tspAt65A))}</span></div>
+          <div className="svgc-total svgc-total-a">
+            <span className="svgc-total-l">Monthly @ 65</span>
+            <span className="svgc-total-v">{fmt(Math.round(moA_at65))}</span>
+          </div>
+        </div>
+        <div className="svgc-card svgc-card-b">
+          <div className="svgc-ttl svgc-ttl-b">Scenario B<br/>Stay to {safeTgt} yrs</div>
+          {pensNet>0
+            ?<div className="svgc-row"><span className="svgc-rl">Pension (net)</span><span className="svgc-rv">{fmt(Math.round(pensNet))}/mo</span></div>
+            :<div className="svgc-row"><span className="svgc-rl" style={{color:"var(--rd)",fontSize:11}}>No pension (&lt;20 yrs)</span><span className="svgc-rv" style={{color:"var(--rd)"}}>—</span></div>
+          }
+          {va>0&&<div className="svgc-row"><span className="svgc-rl">VA ({vaRating}%)</span><span className="svgc-rv">{fmt(Math.round(va))}/mo</span></div>}
+          {tspDrawB>0&&<div className="svgc-row"><span className="svgc-rl">TSP draw (65+)</span><span className="svgc-rv">{fmt(Math.round(tspDrawB))}/mo</span></div>}
+          {hysaDraw>0&&<div className="svgc-row"><span className="svgc-rl">HYSA (65+)</span><span className="svgc-rv">{fmt(Math.round(hysaDraw))}/mo</span></div>}
+          {othDraw>0&&<div className="svgc-row"><span className="svgc-rl">Other inv. (65+)</span><span className="svgc-rv">{fmt(Math.round(othDraw))}/mo</span></div>}
+          <div className="svgc-row"><span className="svgc-rl">Civ. Salary</span><span className="svgc-rv">{fmt(Math.round(civSalB/12))}/mo</span></div>
+          <div className="svgc-row"><span className="svgc-rl" style={{color:"var(--gn)",fontSize:11}}>Health Ins.</span><span className="svgc-rv" style={{color:"var(--gn)",fontSize:12}}>$0 — TRICARE</span></div>
+          {pensNet>0&&<div className="svgc-row"><span className="svgc-rl" style={{fontSize:11}}>Before 65</span><span className="svgc-rv" style={{fontSize:12,color:"var(--mut)"}}>{fmt(Math.round(moB_pre65))}/mo</span></div>}
+          <div className="svgc-row" style={{borderBottom:"none"}}><span className="svgc-rl" style={{fontSize:11}}>TSP bal @ 65</span><span className="svgc-rv" style={{fontSize:12,color:"var(--mut)"}}>{fmt(Math.round(tspAt65B))}</span></div>
+          <div className="svgc-total svgc-total-b">
+            <span className="svgc-total-l">Monthly @ 65</span>
+            <span className="svgc-total-v">{fmt(Math.round(moB_at65))}</span>
+          </div>
+        </div>
+      </div>
+
+      {/* ── BREAK-EVEN ── */}
+      <div className={"svgc-be "+beColor} style={{marginBottom:20}}>
+        {breakEvenAge?(
+          <>
+            <div className="svgc-be-num" style={{color:beColor==="gn"?"var(--gn)":beColor==="am"?"var(--gd)":"var(--rd)"}}>{breakEvenAge}</div>
+            <div className="svgc-be-lbl">{beMsg}</div>
+            {beColor==="gn"&&<div style={{fontSize:12,color:"var(--gn)",marginTop:6,fontWeight:600}}>Staying is financially favorable — break-even before 65</div>}
+            {beColor==="am"&&<div style={{fontSize:12,color:"var(--gd)",marginTop:6}}>Staying breaks even after 65 — consider the time tradeoff carefully</div>}
+          </>
+        ):(
+          <>
+            <div className="svgc-be-num" style={{color:"var(--rd)"}}>—</div>
+            <div className="svgc-be-lbl">{beMsg}</div>
+          </>
+        )}
+      </div>
+
+      {/* ── CHART ── */}
+      <div className="card" style={{marginBottom:20}}>
+        <div className="cttl" style={{marginBottom:8}}>Cumulative Lifetime Earnings</div>
+        <div style={{display:"flex",gap:16,marginBottom:10,fontSize:11,fontWeight:600,flexWrap:"wrap"}}>
+          <span style={{color:"var(--nvm)"}}>&#9632; Leave at {safeSep} yrs (A)</span>
+          <span style={{color:"var(--gn)"}}>&#9632; Stay to {safeTgt} yrs (B)</span>
+        </div>
+        <svg width="100%" viewBox={`0 0 ${CW} ${CH}`} preserveAspectRatio="xMidYMid meet">
+          {yTicks.map((v,i)=>(
+            <line key={i} x1={PL} y1={yS(v).toFixed(1)} x2={CW-PR} y2={yS(v).toFixed(1)} stroke="rgba(138,155,181,0.15)" strokeWidth="1"/>
+          ))}
+          {yTicks.map((v,i)=>(
+            <text key={i} x={PL-4} y={(yS(v)+3).toFixed(1)} textAnchor="end" fontSize="9" fill="#8a9ab5">{fmtM(v)}</text>
+          ))}
+          {ageTks.map(a=>(
+            <text key={a} x={xS(a).toFixed(1)} y={CH-8} textAnchor="middle" fontSize="9" fill="#8a9ab5">{a}</text>
+          ))}
+          <path d={pathA} fill="none" stroke="#c2782a" strokeWidth="2" strokeLinejoin="round"/>
+          <path d={pathB} fill="none" stroke="#5a9e6f" strokeWidth="2" strokeLinejoin="round"/>
+          {breakEvenAge&&breakEvenAge>=currentAge&&breakEvenAge<=chartEnd&&(
+            <>
+              <line x1={xS(breakEvenAge).toFixed(1)} y1={PT} x2={xS(breakEvenAge).toFixed(1)} y2={PT+iH} stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeDasharray="4,3"/>
+              <text x={(xS(breakEvenAge)+4).toFixed(1)} y={PT+14} fontSize="9" fill="rgba(255,255,255,0.65)">break-even</text>
+            </>
+          )}
+        </svg>
+        <div style={{fontSize:11,color:"var(--mut)",marginTop:6,textAlign:"center"}}>Age &#8594;</div>
+      </div>
+
+      {/* ── SHARE BUTTON ── */}
+      <button onClick={handleShare}
+        style={{width:"100%",padding:"14px",background:"linear-gradient(135deg,var(--nv),var(--nvm))",
+          color:"var(--ink)",border:"none",borderRadius:10,fontFamily:"Barlow,sans-serif",
+          fontSize:15,fontWeight:700,cursor:"pointer",marginBottom:20,
+          WebkitTapHighlightColor:"transparent"}}>
+        &#x1F4E4; Share My Numbers
+      </button>
+
+      {/* ── DISCLAIMER ── */}
+      <div style={{background:"var(--sub)",borderRadius:10,padding:14,fontSize:12,color:"var(--mut)",lineHeight:1.6,marginBottom:24}}>
+        <strong style={{color:"var(--ink)"}}>Disclaimer:</strong> These projections use historical averages and publicly available pay data. Results are estimates only and not guaranteed. Not financial advice. Actual TSP returns vary. Consult a fee-only financial advisor before making career decisions.
+        <br/><br/>
+        <em>Assumptions: TSP contributions stop at separation (Scenario A) or retirement (Scenario B), then compound at 7% to age 65. HYSA and other investment contributions stop at civilian retirement age, then compound to 65. Safe withdrawal rate: 4% rule (Bengen, 1994). HYSA at user APY. VA compensation uses 2026 official rates including dependency adjustments. GI Bill MHA uses 2026 DTMO rates. Civilian health insurance deducted from Scenario A; TRICARE covers Scenario B. Pension from DFAS 2026 pay tables. High-3: 2.5% × YOS. BRS: 2.0% × YOS + government match.</em>
+      </div>
+
+      {/* ── SHARE MODAL ── */}
+      {showShareModal&&createPortal(
+        <div style={{position:"fixed",inset:0,zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",
+            background:"rgba(0,0,0,.75)",backdropFilter:"blur(4px)",WebkitBackdropFilter:"blur(4px)"}}
+          onClick={closeShareModal}>
+          <div style={{position:"relative",background:"var(--card)",borderRadius:16,padding:24,maxWidth:420,width:"90%",
+              border:"1px solid var(--br)",maxHeight:"85vh",overflowY:"auto"}}
+            onClick={e=>e.stopPropagation()}>
+            <button onClick={closeShareModal}
+              style={{position:"absolute",top:12,right:14,background:"none",border:"none",fontSize:18,color:"var(--mut)",cursor:"pointer",lineHeight:1,zIndex:1}}>&#x2715;</button>
+            <div style={{fontSize:18,fontWeight:700,color:"var(--ink)",marginBottom:4}}>Share My Numbers</div>
+            <div style={{fontSize:13,color:"var(--mut)",marginBottom:16}}>Preview your Stay vs Go infographic.</div>
+            <div style={{marginBottom:20,borderRadius:10,overflow:"hidden",border:"1px solid var(--sub)",background:"#0a1628",minHeight:200}}>
+              {shareImgURL
+                ?<img src={shareImgURL} alt="Stay vs Go infographic" style={{width:"100%",display:"block"}}/>
+                :<div style={{display:"flex",alignItems:"center",justifyContent:"center",height:200,color:"var(--mut)",fontSize:13}}>Generating...</div>}
+            </div>
+            <button onClick={doShare} disabled={!shareBlobRef.current}
+              style={{display:"flex",alignItems:"center",justifyContent:"center",gap:10,width:"100%",padding:"14px 0",
+                background:shareBlobRef.current?"var(--nv)":"var(--sub)",color:"#fff",border:"none",borderRadius:10,
+                cursor:shareBlobRef.current?"pointer":"default",fontFamily:"Barlow,sans-serif",fontSize:15,fontWeight:600,
+                opacity:shareBlobRef.current?1:.5,transition:"opacity .2s"}}>
+              &#x1F4E4; {canNativeShare?"Share":"Download PNG"}
+            </button>
+          </div>
+        </div>,
+        document.body
+      )}
+    </div>
+  );
+}
+
+function OnboardingScreen({onSelect}){
+  const paths=[
+    {id:"serving",icon:"\u{1F4AA}",title:"Still Serving",sub:"TSP projector · Pay calculator · Stay vs Go"},
+    {id:"transitioning",icon:"\u{1F4CB}",title:"Transitioning",sub:"Retirement calculator · Benefits · Income planning",badge:"Most popular"},
+    {id:"retired",icon:"\u{1F396}",title:"Veteran / Retired",sub:"Retirement income · VA updates · Social Security"},
+  ];
+  return(
+    <div style={{minHeight:"100vh",background:"#0a1628",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"24px 20px"}}>
+      <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:20}}>
+        <div style={{width:36,height:36,borderRadius:8,background:"#0A0E1A",border:"1px solid #d4a017",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20,fontWeight:700,color:"#f0c14b",flexShrink:0}}>M</div>
+        <span style={{fontSize:22,fontWeight:700,color:"#f0c14b",fontFamily:"Barlow,sans-serif",letterSpacing:"-.01em"}}>MilCalc</span>
+      </div>
+      <div style={{fontSize:22,fontWeight:700,color:"#f0ece4",marginBottom:8,textAlign:"center",fontFamily:"Barlow,sans-serif",lineHeight:1.3}}>Where are you in your service?</div>
+      <div style={{fontSize:14,color:"#8a9bb0",marginBottom:28,textAlign:"center",maxWidth:320,lineHeight:1.5}}>We'll show you the tools most relevant to your situation.</div>
+      <div style={{width:"100%",maxWidth:400,display:"flex",flexDirection:"column",gap:12}}>
+        {paths.map(p=>(
+          <button key={p.id} onClick={()=>onSelect(p.id)}
+            style={{position:"relative",background:"#1e3a5f",border:"1px solid #2a3a55",borderRadius:14,padding:"18px 20px",
+              textAlign:"left",cursor:"pointer",display:"flex",alignItems:"center",gap:16,width:"100%",
+              WebkitTapHighlightColor:"transparent"}}
+            onMouseEnter={e=>{e.currentTarget.style.borderColor="#d4a017";}}
+            onMouseLeave={e=>{e.currentTarget.style.borderColor="#2a3a55";}}>
+            {p.badge&&(
+              <span style={{position:"absolute",top:10,right:14,background:"#d4a017",color:"#0a1628",fontSize:10,fontWeight:700,
+                padding:"2px 8px",borderRadius:20,letterSpacing:"0.04em",textTransform:"uppercase",fontFamily:"Barlow,sans-serif"}}>{p.badge}</span>
+            )}
+            <span style={{fontSize:28,lineHeight:1,flexShrink:0}}>{p.icon}</span>
+            <div style={{minWidth:0}}>
+              <div style={{fontSize:16,fontWeight:700,color:"#f0ece4",marginBottom:3,fontFamily:"Barlow,sans-serif"}}>{p.title}</div>
+              <div style={{fontSize:12,color:"#8a9bb0",lineHeight:1.4}}>{p.sub}</div>
+            </div>
+            <span style={{marginLeft:"auto",color:"#d4a017",fontSize:20,flexShrink:0,fontWeight:300}}>›</span>
+          </button>
+        ))}
+      </div>
+      <div style={{marginTop:24,fontSize:12,color:"#8a9bb0",textAlign:"center"}}>No account required · Change anytime</div>
+    </div>
+  );
+}
+
 const NAV=[
   {id:"myinfo",label:"My Info",ico:"\u{1F4CB}"},
   {id:"dashboard",label:"Dashboard",ico:"\u2605"},
   {id:"benefits",label:"Benefits",ico:"\u{1FA96}"},
   {id:"planning",label:"Planning",ico:"\u{1F4CA}"},
+  {id:"stayvsgo",label:"Stay/Go",ico:"\u2696"},
   {id:"share",label:"Share",ico:"\u{1F517}"},
 ];
 
@@ -4539,10 +4365,22 @@ export default function App(){
     tricareplan:"prime",tricareFamSize:"self",tricareGroup:"A",
     useVgli:true,vgliCoverage:400000,vgliAge:45,otherLifePremium:0,
     bah:0,bas:0,specialPays:{},
+    civHiDeps:"single",civHiCost:null,
     _hasVisitedMyInfo:false,
     _hasVisitedBenefits:false,
     _hasVisitedPlanning:false,
     planSection:"taxes",
+    plan_ssaMo:0,
+    // Stay vs Go tab
+    svg_payGrade:"E-7",svg_cYos:10,svg_cAge:28,svg_retType:"High-3",
+    svg_tspBal:0,svg_tspPct:5,svg_sepYos:15,svg_tgtYos:20,
+    svg_vaRat:0,svg_vaDep:"alone",svg_state:"Texas",svg_civSal:60000,svg_civSalB:0,
+    svg_hysaBal:0,svg_hysaMo:0,svg_hysaApy:4.5,
+    svg_othBal:0,svg_othMo:0,svg_othRate:7,
+    svg_civRetAge:65,
+    svg_giUse:false,svg_giMonths:36,
+    svg_hiDeps:"single",svg_hiCost:null,
+    userPath:null,
   };
   const [s,setS]=useState(()=>({...defaults,...(loadSaved()||{})}));
   const set=(k,v)=>setS(x=>{const n={...x,[k]:v};try{localStorage.setItem(STORAGE_KEY,JSON.stringify(n));}catch{}return n;});
@@ -4558,7 +4396,7 @@ export default function App(){
   },[s.yos,s.vaRating,s._hasVisitedMyInfo]);
   const tabRef=useRef(tab);
   const go=id=>{
-    const TAB_NAMES={"myinfo":"My Info","dashboard":"Dashboard","benefits":"Benefits","planning":"Planning"};
+    const TAB_NAMES={"myinfo":"My Info","dashboard":"Dashboard","benefits":"Benefits","planning":"Planning","stayvsgo":"Stay vs Go"};
     track("Tab Changed",{from:TAB_NAMES[tabRef.current]||tabRef.current,to:TAB_NAMES[id]||id});
     track("Page Viewed",{page:TAB_NAMES[id]||id});
     tabRef.current=id;
@@ -4603,7 +4441,8 @@ export default function App(){
     const mp2=s.tricareplan==="tfl"?(s.tricareFamSize==="family"?370:185):0;
     return (gr2[s.tricareFamSize]||gr2.self)+mp2;
   })();
-  const insuranceMo=Math.round(healthPrem2+(s.useVgli?vgliMonthly(s.vgliCoverage,s.vgliAge):0)+(s.otherLifePremium||0));
+  const civHiCost2=s.civHiCost!=null?s.civHiCost:0;
+  const insuranceMo=Math.round(healthPrem2+(s.useVgli?vgliMonthly(s.vgliCoverage,s.vgliAge):0)+(s.otherLifePremium||0)+civHiCost2);
   const gap=s.desiredIncome-(total-insuranceMo);
 
   // ── /share standalone page (also redirect /partners) ──
@@ -4616,7 +4455,8 @@ export default function App(){
       <style>{CSS}</style>
       {/* Landing page kept in DOM for SEO, hidden when calculator is active */}
       <div style={entered?{display:"none"}:undefined}><LandingPage onEnter={enterApp}/></div>
-      <div className="has-badge" style={entered?undefined:{display:"none"}}>
+      {entered&&s.userPath===null&&<OnboardingScreen onSelect={path=>{set("userPath",path);if(path==="serving"){try{localStorage.setItem(TAB_KEY,"stayvsgo");}catch{}setTab("stayvsgo");}}}/>}
+      <div className="has-badge" style={(entered&&s.userPath!==null)?undefined:{display:"none"}}>
 
       {/* ── DEBRIEFED BRAND BADGE ── */}
       <div className="db-badge">
@@ -4661,6 +4501,9 @@ export default function App(){
             <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);window.location.href="/share";}}>
               <span>{"\u{1F517}"}</span><span>Share MilCalc</span>
             </button>
+            <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);set("userPath",null);}}>
+              <span>&#8646;</span><span>Switch View</span>
+            </button>
             <button className="info-sheet-cancel" onClick={()=>setInfoMenu(false)}>Cancel</button>
           </div>
         </div>
@@ -4675,7 +4518,8 @@ export default function App(){
         {tab==="myinfo"    &&<ProfileTab state={s} set={set} isConfigured={s._hasVisitedMyInfo} go={go}/>}
         {tab==="dashboard"&&<DashboardTab state={s} set={set} isConfigured={s._hasVisitedMyInfo} go={go} onPdfExported={()=>{triggerPwa();triggerPopup("pdf_export");}} modalActive={showPopup||showPwaPrompt}/>}
         {tab==="benefits" &&<BenefitsTab state={s} isConfigured={s._hasVisitedMyInfo} go={go}/>}
-        {tab==="planning" &&<PlanningTab state={s} set={set} go={go}/>}
+        {tab==="planning"  &&<PlanningTab state={s} set={set} go={go}/>}
+        {tab==="stayvsgo" &&<StayVsGoTab state={s} set={set}/>}
       </main>
 
       {/* ── ENGAGEMENT POPUP ── */}
