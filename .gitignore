@@ -1,0 +1,39 @@
+node_modules/
+dist/
+.DS_Store
+
+# Android
+android/app/build/
+android/.gradle/
+android/local.properties
+*.keystore
+*.jks
+
+# iOS
+ios/App/build/
+ios/App/Pods/
+ios/App/App.xcworkspace/xcuserdata/
+*.ipa
+*.xcarchive
+
+# Secrets — never commit these
+*.p12
+*.mobileprovision
+*.pem
+*.cer
+*.crt
+*.key
+.env
+.env.*
+!.env.example
+secrets/
+
+# Analytics exports (may contain real user PII)
+mixpanel_events.json
+milcalc_events.json
+*.mixpanel.json
+
+# Local editor / agent config
+.claude/
+.vscode/
+.idea/

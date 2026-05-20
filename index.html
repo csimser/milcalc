@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<!--
+  Before deploying, replace every `https://example.com` reference below
+  (canonical, OG, Twitter, JSON-LD url, JSON-LD creator.url) with your
+  production origin. The defaults are placeholders for the open-source release.
+-->
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, viewport-fit=cover" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="/manifest.json" />
+    <meta name="theme-color" content="#0A0E1A" />
+
+    <!-- iOS PWA -->
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="MilCalc" />
+    <link rel="apple-touch-icon" href="/icon.svg" />
+
+    <title>MilCalc — Free Military Retirement Calculator 2026</title>
+    <meta name="description" content="Free military retirement calculator for active duty, reserve, and veterans. Calculate pension, VA disability, TRICARE, SBP, taxes, BAH gap, and true income gap. No account required.">
+    <link rel="canonical" href="https://example.com" />
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://example.com" />
+    <meta property="og:title" content="MilCalc — Free Military Retirement Calculator" />
+    <meta property="og:description" content="Free military retirement calculator for active duty, reserve, and veterans. Calculate pension, VA disability, TRICARE, SBP, taxes, BAH gap, and true income gap. No account required." />
+    <meta property="og:image" content="https://example.com/og-image.png" />
+    <meta property="og:site_name" content="MilCalc" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="MilCalc — Free Military Retirement Calculator" />
+    <meta name="twitter:description" content="Free military retirement calculator for active duty, reserve, and veterans. Calculate pension, VA disability, TRICARE, SBP, taxes, BAH gap, and true income gap. No account required." />
+    <meta name="twitter:image" content="https://example.com/og-image.png" />
+
+    <!-- Preconnect for external resources -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link rel="preconnect" href="https://cdn.mxpnl.com" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
+
+    <link rel="icon" type="image/svg+xml" href="/icon.svg" />
+
+    <!-- Prevent white flash: hide everything until React is ready -->
+    <style>
+      html, body, #root { background: #0f0f14; margin: 0; padding: 0; }
+      body { visibility: hidden; }
+      .lp-hero { display: none; }
+    </style>
+
+    <!-- JSON-LD: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      "name": "MilCalc",
+      "url": "https://example.com",
+      "description": "Free military retirement financial calculator for active duty, reserve, and veterans. Calculate pension, VA disability, TRICARE, SBP, taxes, and true income gap.",
+      "applicationCategory": "FinanceApplication",
+      "operatingSystem": "Web, iOS, Android",
+      "offers": {
+        "@type": "Offer",
+        "price": "0",
+        "priceCurrency": "USD"
+      },
+      "creator": {
+        "@type": "Organization",
+        "name": "Debriefed",
+        "url": "https://example.com"
+      }
+    }
+    </script>
+
+    <!-- JSON-LD: FAQ -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "FAQPage",
+      "mainEntity": [
+        {
+          "@type": "Question",
+          "name": "How is military retirement pay calculated?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Military retirement pay is calculated as years of service x 2.5% x High-3 average base pay for the High-3 system, or 2.0% for BRS members."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Is military retirement pay taxed?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Military retirement pay is subject to federal income tax. State taxation varies — many states offer full or partial exemptions."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "What is the SBP premium rate?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "The Survivor Benefit Plan premium is 6.5% of the elected base amount, with the survivor receiving 55% of that base."
+          }
+        },
+        {
+          "@type": "Question",
+          "name": "Can I receive both military retirement and VA disability?",
+          "acceptedAnswer": {
+            "@type": "Answer",
+            "text": "Yes — through CRDP (Concurrent Retirement and Disability Pay) for retirees with 20+ years and a VA rating of 50% or higher."
+          }
+        }
+      ]
+    }
+    </script>
+  </head>
+  <body>
+    <div id="root">
+      <h1>MilCalc — Free Military Retirement Calculator</h1>
+      <p>Calculate your military pension, VA disability compensation, TRICARE premiums, SBP costs, state taxes, and true income gap. Free, no account required.</p>
+      <h2>What MilCalc calculates</h2>
+      <ul>
+        <li>Military pension (High-3, BRS, REDUX, Reserve)</li>
+        <li>VA disability compensation (2026 rates)</li>
+        <li>TRICARE premiums (all plans, 2026 rates)</li>
+        <li>Survivor Benefit Plan (SBP) costs</li>
+        <li>Federal and state income taxes</li>
+        <li>BAH, BAS, and special pay income gap</li>
+        <li>Cost of living comparison</li>
+      </ul>
+    </div>
+    <script type="module" src="/src/main.jsx"></script>
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', () => {
+          navigator.serviceWorker.register('/sw.js').catch(() => {});
+        });
+      }
+    </script>
+  </body>
+</html>
