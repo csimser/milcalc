@@ -15,6 +15,8 @@ cd milcalc
 
 If you don't have it, download it from https://nodejs.org (pick the LTS version). This is what runs the app.
 
+This project includes an .nvmrc file. If you use nvm, run 'nvm use' to switch to the correct Node version.
+
 ## Step 3: Install the app's dependencies
 
 Open a terminal in the project folder and run:
