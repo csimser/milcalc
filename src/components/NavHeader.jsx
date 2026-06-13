@@ -211,7 +211,7 @@ export default function NavHeader() {
 
       {/* Top bar — logo + share only */}
       <header className="nh2">
-        <a className="nh2-logo" href="/transitioning" aria-label="MilCalc home">
+        <a className="nh2-logo" href="#/transitioning" aria-label="MilCalc home">
           <div className="nh2-box">M</div>
           <span className="nh2-wordmark">MilCalc</span>
         </a>

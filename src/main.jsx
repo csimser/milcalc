@@ -1,7 +1,10 @@
+// MilCalc - Military financial calculator
+// Copyright (c) 2026 Chris Simser - MIT License - https://github.com/csimser/milcalc
 import React, { useEffect, useState } from 'react'
 import ReactDOM from 'react-dom/client'
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { initAnalytics, captureUtm, track } from './analytics.js'
+import './fonts-embed.css'
 import TransitioningPage from './pages/TransitioningPage.jsx'
 import ServingPage from './pages/ServingPage.jsx'
 import RetiredPage from './pages/RetiredPage.jsx'
@@ -124,7 +127,7 @@ function TosModal() {
         {/* Link to full terms */}
         <div style={{ textAlign: 'center', marginTop: 12 }}>
           <a
-            href="/terms"
+            href="#/terms"
             target="_blank"
             rel="noopener noreferrer"
             style={{ fontSize: 12, color: '#4b5563', textDecoration: 'underline', fontFamily: FONT }}
@@ -148,25 +151,17 @@ function AppShell({ children }) {
   );
 }
 
+// Analytics are no-ops in the download-only build (see analytics.js). These
+// calls are kept inert so the surrounding code path is unchanged.
 initAnalytics();
-// Delay UTM capture to next tick so Mixpanel is fully initialized
-setTimeout(captureUtm, 0);
-
-// Track direct URL access (user typed the URL or followed an external link).
-// Nav-click tracking is handled by NavHeader. This fires only for the initial page load.
-(function trackInitialPath() {
-  const seg = window.location.pathname.replace(/^\//, '').split('/')[0];
-  if (['serving', 'transitioning', 'retired'].includes(seg)) {
-    setTimeout(() => track("Path Selected", { path: seg, source: "direct" }), 0);
-  }
-})();
+captureUtm();
 
 const root = document.getElementById('root');
 ReactDOM.createRoot(root).render(
   React.createElement(React.StrictMode, null,
     React.createElement(AppShell, null,
       React.createElement(ErrorBoundary, null,
-        React.createElement(BrowserRouter, null,
+        React.createElement(HashRouter, null,
           React.createElement(Routes, null,
             // Root redirect: / → /transitioning until the real landing page is built
             React.createElement(Route, { path: "/", element: React.createElement(Navigate, { to: "/transitioning", replace: true }) }),

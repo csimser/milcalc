@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MilCalc — Military Financial Calculator</title>
+  <meta name="description" content="Free military financial calculator. Forecast retirement pay, TSP, GI Bill, VA compensation, VGLI, state taxes, and cost of living. Downloads as a single file and runs entirely on your computer — no account, no internet required." />
+  <meta property="og:title" content="MilCalc — Military Financial Calculator" />
+  <meta property="og:description" content="Forecast your transition financial picture. Free, private, offline. One file you download and run on your own computer." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://milcalc.app" />
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 512 512'%3E%3Crect width='512' height='512' rx='64' fill='%230A0E1A'/%3E%3Ctext x='50%25' y='54%25' dominant-baseline='central' text-anchor='middle' fill='%23D4A84B' font-family='system-ui,-apple-system,sans-serif' font-weight='700' font-size='280'%3EM%3C/text%3E%3C/svg%3E" />
+  <style>
+    :root {
+      --bg: #0f0f14;
+      --panel: #17171f;
+      --ink: #f4f1eb;
+      --muted: #9ca3af;
+      --faint: #6b7280;
+      --line: rgba(255,255,255,0.08);
+      --gold: #d4a017;
+      --gold-bright: #f0c14b;
+      --accent: #c2782a;
+      --accent2: #e09448;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html { -webkit-text-size-adjust: 100%; }
+    body {
+      background: radial-gradient(120% 80% at 50% 0%, #1a1c28 0%, var(--bg) 55%);
+      color: var(--ink);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      line-height: 1.6;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 0 20px;
+    }
+    main { width: 100%; max-width: 680px; padding: 72px 0 40px; }
+    .mark {
+      width: 52px; height: 52px; border-radius: 12px;
+      background: #0a0c0f; border: 1.5px solid var(--gold);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 26px; font-weight: 800; color: var(--gold-bright);
+      margin-bottom: 24px;
+    }
+    h1 {
+      font-size: clamp(30px, 6vw, 44px);
+      line-height: 1.1; letter-spacing: -0.02em; font-weight: 800;
+      margin-bottom: 18px;
+    }
+    .lede { font-size: clamp(16px, 2.6vw, 19px); color: var(--muted); margin-bottom: 14px; }
+    .sub { font-size: 15px; color: var(--faint); margin-bottom: 32px; }
+    .sub strong { color: var(--ink); font-weight: 600; }
+    .cta-row { display: flex; flex-wrap: wrap; align-items: center; gap: 16px 24px; margin-bottom: 14px; }
+    .btn {
+      display: inline-block; text-decoration: none;
+      background: linear-gradient(135deg, var(--accent), var(--accent2));
+      color: #0f0f14; font-weight: 700; font-size: 17px;
+      padding: 15px 30px; border-radius: 11px;
+      box-shadow: 0 6px 24px rgba(194,120,42,0.28);
+      transition: transform .12s ease, box-shadow .12s ease;
+    }
+    .btn:hover { transform: translateY(-1px); box-shadow: 0 8px 30px rgba(194,120,42,0.4); }
+    .ghost { color: var(--gold); text-decoration: none; font-size: 15px; font-weight: 600; }
+    .ghost:hover { text-decoration: underline; }
+    .note { font-size: 13px; color: var(--faint); margin-bottom: 44px; }
+    .section-label {
+      font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+      color: var(--gold); font-weight: 700; margin-bottom: 16px;
+    }
+    .grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+      margin-bottom: 44px;
+    }
+    .card {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 12px; padding: 14px 16px;
+      font-size: 14.5px; color: var(--ink);
+    }
+    .card span { display: block; font-size: 12.5px; color: var(--faint); margin-top: 2px; }
+    .sister {
+      background: var(--panel); border: 1px solid var(--line);
+      border-radius: 12px; padding: 18px 20px; margin-bottom: 40px;
+      font-size: 14.5px; color: var(--muted);
+    }
+    .sister a { color: var(--gold); text-decoration: none; font-weight: 600; }
+    .sister a:hover { text-decoration: underline; }
+    footer {
+      border-top: 1px solid var(--line); padding: 24px 0 36px;
+      font-size: 13px; color: var(--faint); width: 100%; max-width: 680px;
+    }
+    footer a { color: var(--faint); text-decoration: none; }
+    footer a:hover { color: var(--muted); text-decoration: underline; }
+    .disclaim { margin-top: 10px; font-size: 12px; color: #4b5563; }
+    @media (max-width: 480px) {
+      main { padding-top: 52px; }
+      .grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <div class="mark">M</div>
+    <h1>Forecast your military transition, down to the dollar.</h1>
+    <p class="lede">
+      MilCalc is a free military financial calculator. Plug in your numbers and see your
+      full transition picture — retirement pay, TSP, GI Bill, VA compensation, VGLI,
+      state taxes, and cost-of-living comparisons across locations.
+    </p>
+    <p class="sub">
+      <strong>No account. No tracking. No internet required.</strong>
+      You download one file and it runs entirely on your own computer — your numbers never leave your machine.
+    </p>
+
+    <div class="cta-row">
+      <a class="btn" href="https://github.com/csimser/milcalc/releases/latest/download/MilCalc.html">Download MilCalc</a>
+      <a class="ghost" href="https://github.com/csimser/milcalc">View on GitHub →</a>
+    </div>
+    <p class="note">Double-click the downloaded file — it opens in your browser and works offline.</p>
+
+    <div class="section-label">What it calculates</div>
+    <div class="grid">
+      <div class="card">Retirement pay<span>High-3, BRS, REDUX, Reserve/Guard</span></div>
+      <div class="card">TSP projections<span>Long-term balance growth</span></div>
+      <div class="card">GI Bill<span>Education benefit value</span></div>
+      <div class="card">VA compensation<span>Disability rates &amp; CRDP/CRSC</span></div>
+      <div class="card">VGLI<span>Life-insurance comparison</span></div>
+      <div class="card">State taxes<span>Military-retirement exemptions</span></div>
+      <div class="card">Cost of living<span>Compare any two locations</span></div>
+      <div class="card">COLA &amp; income gap<span>Benefits vs. target income</span></div>
+    </div>
+    <p class="note">
+      Rate tables (DoD pay, BAH, VA disability rates, and more) are updated annually with each
+      release. Download the latest version when you have internet to get current numbers.
+    </p>
+
+    <div class="sister">
+      Sister tool: <a href="https://getdebriefed.co">Debriefed</a> — a military-to-civilian
+      resume translator that turns your service record into civilian-readable experience.
+      <a href="https://getdebriefed.co">getdebriefed.co</a>
+    </div>
+  </main>
+
+  <footer>
+    Built by Chris Simser · MIT License · <a href="https://github.com/csimser/milcalc">github.com/csimser/milcalc</a>
+    <div class="disclaim">
+      Not affiliated with the DoD, DFAS, VA, or any government agency. All figures are planning
+      estimates — verify final numbers with your finance office or a VSO.
+    </div>
+  </footer>
+</body>
+</html>

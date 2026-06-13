@@ -1,65 +1,21 @@
-import mixpanel from "mixpanel-browser";
-import { MIXPANEL_TOKEN } from "./config.js";
+// MilCalc analytics — intentionally a no-op stub.
+//
+// MilCalc is a download-only, offline app. It collects no analytics and makes
+// no network calls. The Mixpanel integration that used to live here was removed
+// when MilCalc became a single downloadable HTML file.
+//
+// These functions are kept as inert stubs so the ~150 existing call sites
+// across the app keep working without edits. They do nothing and return
+// nothing — every caller is fire-and-forget, so this is safe.
 
-let initialized = false;
+export function initAnalytics() {}
 
-export function initAnalytics() {
-  if (!import.meta.env.PROD) return;
-  if (!MIXPANEL_TOKEN) return;
-  try {
-    mixpanel.init(MIXPANEL_TOKEN, {
-      track_pageview: false,
-      persistence: "localStorage",
-    });
-    initialized = true;
-    const isMobile = /Mobi|Android|iPhone|iPad/i.test(navigator.userAgent);
-    mixpanel.people.set_once({
-      first_seen: new Date().toISOString(),
-      platform: isMobile ? "mobile" : "desktop",
-    });
-    // Re-register stored UTM as super properties on every init
-    try {
-      const stored = localStorage.getItem("milcalc_utm");
-      if (stored) mixpanel.register(JSON.parse(stored));
-    } catch (e) {}
-  } catch (e) {
-    // analytics must never break the app
-  }
-}
+export function captureUtm() {}
 
-export function captureUtm() {
-  try {
-    const params = new URLSearchParams(window.location.search);
-    const keys = ["utm_source", "utm_medium", "utm_campaign", "utm_content", "ref"];
-    const utm = {};
-    keys.forEach(k => { const v = params.get(k); if (v) utm[k] = v; });
-    if (Object.keys(utm).length === 0) return;
-    localStorage.setItem("milcalc_utm", JSON.stringify(utm));
-    if (!import.meta.env.PROD) {
-      console.log("[MilCalc] UTM captured:", utm);
-    }
-    if (!initialized) return;
-    mixpanel.track("Referral Visit", utm);
-    mixpanel.people.set_once({
-      referral_source: utm.utm_source || utm.ref || "",
-      first_touch_url: window.location.href,
-    });
-    mixpanel.register(utm);
-  } catch (e) {
-    // silent
-  }
-}
+export function track(_event, _props) {}
 
-export function track(event, props) {
-  if (!initialized) return;
-  try {
-    mixpanel.track(event, props);
-  } catch (e) {
-    // silent
-  }
-}
-
-// Round dollar amounts to nearest $100 for privacy
+// Round dollar amounts to nearest $100. Pure helper, still used by the
+// calculators for display rounding — kept functional.
 export function r100(n) {
   return Math.round(n / 100) * 100;
 }
