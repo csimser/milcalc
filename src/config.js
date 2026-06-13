@@ -13,6 +13,6 @@ const env = import.meta.env;
 
 export const PUBLIC_URL        = env.VITE_PUBLIC_URL        || "https://milcalc.app";
 export const PUBLIC_DOMAIN     = env.VITE_PUBLIC_DOMAIN     || "milcalc.app";
-export const SUPPORT_EMAIL     = env.VITE_SUPPORT_EMAIL     || "support@milcalc.app";
+export const SUPPORT_EMAIL     = env.VITE_SUPPORT_EMAIL     || "chris@getdebriefed.co";
 export const PARENT_BRAND_URL  = env.VITE_PARENT_BRAND_URL  || "https://getdebriefed.co";
 export const PARENT_BRAND_DOMAIN = env.VITE_PARENT_BRAND_DOMAIN || "getdebriefed.co";
