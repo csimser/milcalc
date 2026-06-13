@@ -1409,9 +1409,12 @@ export default function RetiredPage() {
               {PARENT_BRAND_DOMAIN}
             </a>
             <span style={{ fontSize:12, color:"#374151" }}> &nbsp;·&nbsp; </span>
-            <a href="/terms" style={{ fontSize:12, color:"#6b7280", textDecoration:"none" }}>Terms</a>
+            <a href="#/terms" style={{ fontSize:12, color:"#6b7280", textDecoration:"none" }}>Terms</a>
             <span style={{ fontSize:12, color:"#374151" }}> &nbsp;·&nbsp; </span>
-            <a href="/partners" style={{ fontSize:12, color:"#6b7280", textDecoration:"none" }}>Partners</a>
+            <a href="#/partners" style={{ fontSize:12, color:"#6b7280", textDecoration:"none" }}>Partners</a>
+            <div style={{ fontSize:11, color:"#4b5563", marginTop:8 }}>
+              Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer" style={{ color:"#6b7280", textDecoration:"none" }}>github.com/csimser/milcalc</a>
+            </div>
           </div>
 
           {/* ── FEEDBACK BUTTON ── */}

@@ -23,7 +23,11 @@ import {
   fmt, fmtYos, dk,
 } from './lib/calc.js';
 
-export const FONTS=`@import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow+Condensed:wght@600;700&family=Libre+Baskerville:wght@700&family=Barlow:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=Rajdhani:wght@500;600;700&family=Inter:wght@400;500;600&display=swap');`;
+// Fonts are inlined as base64 woff2 via src/fonts-embed.css (imported in
+// main.jsx) so the downloaded single-file app works fully offline. This used to
+// be a Google Fonts @import; kept as an empty export for the <style>{FONTS}>
+// call sites that reference it.
+export const FONTS=``;
 export const CSS=`
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
 :root{
@@ -589,31 +593,9 @@ function DebriefedGeneralCard() {
 
 // ── LANDING PAGE ────────────────────────────────────────────────────────
 function LandingPage({onEnter}){
-  const [installPrompt,setInstallPrompt]=useState(null);
-  const [showInstallNudge,setShowInstallNudge]=useState(false);
-
   useEffect(()=>{
     track("Page Viewed",{page:"Landing"});
-    const handler=e=>{e.preventDefault();setInstallPrompt(e);setShowInstallNudge(true);};
-    window.addEventListener('beforeinstallprompt',handler);
-    // iOS detection — no beforeinstallprompt event
-    const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
-    const isStandalone=window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;
-    if(isIOS&&!isStandalone) setShowInstallNudge(true);
-    return ()=>window.removeEventListener('beforeinstallprompt',handler);
   },[]);
-
-  const handleInstall=async()=>{
-    if(installPrompt){
-      track("PWA Install Prompted",{});
-      installPrompt.prompt();
-      const choice=await installPrompt.userChoice;
-      if(choice.outcome==="accepted") track("PWA Installed",{});
-      setInstallPrompt(null);
-    }
-  };
-
-  const isIOS=/iPad|iPhone|iPod/.test(navigator.userAgent)&&!window.MSStream;
 
   return(
     <div className="lp">
@@ -661,25 +643,10 @@ function LandingPage({onEnter}){
         </div>
       </div>
 
-      {showInstallNudge&&(
-        <div className="lp-install">
-          <div className="lp-install-card">
-            <div className="lp-install-ico">{"\u{1F4F1}"}</div>
-            <div className="lp-install-txt">
-              <h4>Add to Home Screen</h4>
-              <p>{isIOS
-                ?"Tap the share button, then \"Add to Home Screen\" for the best experience."
-                :"Install MilCalc for instant access — works offline."
-              }</p>
-            </div>
-            {installPrompt&&<button className="lp-install-btn" onClick={()=>{track("Add to Home Screen Tapped",{});handleInstall();}}>Install</button>}
-          </div>
-        </div>
-      )}
-
       <footer className="lp-footer">
-        <p><a href="/share">Share MilCalc</a></p>
+        <p><a href="#/share">Share MilCalc</a></p>
         <p style={{marginTop:8}}>Part of the <a href={PARENT_BRAND_URL} target="_blank" rel="noopener noreferrer">Debriefed</a> product family.  Built by veterans, for veterans.</p>
+        <p style={{marginTop:8}}>Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer">github.com/csimser/milcalc</a></p>
         <p style={{marginTop:8}}>Not affiliated with DoD, DFAS, VA, or any government agency. All calculations are estimates.</p>
       </footer>
     </div>
@@ -3217,7 +3184,7 @@ const FAQ_ITEMS=[
   {q:"What retirement systems does MilCalc support?",a:"MilCalc supports Active Duty retirement (Legacy High-3 and BRS), Medical separation, Reserve/Guard retirement (points-based), and Veteran estimates (VA compensation without retirement pay)."},
   {q:"How is CRDP eligibility determined?",a:"CRDP is available to retirees with 20+ qualifying years of service AND a VA disability rating of 50% or higher. If you qualify, CRDP eliminates the VA waiver and lets you receive both your full retirement pay and full VA compensation simultaneously."},
   {q:"My state isn\u2019t showing a tax exemption \u2014 is that correct?",a:"MilCalc includes confirmed state-level exemptions for military retirement pay. If your state recently changed its policy, email us and we\u2019ll get it corrected quickly."},
-  {q:"How do I clear my saved data?",a:"Android: Settings \u2192 Apps \u2192 MilCalc \u2192 Clear Data. iOS: Delete and reinstall the app."},
+  {q:"How do I clear my saved data?",a:"MilCalc keeps your inputs in your browser\u2019s local storage. Clear your browser\u2019s site data for this file, or use your browser\u2019s \u201cclear browsing data\u201d option, to remove it."},
   {q:"I found a calculation error. How do I report it?",a:`Email ${SUPPORT_EMAIL} with subject \u201CCalculation Error.\u201D Include your inputs (pay grade, YOS, VA rating, filing status, state) and what you believe the correct result should be.`},
   {q:"Will MilCalc add TSP projections or savings planning?",a:`TSP and long-term savings projections are on the roadmap for a future version. Let us know at ${SUPPORT_EMAIL} \u2014 user demand helps us prioritize.`},
 ];
@@ -4201,46 +4168,14 @@ export default function App(){
   const enterApp=()=>{try{localStorage.setItem(LANDING_KEY,"1");}catch{}setEntered(true);};
   const exitApp=()=>{try{localStorage.removeItem(LANDING_KEY);}catch{}setEntered(false);};
 
-  // ── PWA install prompt (app-level) ──
-  const PWA_SESSION_KEY="milcalc_pwa_shown";
-  const [pwaPromptEvent,setPwaPromptEvent]=useState(null);
-  const [showPwaPrompt,setShowPwaPrompt]=useState(false);
-  const pwaShownRef=useRef(false);
-  const isPwaBlocked=()=>{try{return sessionStorage.getItem(PWA_SESSION_KEY)==="1"||window.matchMedia('(display-mode: standalone)').matches||navigator.standalone;}catch{return false;}};
+  // ── PWA install prompt removed (download-only app) ──
+  // triggerPwa() is an inert no-op and showPwaPrompt is always false, so the
+  // remaining references (popup guard, dashboard modalActive) keep working
+  // without further edits.
+  const showPwaPrompt=false;
+  const triggerPwa=()=>{};
   // Reveal body after first React render (prevents white flash)
   useEffect(()=>{document.body.style.visibility='visible';},[]);
-
-  useEffect(()=>{
-    const handler=e=>{e.preventDefault();setPwaPromptEvent(e);};
-    window.addEventListener('beforeinstallprompt',handler);
-    return ()=>window.removeEventListener('beforeinstallprompt',handler);
-  },[]);
-  const triggerPwa=()=>{
-    if(isPwaBlocked()||pwaShownRef.current||!pwaPromptEvent) return;
-    pwaShownRef.current=true;
-    try{sessionStorage.setItem(PWA_SESSION_KEY,"1");}catch{}
-    // Dismiss engagement popup if showing — PWA takes priority
-    if(showPopup){dismissPopup();}
-    setShowPwaPrompt(true);
-    track("PWA Install Prompt Shown",{});
-  };
-  const handlePwaInstall=async()=>{
-    if(pwaPromptEvent){
-      track("PWA Install Prompted",{});
-      pwaPromptEvent.prompt();
-      const choice=await pwaPromptEvent.userChoice;
-      if(choice.outcome==="accepted") track("PWA Installed",{});
-      setPwaPromptEvent(null);
-    }
-    setShowPwaPrompt(false);
-  };
-  const dismissPwa=()=>{setShowPwaPrompt(false);track("PWA Install Dismissed",{});};
-  // PWA trigger: 3+ minutes on page
-  useEffect(()=>{
-    if(!pwaPromptEvent) return;
-    const timer=setTimeout(()=>triggerPwa(),180000); // 3 minutes
-    return ()=>clearTimeout(timer);
-  },[pwaPromptEvent]);
 
   const defaults={
     userName:"",
@@ -4390,7 +4325,7 @@ export default function App(){
             <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);setScreen("privacy");}}>
               <span>{"\u{1F512}"}</span><span>Privacy Policy</span>
             </button>
-            <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);window.location.href="/share";}}>
+            <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);window.location.hash="#/share";}}>
               <span>{"\u{1F517}"}</span><span>Share MilCalc</span>
             </button>
             <button className="info-sheet-btn" onClick={()=>{setInfoMenu(false);set("userPath",null);}}>
@@ -4424,7 +4359,7 @@ export default function App(){
                 onClick={()=>{track("Engagement Popup Review Clicked",{});dismissPopup();}}>
                 <span className="ep-opt-ico">{"\u2B50"}</span><span>Leave a review</span>
               </a>
-              <button className="ep-opt" onClick={()=>{track("Engagement Popup Share Clicked",{});dismissPopup();window.location.href="/share";}}>
+              <button className="ep-opt" onClick={()=>{track("Engagement Popup Share Clicked",{});dismissPopup();window.location.hash="#/share";}}>
                 <span className="ep-opt-ico">{"\u{1F517}"}</span><span>Share with a fellow veteran</span>
               </button>
               <button className="ep-opt" onClick={()=>{track("Engagement Popup Feedback Clicked",{});dismissPopup();setScreen("support");}}>
@@ -4432,26 +4367,6 @@ export default function App(){
               </button>
             </div>
             <button className="ep-dismiss" onClick={dismissPopup}>Maybe later</button>
-          </div>
-        </div>
-      )}
-
-      {/* ── PWA INSTALL PROMPT ── */}
-      {showPwaPrompt&&(
-        <div className="ep-overlay" onClick={dismissPwa}>
-          <div className="ep-modal" onClick={e=>e.stopPropagation()}>
-            <div style={{fontSize:32,textAlign:"center",marginBottom:8}}>{"\u{1F4F1}"}</div>
-            <div className="ep-title">Add MilCalc to Home Screen</div>
-            <div style={{fontSize:14,color:"#7A8AA0",textAlign:"center",lineHeight:1.5,marginBottom:16}}>
-              Install for instant access — works offline, no app store needed.
-            </div>
-            <button onClick={handlePwaInstall}
-              style={{width:"100%",padding:"14px",background:"linear-gradient(135deg,#c2782a,#e09448)",
-                color:"#0A0E1A",border:"none",borderRadius:10,fontSize:15,fontWeight:700,cursor:"pointer",
-                fontFamily:"Barlow,sans-serif",marginBottom:8}}>
-              Install Now
-            </button>
-            <button className="ep-dismiss" onClick={dismissPwa}>Maybe later</button>
           </div>
         </div>
       )}
@@ -4467,7 +4382,7 @@ export default function App(){
             return(
             <button key={n.id} className={"btab"+(tab===n.id?" on":"")}
               style={{flex:"1 1 0",minWidth:0,width:"auto"}}
-              onClick={()=>{if(n.id==="share"){window.location.href="/share";return;}go(n.id);}}>
+              onClick={()=>{if(n.id==="share"){window.location.hash="#/share";return;}go(n.id);}}>
               {showDot&&<span className="btab-dot"/>}
               <span className="btab-ico">{n.ico}</span>
               <span>{n.label}</span>

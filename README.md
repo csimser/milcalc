@@ -1,78 +1,41 @@
 # MilCalc
 
-A free, offline-capable React + Capacitor app for military retirement
-financial planning — pension, VA disability, BAH, GI Bill, state taxes,
-and income-gap analysis. All calculations run client-side. No accounts,
-no backend, no user data leaves the device.
+Military financial calculator. Forecast your transition financial picture: retirement pay, TSP, GI Bill, VA compensation, VGLI, state taxes, and cost of living comparisons.
 
-See `CLAUDE.md` for architecture notes and `SETUP.md` for the full
-build-and-ship-to-stores walkthrough (Android keystore, iOS certs,
-GitHub Actions, Play Console, App Store Connect).
+Works completely free. No account, no credit card, no internet required after download. Rate tables (DoD pay tables, BAH, VA disability rates, and other financial reference data) are updated annually with each release — download the latest `MilCalc.html` to get current numbers.
+
+## ⬇️ [Download MilCalc](https://github.com/csimser/milcalc/releases/latest/download/MilCalc.html)
+
+Double-click the downloaded file. The app opens in your browser and runs entirely on your computer.
 
 ---
 
-## Quick start
+- **Private by design** — every calculation runs locally in your browser. No servers, no accounts, nothing leaves your computer.
+- **Offline** — once downloaded, it works with no internet connection.
+- **One file** — the entire app (code, styles, fonts) is a single self-contained HTML file.
 
-```bash
-git clone <your-fork-url>
-cd milcalc
-npm install
-cp .env.example .env.local   # edit values — see below
-npm run dev                  # http://localhost:3000
-```
+## What it calculates
 
-## Environment variables
+- Military retirement pay (Legacy High-3, BRS, REDUX, medical, Reserve/Guard)
+- TSP projections
+- GI Bill benefits
+- VA disability compensation
+- TRICARE premiums and SBP costs
+- VGLI / life-insurance comparisons
+- Federal and state income taxes (state military-retirement exemptions)
+- BAH and income-gap analysis
+- Cost-of-living comparisons across locations
 
-Every configurable value lives in `.env.local` (git-ignored). Copy
-`.env.example` and fill in the ones you need — all are optional except
-`VITE_PUBLIC_URL` if you want correct share/SEO links.
+## Want to hack on the source?
 
-| Variable                   | Required | What it controls                                                          |
-|----------------------------|----------|---------------------------------------------------------------------------|
-| `VITE_PUBLIC_URL`          | ✓        | Full origin used in canonical URL, OG meta, share links, JSON-LD          |
-| `VITE_PUBLIC_DOMAIN`       | ✓        | Bare domain shown in PDF footers and share text                           |
-| `VITE_SUPPORT_EMAIL`       | ✓        | Email surfaced in FAQ, Terms, Partners page, support modal, review CTA    |
-| `VITE_PARENT_BRAND_URL`    |          | URL for the "Part of <brand>" footer link and post-export promo modal     |
-| `VITE_PARENT_BRAND_DOMAIN` |          | Bare domain shown alongside the parent-brand link                         |
-| `VITE_MIXPANEL_TOKEN`      |          | Mixpanel project token. Leave blank to disable analytics entirely         |
+See [DEVELOPMENT.md](DEVELOPMENT.md) for the local build instructions.
 
-Vite only exposes variables prefixed with `VITE_` to client code.
-Restart `npm run dev` after editing the file so Vite reloads them.
+## License
 
-### Where to get each value
+MIT — see [LICENSE](LICENSE). Built by Chris Simser.
 
-- **`VITE_MIXPANEL_TOKEN`** — Mixpanel dashboard → Project Settings →
-  Access Keys → "Project Token." A blank token disables all analytics
-  calls; the app still works.
-- **`VITE_PUBLIC_URL` / `VITE_PUBLIC_DOMAIN`** — whatever you deploy at
-  (Vercel, Netlify, GitHub Pages, etc.). For local-only forks leave the
-  `example.com` defaults.
-- **`VITE_SUPPORT_EMAIL`** — any inbox you want users to reach you at.
+Sister tool: **[Debriefed](https://getdebriefed.co)** — military-to-civilian resume translator.
 
-### Files you'll also want to update before publishing
+---
 
-The following are static files that Vite can't substitute. Edit them
-once with your final domain:
-
-- `public/sitemap.xml` — replace `https://example.com` with your URL
-- `public/robots.txt` — same
-- `index.html` — replace `https://example.com` in canonical, OG, and
-  JSON-LD tags with your URL
-- `capacitor.config.ts` — change `appId: 'com.milcalc.app'` to your
-  reverse-DNS bundle ID before building for iOS/Android
-
-## Database / migrations / seed data
-
-None. MilCalc has no backend. Every calculation is a pure function and
-every user input is held in React state or `localStorage`. There is
-nothing to migrate, seed, or provision.
-
-## Building
-
-```bash
-npm run build           # web build → dist/
-npm run build:android   # web + sync to Android project
-npm run build:ios       # web + sync to iOS project
-```
-
-See `SETUP.md` for store-submission flow.
+*Not affiliated with the DoD, DFAS, VA, or any government agency. All figures are planning estimates — verify final numbers with your finance office or a VSO.*

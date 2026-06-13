@@ -1,0 +1,44 @@
+name: Release MilCalc.html
+
+# Builds the single-file MilCalc.html and attaches it to a GitHub Release.
+# Trigger by pushing a version tag, e.g.:
+#   git tag v1.1.0 && git push origin v1.1.0
+#
+# The download link used everywhere (README, landing page) is:
+#   https://github.com/csimser/milcalc/releases/latest/download/MilCalc.html
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: '.nvmrc'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build single-file app
+        run: npm run build
+
+      - name: Verify build output
+        run: test -f dist/MilCalc.html
+
+      - name: Attach MilCalc.html to the Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/MilCalc.html
+          generate_release_notes: true

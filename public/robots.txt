@@ -1,4 +1,0 @@
-# Update https://example.com to your deployment URL before publishing.
-User-agent: *
-Allow: /
-Sitemap: https://example.com/sitemap.xml

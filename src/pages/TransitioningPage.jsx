@@ -493,50 +493,15 @@ export default function TransitioningPage() {
     setShowPopup(false);
     track("Engagement Popup Dismissed", {});
   };
-  // ── PWA install prompt ──
-  const PWA_LS_KEY = "milcalc_pwa_dismissed_at";
-  const [pwaPromptEvent, setPwaPromptEvent] = useState(null);
-  const [showPwaPrompt, setShowPwaPrompt] = useState(false);
-  const pwaShownRef = useRef(false);
-  const isPwaBlocked = () => {
-    try {
-      if (window.matchMedia("(display-mode: standalone)").matches || navigator.standalone) return true;
-      const dismissed = Number(localStorage.getItem(PWA_LS_KEY) || 0);
-      if (dismissed && Date.now() - dismissed < 30 * 24 * 60 * 60 * 1000) return true;
-    } catch {}
-    return false;
-  };
-  useEffect(() => {
-    const handler = e => { e.preventDefault(); setPwaPromptEvent(e); };
-    window.addEventListener("beforeinstallprompt", handler);
-    return () => window.removeEventListener("beforeinstallprompt", handler);
-  }, []);
+  // ── PWA install prompt removed ──
+  // MilCalc is a download-only app — there is no "install as app" / Add to Home
+  // Screen flow. triggerPwa() is kept as an inert no-op so the existing call
+  // sites below don't need to change.
+  const triggerPwa = () => {};
   // DEV: clear survey gate on every load so it's testable
   useEffect(() => {
     if (import.meta.env.DEV) sessionStorage.removeItem("milcalc_survey_shown");
   }, []);
-  const triggerPwa = () => {
-    if (isPwaBlocked() || pwaShownRef.current || !pwaPromptEvent || showDebriefedPromo || showPopup) return;
-    if (calcCountRef.current < 3) return;
-    pwaShownRef.current = true;
-    setShowPwaPrompt(true);
-    track("PWA Install Prompt Shown", {});
-  };
-  const handlePwaInstall = async () => {
-    if (pwaPromptEvent) {
-      track("PWA Install Prompted", {});
-      pwaPromptEvent.prompt();
-      const choice = await pwaPromptEvent.userChoice;
-      if (choice.outcome === "accepted") track("PWA Installed", {});
-      setPwaPromptEvent(null);
-    }
-    setShowPwaPrompt(false);
-  };
-  const dismissPwa = () => {
-    try { localStorage.setItem(PWA_LS_KEY, String(Date.now())); } catch {}
-    setShowPwaPrompt(false);
-    track("PWA Install Dismissed", {});
-  };
   // ── Rating prompt ──
   const RATING_LS_KEY = "milcalc_rating_last_shown";
   const RETURNING_LS_KEY = "milcalc_returning_user";
@@ -2216,9 +2181,12 @@ export default function TransitioningPage() {
               {PARENT_BRAND_DOMAIN}
             </a>
             <span style={{ fontSize:12, color:"#374151" }}> &nbsp;·&nbsp; </span>
-            <a href="/terms" style={{ fontSize:12, color:"#6b7280", textDecoration:"none" }}>Terms</a>
+            <a href="#/terms" style={{ fontSize:12, color:"#6b7280", textDecoration:"none" }}>Terms</a>
             <span style={{ fontSize:12, color:"#374151" }}> &nbsp;·&nbsp; </span>
-            <a href="/partners" style={{ fontSize:12, color:"#6b7280", textDecoration:"none" }}>Partners</a>
+            <a href="#/partners" style={{ fontSize:12, color:"#6b7280", textDecoration:"none" }}>Partners</a>
+            <div style={{ fontSize:11, color:"#4b5563", marginTop:8 }}>
+              Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer" style={{ color:"#6b7280", textDecoration:"none" }}>github.com/csimser/milcalc</a>
+            </div>
           </div>
 
           {/* ── FEEDBACK BUTTON ── */}
@@ -2363,26 +2331,6 @@ export default function TransitioningPage() {
               Export PDF
             </button>
             <button className="tr-ep-dismiss" onClick={dismissPopup}>Maybe later</button>
-          </div>
-        </div>
-      )}
-
-      {/* ── PWA INSTALL PROMPT ── */}
-      {showPwaPrompt && !showDebriefedPromo && !showPopup && (
-        <div className="tr-ep-overlay" onClick={dismissPwa}>
-          <div className="tr-ep-modal" onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 32, textAlign: "center", marginBottom: 8 }}>📱</div>
-            <div className="tr-ep-title">Add MilCalc to Home Screen</div>
-            <div style={{ fontSize: 14, color: "#6b7280", textAlign: "center", lineHeight: 1.5, marginBottom: 16 }}>
-              Install for instant access — works offline, no app store needed.
-            </div>
-            <button onClick={handlePwaInstall}
-              style={{ width: "100%", padding: "14px", background: "linear-gradient(135deg,#c2782a,#e09448)",
-                color: "#0f0f14", border: "none", borderRadius: 10, fontSize: 15, fontWeight: 700,
-                cursor: "pointer", fontFamily: "Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif", marginBottom: 8 }}>
-              Install Now
-            </button>
-            <button className="tr-ep-dismiss" onClick={dismissPwa}>Maybe later</button>
           </div>
         </div>
       )}
