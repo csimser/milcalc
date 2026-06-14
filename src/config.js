@@ -16,3 +16,4 @@ export const PUBLIC_DOMAIN     = env.VITE_PUBLIC_DOMAIN     || "milcalc.app";
 export const SUPPORT_EMAIL     = env.VITE_SUPPORT_EMAIL     || "chris@getdebriefed.co";
 export const PARENT_BRAND_URL  = env.VITE_PARENT_BRAND_URL  || "https://getdebriefed.co";
 export const PARENT_BRAND_DOMAIN = env.VITE_PARENT_BRAND_DOMAIN || "getdebriefed.co";
+export const DISCORD_URL       = env.VITE_DISCORD_URL       || "https://discord.gg/mfN7dqnsaY";

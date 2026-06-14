@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { SUPPORT_EMAIL } from "../config.js";
+import { DiscordLink } from "../components/ui.jsx";
 
 const TIERS = [
   {
@@ -158,6 +159,7 @@ export default function PartnersPage() {
             {SUPPORT_EMAIL}
           </a>
         </p>
+        <DiscordLink />
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import NavHeader, { NAV_H } from "../components/NavHeader.jsx";
 import {
-  DS_CSS, SummaryBar, SectionHeader, InfoCard, IncomeRow, TotalRow, HintBox,
+  DS_CSS, SummaryBar, SectionHeader, InfoCard, IncomeRow, TotalRow, HintBox, DiscordLink,
 } from "../components/ui.jsx";
 import { fmt, getVAPriorityGroup, calcStateTax, calcFederalTax, pension, calcVAComp, lookupPay } from "../lib/calc.js";
 import { TRICARE_PLANS, TRICARE_TRR, VA_PRIORITY_GROUPS, STATES, GRADE_LABELS, GRADE_GROUPS } from "../lib/data.js";
@@ -1415,6 +1415,7 @@ export default function RetiredPage() {
             <div style={{ fontSize:11, color:"#4b5563", marginTop:8 }}>
               Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer" style={{ color:"#6b7280", textDecoration:"none" }}>github.com/csimser/milcalc</a>
             </div>
+            <DiscordLink />
           </div>
 
           {/* ── FEEDBACK BUTTON ── */}
