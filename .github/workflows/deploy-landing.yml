@@ -1,0 +1,48 @@
+name: Deploy landing page
+
+# Deploys ONLY the static landing/ directory to GitHub Pages.
+# This serves the independent landing page at csimser.github.io/milcalc/.
+# (The custom domain milcalc.app is served from the separate
+# csimser/milcalc-landing repo, so there is no CNAME here.)
+# The MilCalc app itself is NOT hosted — it is distributed as a download from
+# GitHub Releases (see release.yml).
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'landing/**'
+      - '.github/workflows/deploy-landing.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow one concurrent deployment; cancel in-progress runs for the same ref.
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload landing/ as Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: landing
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
