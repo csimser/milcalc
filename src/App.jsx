@@ -646,7 +646,7 @@ function LandingPage({onEnter}){
       <footer className="lp-footer">
         <p><a href="#/share">Share MilCalc</a></p>
         <p style={{marginTop:8}}>Part of the <a href={PARENT_BRAND_URL} target="_blank" rel="noopener noreferrer">Debriefed</a> product family.  Built by veterans, for veterans.</p>
-        <p style={{marginTop:8}}>Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer">github.com/csimser/milcalc</a></p>
+        <p style={{marginTop:8}}>Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer">github.com/csimser/milcalc</a> · <a href="https://discord.gg/mfN7dqnsaY" target="_blank" rel="noopener noreferrer"><svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13" aria-hidden="true" style={{verticalAlign:"-2px",marginRight:"3px"}}><path fillRule="evenodd" d="M10 3.5c-4.14 0-7.5 2.46-7.5 5.5 0 1.43.74 2.73 1.96 3.71-.1.86-.45 1.62-.97 2.23-.14.16-.17.39-.09.59.08.2.27.33.49.33 1.3 0 2.5-.43 3.49-1.16.82.26 1.71.4 2.62.4 4.14 0 7.5-2.46 7.5-5.5S14.14 3.5 10 3.5z" clipRule="evenodd"/></svg>Join The Debrief community</a></p>
         <p style={{marginTop:8}}>Not affiliated with DoD, DFAS, VA, or any government agency. All calculations are estimates.</p>
       </footer>
     </div>
