@@ -8,7 +8,7 @@ import NavHeader, { NAV_H } from "../components/NavHeader.jsx";
 import { PUBLIC_URL, PUBLIC_DOMAIN, SUPPORT_EMAIL, PARENT_BRAND_URL, PARENT_BRAND_DOMAIN } from "../config.js";
 import {
   SummaryBar, SectionHeader, InfoCard, ToggleGroup,
-  SliderField, HintBox, CTAButton, DS_CSS, Stepper,
+  SliderField, HintBox, CTAButton, DS_CSS, Stepper, DiscordLink,
 } from "../components/ui.jsx";
 import { lookupPay, pension, calcVAComp, calcStateTax, calcFederalTax, fmt, getVAPriorityGroup, mgibMonthly } from "../lib/calc.js";
 import { STATES, GRADE_LABELS, GRADE_GROUPS, VA_PRIORITY_GROUPS, TRICARE_PLANS, GI_BILL_ONLINE_MHA, MGIB_ENROLL_OPTS, MHA_CITIES } from "../lib/data.js";
@@ -2467,6 +2467,7 @@ export default function ServingPage() {
                 <div style={{ fontSize:11, color:"#4b5563", marginTop:8 }}>
                   Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer" style={{ color:"#6b7280", textDecoration:"none" }}>github.com/csimser/milcalc</a>
                 </div>
+                <DiscordLink />
               </div>
 
               {/* ── FEEDBACK BUTTON ── */}

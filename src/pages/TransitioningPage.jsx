@@ -3,7 +3,7 @@ import NavHeader, { NAV_H } from "../components/NavHeader.jsx";
 import { PUBLIC_URL, PUBLIC_DOMAIN, SUPPORT_EMAIL, PARENT_BRAND_URL, PARENT_BRAND_DOMAIN } from "../config.js";
 import {
   DS_CSS, SummaryBar, SectionHeader, InfoCard, FieldRow, ToggleGroup,
-  IncomeRow, TotalRow, HintBox, StepList, Stepper,
+  IncomeRow, TotalRow, HintBox, StepList, Stepper, DiscordLink,
 } from "../components/ui.jsx";
 import {
   lookupPay, pensionBySepType, calcVAComp, calcStateTax, calcFederalTax, pct, fmt, mgibMonthly,
@@ -2187,6 +2187,7 @@ export default function TransitioningPage() {
             <div style={{ fontSize:11, color:"#4b5563", marginTop:8 }}>
               Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer" style={{ color:"#6b7280", textDecoration:"none" }}>github.com/csimser/milcalc</a>
             </div>
+            <DiscordLink />
           </div>
 
           {/* ── FEEDBACK BUTTON ── */}

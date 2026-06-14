@@ -2,6 +2,8 @@
 // All shared building blocks for MilCalc's three paths.
 // Inject DS_CSS via <style>{DS_CSS}</style> at the page level once.
 
+import { DISCORD_URL } from "../config.js";
+
 // ── DESIGN SYSTEM CSS ─────────────────────────────────────────────────
 export const DS_CSS = `
 /* ── RESET & BASE ── */
@@ -857,6 +859,25 @@ export function Stepper({ value, onChange, min, max, step = 1, format }) {
         min={min} max={max}
       />
       <button type="button" className="ds-stepper-btn" onClick={inc} aria-label="Increase">+</button>
+    </div>
+  );
+}
+
+// ── DISCORD COMMUNITY LINK ────────────────────────────────────────────
+// Single source of truth for the "Join The Debrief community" footer link.
+// Rendered in every route's footer so the downloaded MilCalc.html always
+// carries the Discord invite (previously it lived only on the unused
+// LandingPage in App.jsx, which Rollup tree-shook out of the build).
+export function DiscordLink({ marginTop = 8 }) {
+  return (
+    <div style={{ marginTop, fontSize: 12 }}>
+      <a href={DISCORD_URL} target="_blank" rel="noopener noreferrer"
+        style={{ color: "#6b7280", textDecoration: "none", display: "inline-flex", alignItems: "center" }}>
+        <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13" aria-hidden="true" style={{ verticalAlign: "-2px", marginRight: 3 }}>
+          <path fillRule="evenodd" d="M10 3.5c-4.14 0-7.5 2.46-7.5 5.5 0 1.43.74 2.73 1.96 3.71-.1.86-.45 1.62-.97 2.23-.14.16-.17.39-.09.59.08.2.27.33.49.33 1.3 0 2.5-.43 3.49-1.16.82.26 1.71.4 2.62.4 4.14 0 7.5-2.46 7.5-5.5S14.14 3.5 10 3.5z" clipRule="evenodd"/>
+        </svg>
+        Join The Debrief community
+      </a>
     </div>
   );
 }

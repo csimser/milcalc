@@ -22,6 +22,7 @@ import {
   getVAPriorityGroup, vgliRate, vgliMonthly, mgibMonthly,
   fmt, fmtYos, dk,
 } from './lib/calc.js';
+import { DiscordLink } from './components/ui.jsx';
 
 // Fonts are inlined as base64 woff2 via src/fonts-embed.css (imported in
 // main.jsx) so the downloaded single-file app works fully offline. This used to
@@ -3398,6 +3399,7 @@ export function SharePage(){
       <div className="share-footer">
         <p>MilCalc v{APP_VERSION}</p>
         <p>Part of the <a href={PARENT_BRAND_URL} target="_blank" rel="noopener noreferrer">Debriefed</a> product family.</p>
+        <DiscordLink />
       </div>
     </div>
   );

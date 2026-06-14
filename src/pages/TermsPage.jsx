@@ -1,5 +1,6 @@
 import { useNavigate } from "react-router-dom";
 import { SUPPORT_EMAIL } from "../config.js";
+import { DiscordLink } from "../components/ui.jsx";
 
 const SECTIONS = [
   {
@@ -117,6 +118,7 @@ export default function TermsPage() {
               {SUPPORT_EMAIL}
             </a>
           </p>
+          <DiscordLink />
         </div>
       </div>
     </div>
