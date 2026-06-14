@@ -30,6 +30,10 @@ Double-click the downloaded file. The app opens in your browser and runs entirel
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for the local build instructions.
 
+## Community
+
+Join [The Debrief](https://discord.gg/mfN7dqnsaY) — a free community for service members and veterans working the transition. Resume help, VA claims talk, job search, tool support. Veterans helping veterans. No cost, no upsell.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Built by Chris Simser.
