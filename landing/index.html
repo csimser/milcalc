@@ -1,0 +1,371 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MilCalc: Free Military Financial Calculator</title>
+    <meta name="description" content="Free military financial calculator. Download one HTML file, double-click it, use it. Retirement pay, TSP, GI Bill, VA compensation, state taxes, cost of living. No account, no signup, no internet required.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Rajdhani:wght@500;600;700&family=IBM+Plex+Mono:wght@500&display=swap" rel="stylesheet">
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --bg: #0b1120;
+            --surface: #111827;
+            --border: rgba(255, 255, 255, 0.1);
+            --border-bright: rgba(255, 255, 255, 0.2);
+            --text: #cbd5e1;
+            --text-dim: #6b7fa3;
+            --accent: #d4a017;
+            --accent-hover: #f0c14b;
+            --accent-dim: rgba(212, 160, 23, 0.08);
+            --accent-glow: rgba(212, 160, 23, 0.15);
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(ellipse at 50% 30%, var(--accent-glow) 0%, transparent 50%);
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        .container {
+            max-width: 640px;
+            width: 100%;
+            position: relative;
+            z-index: 1;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.35rem 0.85rem;
+            background: var(--accent-dim);
+            border: 1px solid rgba(212, 160, 23, 0.2);
+            border-radius: 100px;
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 0.75rem;
+            color: var(--accent);
+            letter-spacing: 0.05em;
+            text-transform: uppercase;
+            margin-bottom: 1.5rem;
+            animation: fadeIn 0.6s ease both;
+        }
+
+        .badge::before {
+            content: '';
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--accent);
+            animation: pulse 2s ease-in-out infinite;
+        }
+
+        h1 {
+            font-family: 'Rajdhani', sans-serif;
+            font-size: clamp(2.5rem, 6vw, 3.5rem);
+            font-weight: 700;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            margin-bottom: 1.25rem;
+            animation: fadeIn 0.6s ease 0.1s both;
+        }
+
+        .subtitle {
+            font-size: 1.15rem;
+            color: var(--text-dim);
+            line-height: 1.65;
+            margin-bottom: 2.5rem;
+            animation: fadeIn 0.6s ease 0.2s both;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1px;
+            background: var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            margin-bottom: 2.5rem;
+            animation: fadeIn 0.6s ease 0.3s both;
+        }
+
+        .stat {
+            background: var(--surface);
+            padding: 1.25rem;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-family: 'IBM Plex Mono', monospace;
+            font-size: 1.35rem;
+            font-weight: 500;
+            color: var(--accent);
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+        }
+
+        .cta {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 3rem;
+            animation: fadeIn 0.6s ease 0.4s both;
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.6rem;
+            padding: 0.85rem 1.5rem;
+            border-radius: 10px;
+            font-family: 'Inter', -apple-system, sans-serif;
+            font-size: 0.95rem;
+            font-weight: 600;
+            text-decoration: none;
+            transition: all 0.2s ease;
+            cursor: pointer;
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #0a0a0a;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 8px 30px rgba(212, 160, 23, 0.25);
+        }
+
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--text);
+            border: 1px solid var(--border);
+        }
+
+        .btn-secondary:hover {
+            border-color: var(--border-bright);
+            background: #1e2937;
+        }
+
+        .btn svg {
+            width: 18px;
+            height: 18px;
+        }
+
+        .features {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            margin-bottom: 3rem;
+            animation: fadeIn 0.6s ease 0.5s both;
+        }
+
+        .feature {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+            padding: 1rem 1.25rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+        }
+
+        .feature-icon {
+            color: var(--accent);
+            font-size: 1.1rem;
+            margin-top: 0.1rem;
+            flex-shrink: 0;
+        }
+
+        .feature-text {
+            font-size: 0.9rem;
+            color: var(--text-dim);
+            line-height: 1.5;
+        }
+
+        .feature-text strong {
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .message {
+            padding: 1.5rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            margin-bottom: 2rem;
+            animation: fadeIn 0.6s ease 0.6s both;
+        }
+
+        .message p {
+            font-size: 0.9rem;
+            color: var(--text-dim);
+            line-height: 1.7;
+        }
+
+        .message .sig {
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: var(--text);
+            font-weight: 500;
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 0.8rem;
+            color: #444;
+            animation: fadeIn 0.6s ease 0.7s both;
+        }
+
+        .footer a {
+            color: var(--text-dim);
+            text-decoration: none;
+        }
+
+        .footer a:hover { color: var(--accent); }
+
+        .community-cta { margin-top: 1.25rem; }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        @media (max-width: 500px) {
+            .cta { flex-direction: column; }
+            .stats { grid-template-columns: 1fr; }
+            .community-cta .btn { width: 100%; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="badge">Open Source</div>
+
+        <h1>MilCalc</h1>
+
+        <p class="subtitle">
+            Free military financial calculator. Retirement pay, TSP, GI Bill, VA compensation, VGLI, state taxes, cost of living. Works on your computer.
+        </p>
+
+        <div class="stats">
+            <div class="stat">
+                <div class="stat-value">6</div>
+                <div class="stat-label">Calculator modules</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">All 50</div>
+                <div class="stat-label">State tax profiles</div>
+            </div>
+            <div class="stat">
+                <div class="stat-value">Free</div>
+                <div class="stat-label">Forever</div>
+            </div>
+        </div>
+
+        <div class="cta">
+            <a href="https://github.com/csimser/milcalc/releases/latest/download/MilCalc.html" class="btn btn-primary">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 16l-5-5h3V4h4v7h3l-5 5zm-9 4v-2h18v2H3z"/></svg>
+                Download MilCalc
+            </a>
+            <a href="https://github.com/csimser/milcalc" class="btn btn-secondary">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/></svg>
+                View on GitHub
+            </a>
+        </div>
+
+        <div class="features">
+            <div class="feature">
+                <span class="feature-icon">&#9670;</span>
+                <p class="feature-text"><strong>Full transition financial picture.</strong> Retirement pay (High-3, BRS), TSP projections (Roth, Traditional, Split), GI Bill estimates, VA disability compensation, VGLI premiums, and state-by-state cost of living comparisons.</p>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">&#9670;</span>
+                <p class="feature-text"><strong>Updated annually.</strong> Pay tables, BAH rates, VA disability percentages, and other reference data updated with each release. Download the latest MilCalc.html for current numbers.</p>
+            </div>
+            <div class="feature">
+                <span class="feature-icon">&#9670;</span>
+                <p class="feature-text"><strong>Runs on your computer.</strong> Download one HTML file, double-click it, use it. No install, no signup, no internet required.</p>
+            </div>
+        </div>
+
+        <div class="message">
+            <p style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; font-family: 'IBM Plex Mono', monospace;">
+                <svg viewBox="0 0 24 24" fill="currentColor" style="width:18px; height:18px;"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 12H6v-2h12v2zm0-3H6V9h12v2zm0-3H6V6h12v2z"/></svg>
+                The Debrief
+            </p>
+            <p>
+                Free community for transitioning service members and veterans. Retirement planning, VA claims, job search, tool support. Veterans helping veterans. No cost, no upsell.
+            </p>
+            <div class="community-cta">
+                <a href="https://discord.gg/mfN7dqnsaY" class="btn btn-primary">Join the community</a>
+            </div>
+        </div>
+
+        <div class="message" style="margin-bottom: 0.75rem;">
+            <p style="font-size: 0.85rem; color: var(--accent); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.75rem; font-family: 'IBM Plex Mono', monospace;">How do I use this?</p>
+            <p>
+                Click "Download MilCalc" above. Save the HTML file. Double-click it.
+            </p>
+            <p style="margin-top: 0.75rem;">
+                The app opens in your browser and runs entirely on your computer. Plug in your numbers, see your full transition financial picture.
+            </p>
+            <p style="margin-top: 0.75rem;">
+                That's it. No account. No signup. No internet required.
+            </p>
+            <p style="margin-top: 0.75rem;">
+                For TAP offices, Fleet and Family Support, financial counselors: this same file works for anyone you point to it. Share the link, point service members at it. No setup on your end.
+            </p>
+        </div>
+
+        <div class="message">
+            <p>
+                I built this because transitioning service members deserve to see their full financial picture before signing their DD-214, without paying someone to show it to them. Now anyone can download it and have answers in 30 seconds.
+            </p>
+            <p style="margin-top: 0.75rem;">
+                If your organization wants to host a copy or include this in your transition program, the GitHub repo has everything you need. MIT licensed. Take it.
+            </p>
+            <p class="sig">Chris S. &middot; <a href="mailto:chris@getdebriefed.co" style="color: var(--accent); text-decoration: none;">chris@getdebriefed.co</a></p>
+        </div>
+
+        <div class="footer">
+            <p>MIT License &middot; <a href="https://discord.gg/mfN7dqnsaY">Join The Debrief community</a> &middot; <a href="https://getdebriefed.co">Debriefed (sister tool)</a></p>
+        </div>
+    </div>
+</body>
+</html>
