@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import NavHeader, { NAV_H } from "../components/NavHeader.jsx";
+import UpdateCheck from "../components/UpdateCheck.jsx";
 import {
   DS_CSS, SummaryBar, SectionHeader, InfoCard, IncomeRow, TotalRow, HintBox, DiscordLink,
 } from "../components/ui.jsx";
@@ -1416,6 +1417,7 @@ export default function RetiredPage() {
               Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer" style={{ color:"#6b7280", textDecoration:"none" }}>github.com/csimser/milcalc</a>
             </div>
             <DiscordLink />
+            <UpdateCheck />
           </div>
 
           {/* ── FEEDBACK BUTTON ── */}

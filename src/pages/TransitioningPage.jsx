@@ -1,13 +1,16 @@
 import { useState, useEffect, useRef } from "react";
 import NavHeader, { NAV_H } from "../components/NavHeader.jsx";
+import UpdateCheck from "../components/UpdateCheck.jsx";
 import { PUBLIC_URL, PUBLIC_DOMAIN, SUPPORT_EMAIL, PARENT_BRAND_URL, PARENT_BRAND_DOMAIN } from "../config.js";
 import {
   DS_CSS, SummaryBar, SectionHeader, InfoCard, FieldRow, ToggleGroup,
   IncomeRow, TotalRow, HintBox, StepList, Stepper, DiscordLink,
 } from "../components/ui.jsx";
 import {
-  lookupPay, pensionBySepType, calcVAComp, calcStateTax, calcFederalTax, pct, fmt, mgibMonthly,
+  lookupPay, calcVAComp, calcStateTax, calcFederalTax, fmt, mgibMonthly,
   vgliMonthly, getVAPriorityGroup,
+  calculateRetirement, legacySepType, reservePayAge, teraReductionFactor,
+  isReserveType, isMedicalType, isActiveType,
 } from "../lib/calc.js";
 import {
   GRADE_LABELS, GRADE_GROUPS, COL, MHA_CITIES, STATES,
@@ -44,10 +47,28 @@ const LS_KEY = "tr_state_v2";
 
 const DEFAULT_STATE = {
   name: "",
+  // v1.1: retireeType (7-way) is the source of truth; sepType is the derived
+  // legacy mirror (legacySepType) that the many non-pension consumers
+  // (TRICARE, GI Bill, VA health, PDF, analytics) continue to read.
+  retireeType: "active-regular",
   sepType: "active",
   retType: "High-3",
   yos: 20,
   grade: "E-7",
+  // v1.1 retirement fields
+  medDodPct: 50,
+  tdrl: false,
+  combatRelated: false,
+  retireAge: 42,
+  brsLumpSum: 0,
+  reservePoints: 3600,
+  currentAge: 45,
+  payStartAge: 60,
+  reserve20GoodYears: true,
+  reserveAdDays: 0,
+  reservePtGoodYears: 0,
+  reservePtAdDays: 0,
+  reservePtOther: 0,
   deps: "sp0",
   vaRating: 0,
   giUse: false,
@@ -86,10 +107,37 @@ const DEFAULT_STATE = {
   tspYrsRemaining: 0,
 };
 
+// Pre-v1.1 saved blobs have `sepType` (active/medical/reserve/veteran) but no
+// `retireeType`. Map the old coarse type to the new 7-way type so existing
+// users keep their configuration, keep `sepType` synced as the derived mirror,
+// and coerce REDUX off types where it's invalid. Mirrors App.jsx::migrateState.
+function migrateState(saved) {
+  if (!saved || typeof saved !== "object") return saved;
+  const s = { ...saved };
+  if (!s.retireeType) {
+    const sep = s.sepType;
+    const yos = s.yos || 0;
+    if (sep === "active") s.retireeType = yos > 0 && yos < 20 ? "active-tera" : "active-regular";
+    else if (sep === "medical") s.retireeType = "active-medical";
+    else if (sep === "reserve") s.retireeType = "reserve-regular-drawing";
+    else if (sep === "veteran") s.retireeType = "veteran";
+    else s.retireeType = "active-regular";
+  }
+  // REDUX only valid for Active Regular (20-yr High-3 retirees who took CSB).
+  if (s.retType === "REDUX" && s.retireeType !== "active-regular") s.retType = "High-3";
+  // Keep the legacy mirror consistent with the source of truth.
+  s.sepType = legacySepType(s.retireeType);
+  return s;
+}
+
 function loadState() {
   try {
     const raw = localStorage.getItem(LS_KEY);
-    return raw ? { ...DEFAULT_STATE, ...JSON.parse(raw) } : DEFAULT_STATE;
+    if (!raw) return DEFAULT_STATE;
+    // Migrate the saved blob first (so the legacy-detection check sees the
+    // absence of retireeType), then layer defaults under it.
+    const saved = migrateState(JSON.parse(raw));
+    return { ...DEFAULT_STATE, ...saved };
   } catch { return DEFAULT_STATE; }
 }
 
@@ -453,6 +501,15 @@ function growBal(currentBal, monthlyContrib, years, annualRate) {
 export default function TransitioningPage() {
   const [s, setS] = useState(loadState);
   const set = (key, val) => setS(prev => ({ ...prev, [key]: val }));
+  // Setting the 7-way retiree type also re-derives the legacy sepType mirror
+  // and coerces REDUX off types where it's invalid.
+  const setRetireeType = v => setS(prev => ({
+    ...prev,
+    retireeType: v,
+    sepType: legacySepType(v),
+    retType: prev.retType === "REDUX" && v !== "active-regular" ? "High-3" : prev.retType,
+  }));
+  const [ptEstOpen, setPtEstOpen] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [debugMsg, setDebugMsg] = useState('');
   const [showDebriefedPromo, setShowDebriefedPromo] = useState(false);
@@ -556,14 +613,24 @@ export default function TransitioningPage() {
   // ── Calculations ──────────────────────────────────────────────────────
   const depInfo = DEP_OPTIONS.find(d => d.v === s.deps) || DEP_OPTIONS[0];
   const h3 = lookupPay(s.grade, s.yos) || 0;
-  const grossPension = s.sepType === "veteran" ? 0
-    : pensionBySepType(s.sepType, s.retType, s.yos, h3, 0, false, 0, 40, 60);
   const stateInfo = STATES[s.selectedState] || { ok: true };
   const currentAge = s.vgliAge || 40;
-  const stateTaxMo = grossPension > 0 ? calcStateTax(grossPension * 12, stateInfo, currentAge) / 12 : 0;
-  const netPension = grossPension - stateTaxMo;
   const filingStatus = (s.deps || "").startsWith("sp") ? "mfj" : "single";
   const vaComp = s.vaRating > 0 ? calcVAComp(s.vaRating, depInfo.key, depInfo.ch) : 0;
+  // ── v1.1 retirement engine ─ single source of truth for pension, CRDP/CRSC
+  // offset, BRS lump sum, and reserve retired-pay timing. vaMonthly is passed
+  // pre-computed so the engine stays free of dependent lookups.
+  const ret = calculateRetirement({ ...s, high3: h3, vaMonthly: vaComp });
+  const grossPension = ret.grossPension;
+  // taxablePension = retired pay actually received after VA waiver/CRSC offset
+  // (CRDP/none leave it equal to gross). crscMo is the tax-free CRSC restoration.
+  const taxablePension = ret.taxablePensionMonthly;
+  const crscMo = ret.crscAmount;
+  const stateTaxMo = taxablePension > 0 ? calcStateTax(taxablePension * 12, stateInfo, currentAge) / 12 : 0;
+  const netPension = taxablePension - stateTaxMo + crscMo;
+  // Points estimator + reserve pay-age math (for the conditional UI fields).
+  const ptEstimate = Math.round((s.reservePtGoodYears || 0) * 63 + (s.reservePtAdDays || 0) + (s.reservePtOther || 0));
+  const payAgeCalc = reservePayAge(s.reserveAdDays);
   const isMGIB = s.giType === "ch30" || s.giType === "ch1606";
   const giBase = s.giOnline ? GI_BILL_ONLINE_MHA : (MHA_CITIES[s.giCity] || 0);
   const giMhaMo = s.giUse
@@ -606,7 +673,7 @@ export default function TransitioningPage() {
   // Federal tax: only Traditional TSP draws are taxable
   const tspTaxable = tspType === "roth" ? 0 : tspTradDraw;
   const mgibTaxableAnnual = isMGIB ? giMhaMo * 12 : 0;
-  const federalTaxableAnnual = (grossPension * 12) + mgibTaxableAnnual + (tspTaxable * 12);
+  const federalTaxableAnnual = (taxablePension * 12) + mgibTaxableAnnual + (tspTaxable * 12);
   const fedTax = calcFederalTax(federalTaxableAnnual, filingStatus, currentAge >= 65, false);
   const fedTaxMo = fedTax.monthlyTax;
   const totalIncome = netPension + vaComp + giMhaMo + tspMonthlyDraw + hysaMonthlyDraw + othMonthlyDraw + otherMonthlyIncome;
@@ -626,7 +693,7 @@ export default function TransitioningPage() {
   const incomeGap = targetIncome > 0 ? targetIncome - phase1TakeHome : 0;
   const isFullyCovered = phase1TakeHome >= targetIncome || (targetIncome === 0 && phase1TakeHome >= 0);
   const coverage = targetIncome > 0 ? Math.min(100, Math.round((phase1TakeHome / targetIncome) * 100)) : 100;
-  const pensionPct = pct(s.retType, s.yos);
+  const pensionPct = ret.multiplierPct;
 
   const chips = [
     netPension > 0 && { label: "Pension", value: fmt(netPension) },
@@ -1256,26 +1323,180 @@ export default function TransitioningPage() {
                 onChange={e => set("name", e.target.value)}
               />
             </FieldRow>
-            <div className="tr-sep-tg">
-              <ToggleGroup
-                label="Separation Type"
-                value={s.sepType}
-                onChange={v => set("sepType", v)}
-                options={[
-                  { v: "active",  l: "Active Retiree" },
-                  { v: "medical", l: "Medical Retiree" },
-                  { v: "reserve", l: "Reserve/Guard" },
-                  { v: "veteran", l: "Veteran (no pension)" },
-                ]}
-              />
+            {/* ── RETIREE TYPE (v1.1 7-way selector) ── */}
+            <div className="ds-tg ds-tg-with-label">
+              <span className="ds-field-label">Retiree Type</span>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, width: "100%" }}>
+                {[
+                  { grp: "Active Duty", opts: [
+                    { v: "active-regular", l: "Active Regular (20+ yrs)", d: "Standard 20-year active retirement" },
+                    { v: "active-tera",    l: "Active TERA (under 20 yrs)", d: "Voluntary early retirement, 15–19 yrs" },
+                    { v: "active-medical", l: "Active Medical (Ch. 61)", d: "Disability retirement" },
+                  ]},
+                  { grp: "Reserve / Guard", opts: [
+                    { v: "reserve-regular-drawing", l: "Reserve — Drawing Pension", d: "At retired-pay age, pension flowing" },
+                    { v: "reserve-regular-waiting", l: "Reserve — Awaiting Pay Age", d: "Retired, pension begins later" },
+                    { v: "reserve-medical",         l: "Reserve Medical (Ch. 61)", d: "Reserve disability retirement" },
+                  ]},
+                  { grp: "No Pension", opts: [
+                    { v: "veteran", l: "Veteran (Separated)", d: "No military pension" },
+                  ]},
+                ].map(group => (
+                  <div key={group.grp}>
+                    <div style={{ fontSize: 10, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".08em", color: "#4b5563", margin: "0 0 6px" }}>{group.grp}</div>
+                    <div style={{ display: "grid", gap: 6 }}>
+                      {group.opts.map(o => (
+                        <button
+                          key={o.v}
+                          type="button"
+                          className={`ds-tb${s.retireeType === o.v ? " active" : ""}`}
+                          onClick={() => setRetireeType(o.v)}
+                          style={{ width: "100%", flexDirection: "column", alignItems: "flex-start", textAlign: "left", padding: "10px 12px", gap: 1, whiteSpace: "normal", minHeight: 0 }}
+                        >
+                          <span style={{ fontWeight: 700, fontSize: 13 }}>{o.l}</span>
+                          <span style={{ fontSize: 11, opacity: 0.8, fontWeight: 400 }}>{o.d}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-            {s.sepType !== "veteran" && (
+
+            {s.retireeType === "veteran" && (
+              <HintBox variant="gold">No DoD retirement pay. Veterans who separated before qualifying for retirement receive no pension — but VA disability compensation, GI Bill, and VA Healthcare all still apply.</HintBox>
+            )}
+
+            {isMedicalType(s.retireeType) && (
+              <HintBox>
+                <strong>Chapter 61 Medical Retirement.</strong> Multiplier = higher of your DoD disability rating or the {s.retType === "BRS" ? "2.0" : "2.5"}%/yr length-of-service figure{isReserveType(s.retireeType) ? " (points ÷ 360)" : ""}, capped at {s.retType === "BRS" ? "60" : "75"}% of High-36.
+              </HintBox>
+            )}
+
+            {s.retireeType !== "veteran" && (
               <ToggleGroup
                 label="Retirement System"
                 value={s.retType}
                 onChange={v => set("retType", v)}
-                options={["High-3", "BRS", "REDUX"]}
+                options={s.retireeType === "active-regular" ? ["High-3", "BRS", "REDUX"] : ["High-3", "BRS"]}
               />
+            )}
+
+            {s.retireeType !== "veteran" && s.retType === "BRS" && (
+              <HintBox><strong>BRS:</strong> 2.0%/yr multiplier plus TSP matching up to 5% of basic pay. Applies to those who opted in or entered service after Jan 1, 2018.</HintBox>
+            )}
+
+            {isMedicalType(s.retireeType) && (
+              <FieldRow label="DoD Disability Rating">
+                <div className="tr-sel">
+                  <select value={s.medDodPct} onChange={e => set("medDodPct", Number(e.target.value))}>
+                    {[30,40,50,60,70,80,90,100].map(r => <option key={r} value={r}>{r}%</option>)}
+                  </select>
+                </div>
+              </FieldRow>
+            )}
+
+            {s.retireeType === "active-tera" && (
+              <HintBox>
+                Standard TERA (Title 10 §1293/1305) early retirement: 15–19 years.{s.yos > 0 && s.yos < 20 && <> Reduction factor ×{teraReductionFactor(s.yos).toFixed(3)} ({Math.round((1 - teraReductionFactor(s.yos)) * 100)}% reduction for retiring {(20 - s.yos).toFixed(1)} yrs early).</>}
+              </HintBox>
+            )}
+
+            {isReserveType(s.retireeType) && (
+              <>
+                <FieldRow label="Total Retirement Points">
+                  <Stepper value={s.reservePoints} onChange={v => set("reservePoints", Math.round(v))} min={0} max={14400} step={50} />
+                </FieldRow>
+                <div style={{ padding: "0 14px 12px" }}>
+                  <button
+                    type="button"
+                    onClick={() => setPtEstOpen(o => !o)}
+                    style={{ background: "none", border: "none", color: "#d4a017", fontSize: 12, fontWeight: 600, cursor: "pointer", padding: "2px 0", fontFamily: "inherit" }}
+                  >
+                    {ptEstOpen ? "▾" : "▸"} Don't know your exact points?
+                  </button>
+                  {ptEstOpen && (
+                    <div style={{ background: "rgba(255,255,255,0.04)", borderRadius: 10, padding: "4px 0", marginTop: 6 }}>
+                      <FieldRow label="Good years served">
+                        <Stepper value={s.reservePtGoodYears} onChange={v => set("reservePtGoodYears", Math.round(v))} min={0} max={40} />
+                      </FieldRow>
+                      <FieldRow label="Active-duty days">
+                        <Stepper value={s.reservePtAdDays} onChange={v => set("reservePtAdDays", Math.round(v))} min={0} max={8000} step={10} />
+                      </FieldRow>
+                      <FieldRow label="Other point sources">
+                        <Stepper value={s.reservePtOther} onChange={v => set("reservePtOther", Math.round(v))} min={0} max={5000} step={10} />
+                      </FieldRow>
+                      <HintBox>
+                        Estimated total: <strong>{ptEstimate.toLocaleString()} pts</strong> (good years × 63 + AD days + other). Enter exact points from MyPay for accuracy.
+                        <button
+                          type="button"
+                          onClick={() => set("reservePoints", ptEstimate)}
+                          style={{ display: "block", marginTop: 8, background: "#d4a017", color: "#0f0f14", border: "none", borderRadius: 8, padding: "6px 12px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}
+                        >Use this estimate</button>
+                      </HintBox>
+                    </div>
+                  )}
+                </div>
+                {s.reservePoints > 0 && h3 > 0 && (
+                  <HintBox><strong>Equivalent YOS:</strong> {(s.reservePoints / 360).toFixed(1)} years · <strong>{s.retireeType === "reserve-regular-waiting" ? "Projected pension" : "Pension"}:</strong> {fmt(ret.projectedGross)}/mo</HintBox>
+                )}
+              </>
+            )}
+
+            {s.retireeType === "reserve-regular-waiting" && (
+              <>
+                <FieldRow label="Current Age">
+                  <Stepper value={s.currentAge} onChange={v => set("currentAge", Math.round(v))} min={35} max={80} />
+                </FieldRow>
+                <FieldRow label="Qualifying Active-Duty Days">
+                  <Stepper
+                    value={s.reserveAdDays}
+                    onChange={v => { const d = Math.max(0, Math.round(v)); set("reserveAdDays", d); set("payStartAge", reservePayAge(d).age); }}
+                    min={0} max={5000} step={30}
+                  />
+                </FieldRow>
+                <HintBox>
+                  {s.reserveAdDays > 0
+                    ? <><strong>Pay-age reduction:</strong> {s.reserveAdDays.toLocaleString()} days ÷ 90 = {payAgeCalc.periods} period{payAgeCalc.periods === 1 ? "" : "s"} × 3 mo = {payAgeCalc.months} mo. <strong>Retired pay age = {payAgeCalc.age}</strong> (floor 50).</>
+                    : <>Retired pay age: <strong>60</strong>. Ready Reserve members may reduce age 60 by 3 months per 90 qualifying active-duty days (after 28 Jan 2008).</>}
+                </HintBox>
+                <HintBox variant="gold">Pension = $0 now; begins at age {payAgeCalc.age}. VA disability flows immediately.</HintBox>
+              </>
+            )}
+
+            {s.retireeType === "reserve-medical" && (
+              <ToggleGroup
+                label="20+ qualifying years of reserve service? (CRDP eligibility)"
+                value={s.reserve20GoodYears ? "y" : "n"}
+                onChange={v => set("reserve20GoodYears", v === "y")}
+                options={[{ v: "n", l: "No" }, { v: "y", l: "Yes" }]}
+              />
+            )}
+
+            {s.retireeType !== "veteran" && (
+              <ToggleGroup
+                label="Disabilities are combat-related (CRSC eligible)"
+                value={s.combatRelated ? "y" : "n"}
+                onChange={v => set("combatRelated", v === "y")}
+                options={[{ v: "n", l: "No" }, { v: "y", l: "Yes" }]}
+              />
+            )}
+
+            {s.retType === "BRS" && (isActiveType(s.retireeType) || s.retireeType === "reserve-regular-drawing") && (
+              <>
+                <FieldRow label="Retirement Age (at separation)">
+                  <Stepper value={s.retireAge} onChange={v => set("retireAge", Math.round(v))} min={37} max={66} />
+                </FieldRow>
+                <ToggleGroup
+                  label="BRS Lump Sum Election"
+                  value={String(s.brsLumpSum)}
+                  onChange={v => set("brsLumpSum", Number(v))}
+                  options={[{ v: "0", l: "None" }, { v: "0.25", l: "25%" }, { v: "0.5", l: "50%" }]}
+                />
+                {ret.lumpSum && (
+                  <HintBox><strong>Lump sum cash:</strong> {fmt(ret.lumpSum.cash)} · <strong>Reduced /mo until 67:</strong> {fmt(ret.lumpSum.reducedMonthly)} · <strong>Full after 67:</strong> {fmt(ret.lumpSum.fullMonthly)}</HintBox>
+                )}
+              </>
             )}
             <FieldRow label="Years of Service">
               <Stepper value={s.yos} onChange={v => set("yos", v)} min={0} max={40} />
@@ -1320,10 +1541,25 @@ export default function TransitioningPage() {
                   ? stateTaxMo > 0
                     ? `${s.retType} · ${pensionPct.toFixed(0)}% of High-3 · Gross ${fmt(grossPension)} · ${stateInfo.rate}% state tax`
                     : `${s.retType} · ${pensionPct.toFixed(0)}% of High-3 (${s.grade} at ${s.yos} YOS) · ${s.selectedState}: tax-exempt`
-                  : "Below minimum YOS for pension"}
+                  : ret.isWaiting
+                    ? "Not yet flowing — begins at retired pay age"
+                    : "Below minimum YOS for pension"}
                 value={fmt(netPension)}
                 color={netPension > 0 ? "gold" : "muted"}
               />
+            )}
+            {ret.isWaiting && (
+              <HintBox variant="gold"><strong>Pension begins at age {ret.payStartAge}.</strong> Projected gross: {fmt(ret.projectedGross)}/mo. VA disability flows immediately.</HintBox>
+            )}
+            {grossPension > 0 && s.vaRating > 0 && ret.offsetType !== "none" && (
+              <HintBox variant={ret.offsetType === "waiver" ? "red" : "green"}>
+                {ret.offsetType === "crdp" && <><strong>CRDP:</strong> Concurrent Retirement & Disability Pay — full pension AND full VA compensation, no offset.</>}
+                {ret.offsetType === "crsc" && <><strong>CRSC:</strong> Combat-Related Special Compensation of {fmt(crscMo)}/mo (tax-free) restores the VA-waived pension.</>}
+                {ret.offsetType === "waiver" && <><strong>VA Waiver:</strong> Pension offset dollar-for-dollar by {fmt(vaComp)}/mo of VA comp. {s.vaRating < 50 ? "CRDP requires a 50%+ VA rating." : "If your disabilities are combat-related, you may qualify for CRSC instead."}</>}
+              </HintBox>
+            )}
+            {ret.lumpSum && (
+              <HintBox><strong>BRS Lump Sum ({Math.round(ret.lumpSum.electedPct * 100)}%):</strong> {fmt(ret.lumpSum.cash)} cash at retirement, reduced to {fmt(ret.lumpSum.reducedMonthly)}/mo until age 67, then {fmt(ret.lumpSum.fullMonthly)}/mo.</HintBox>
             )}
             <FieldRow label="VA Disability Rating">
               <div className="tr-sel">
@@ -2188,6 +2424,7 @@ export default function TransitioningPage() {
               Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer" style={{ color:"#6b7280", textDecoration:"none" }}>github.com/csimser/milcalc</a>
             </div>
             <DiscordLink />
+            <UpdateCheck />
           </div>
 
           {/* ── FEEDBACK BUTTON ── */}
