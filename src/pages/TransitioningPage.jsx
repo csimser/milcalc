@@ -13,7 +13,7 @@ import {
   isReserveType, isMedicalType, isActiveType,
 } from "../lib/calc.js";
 import {
-  GRADE_LABELS, GRADE_GROUPS, COL, MHA_CITIES, STATES,
+  GRADE_LABELS, GRADE_GROUPS, COL, MHA_CITIES, STATES, VA,
   TRICARE_PLANS, GI_BILL_ONLINE_MHA, MGIB_ENROLL_OPTS, VA_PRIORITY_GROUPS,
 } from "../lib/data.js";
 import { jsPDF } from "jspdf";
@@ -26,9 +26,15 @@ const DEP_OPTIONS = [
   { v: "sp1", l: "+Spouse+Child",       key: "sp", ch: 1 },
   { v: "sp2", l: "+Spouse+2 Children",  key: "sp", ch: 2 },
   { v: "sp3", l: "+Spouse+3 Children",  key: "sp", ch: 3 },
+  { v: "sp4", l: "+Spouse+4 Children",  key: "sp", ch: 4 },
+  { v: "sp5", l: "+Spouse+5 Children",  key: "sp", ch: 5 },
+  { v: "sp6", l: "+Spouse+6 Children",  key: "sp", ch: 6 },
   { v: "s1",  l: "Single+Child",        key: "s",  ch: 1 },
   { v: "s2",  l: "Single+2 Children",   key: "s",  ch: 2 },
   { v: "s3",  l: "Single+3 Children",   key: "s",  ch: 3 },
+  { v: "s4",  l: "Single+4 Children",   key: "s",  ch: 4 },
+  { v: "s5",  l: "Single+5 Children",   key: "s",  ch: 5 },
+  { v: "s6",  l: "Single+6 Children",   key: "s",  ch: 6 },
 ];
 
 const TRICARE_PLAN_OPTS = [
@@ -59,6 +65,7 @@ const DEFAULT_STATE = {
   medDodPct: 50,
   tdrl: false,
   combatRelated: false,
+  v3TaxFree: false,
   retireAge: 42,
   brsLumpSum: 0,
   reservePoints: 3600,
@@ -673,7 +680,10 @@ export default function TransitioningPage() {
   // Federal tax: only Traditional TSP draws are taxable
   const tspTaxable = tspType === "roth" ? 0 : tspTradDraw;
   const mgibTaxableAnnual = isMGIB ? giMhaMo * 12 : 0;
-  const federalTaxableAnnual = (taxablePension * 12) + mgibTaxableAnnual + (tspTaxable * 12);
+  // V3 (26 USC 104) combat-related disability retired pay is federally tax-free —
+  // the engine zeroes fedTaxablePensionMonthly for that case (Chapter 61 only).
+  const fedTaxablePension = ret.fedTaxablePensionMonthly;
+  const federalTaxableAnnual = (fedTaxablePension * 12) + mgibTaxableAnnual + (tspTaxable * 12);
   const fedTax = calcFederalTax(federalTaxableAnnual, filingStatus, currentAge >= 65, false);
   const fedTaxMo = fedTax.monthlyTax;
   const totalIncome = netPension + vaComp + giMhaMo + tspMonthlyDraw + hysaMonthlyDraw + othMonthlyDraw + otherMonthlyIncome;
@@ -1465,12 +1475,34 @@ export default function TransitioningPage() {
             )}
 
             {s.retireeType === "reserve-medical" && (
-              <ToggleGroup
-                label="20+ qualifying years of reserve service? (CRDP eligibility)"
-                value={s.reserve20GoodYears ? "y" : "n"}
-                onChange={v => set("reserve20GoodYears", v === "y")}
-                options={[{ v: "n", l: "No" }, { v: "y", l: "Yes" }]}
-              />
+              <>
+                <ToggleGroup
+                  label="20+ qualifying years of reserve service? (CRDP eligibility)"
+                  value={s.reserve20GoodYears ? "y" : "n"}
+                  onChange={v => set("reserve20GoodYears", v === "y")}
+                  options={[{ v: "n", l: "No" }, { v: "y", l: "Yes" }]}
+                />
+                <FieldRow label="Current Age">
+                  <Stepper value={s.currentAge} onChange={v => set("currentAge", Math.round(v))} min={20} max={80} />
+                </FieldRow>
+                <FieldRow label="Qualifying Active-Duty Days (pay-age reduction)">
+                  <Stepper
+                    value={s.reserveAdDays}
+                    onChange={v => { const d = Math.max(0, Math.round(v)); set("reserveAdDays", d); set("payStartAge", reservePayAge(d).age); }}
+                    min={0} max={5000} step={30}
+                  />
+                </FieldRow>
+                <HintBox>
+                  {s.reserveAdDays > 0
+                    ? <><strong>Retired pay age:</strong> {s.reserveAdDays.toLocaleString()} days ÷ 90 = {payAgeCalc.periods} period{payAgeCalc.periods === 1 ? "" : "s"} × 3 mo = {payAgeCalc.months} mo reduction → <strong>age {payAgeCalc.age}</strong> (floor 50).</>
+                    : <>Retired pay age: <strong>60</strong>. Reduce by 3 months per 90 qualifying active-duty days (after 28 Jan 2008), floor 50.</>}
+                </HintBox>
+                {s.reserve20GoodYears && s.currentAge < payAgeCalc.age && (
+                  <HintBox variant="gold">
+                    <strong>Chapter 61 pension is paid now</strong> (medical retirement, not delayed). But <strong>CRDP is eligible at age {payAgeCalc.age}</strong> — until then, the VA waiver applies{s.combatRelated ? " (or CRSC if combat-related)" : ""}.
+                  </HintBox>
+                )}
+              </>
             )}
 
             {s.retireeType !== "veteran" && (
@@ -1480,6 +1512,20 @@ export default function TransitioningPage() {
                 onChange={v => set("combatRelated", v === "y")}
                 options={[{ v: "n", l: "No" }, { v: "y", l: "Yes" }]}
               />
+            )}
+
+            {isMedicalType(s.retireeType) && (
+              <>
+                <ToggleGroup
+                  label="Disability is combat-related per 26 USC 104 (V3 code) — pension is federally tax-free"
+                  value={s.v3TaxFree ? "y" : "n"}
+                  onChange={v => set("v3TaxFree", v === "y")}
+                  options={[{ v: "n", l: "No" }, { v: "y", l: "Yes" }]}
+                />
+                <HintBox>
+                  Check this if your retirement orders or DA Form 199 indicate <strong>V3 = YES</strong>. Makes your disability retired pay non-taxable for federal income tax under IRC §104(a)(4). This is independent of CRSC — you can have either or both. <em>State tax treatment varies.</em>
+                </HintBox>
+              </>
             )}
 
             {s.retType === "BRS" && (isActiveType(s.retireeType) || s.retireeType === "reserve-regular-drawing") && (
@@ -1521,6 +1567,11 @@ export default function TransitioningPage() {
                 </select>
               </div>
             </FieldRow>
+            {depInfo.ch >= 4 && (
+              <HintBox>
+                Each child beyond the first adds the VA "Each Additional Child Under 18" rate{s.vaRating >= 30 ? <> ({fmt(VA[s.vaRating].ac)}/mo at {s.vaRating}%)</> : s.vaRating > 0 ? " (applies once your rating reaches 30%)" : ""}. For families with more than 6 dependents, contact VA directly.
+              </HintBox>
+            )}
             <FieldRow label="State of Residence">
               <div className="tr-sel">
                 <select value={s.selectedState} onChange={e => { set("selectedState", e.target.value); track("State Selected", { state: e.target.value }); }}>
@@ -1554,8 +1605,22 @@ export default function TransitioningPage() {
             {grossPension > 0 && s.vaRating > 0 && ret.offsetType !== "none" && (
               <HintBox variant={ret.offsetType === "waiver" ? "red" : "green"}>
                 {ret.offsetType === "crdp" && <><strong>CRDP:</strong> Concurrent Retirement & Disability Pay — full pension AND full VA compensation, no offset.</>}
-                {ret.offsetType === "crsc" && <><strong>CRSC:</strong> Combat-Related Special Compensation of {fmt(crscMo)}/mo (tax-free) restores the VA-waived pension.</>}
+                {ret.offsetType === "crsc" && (ret.crscCapped
+                  ? <><strong>CRSC:</strong> Combat-Related Special Compensation of {fmt(crscMo)}/mo (tax-free, capped at LOS-based retired pay of {fmt(ret.losBasedPension)}/mo per 10 USC 1413a). The VA waiver still applies to the remaining pension, so CRSC only partially restores it.</>
+                  : <><strong>CRSC:</strong> Combat-Related Special Compensation of {fmt(crscMo)}/mo (tax-free) restores the VA-waived pension.</>)}
                 {ret.offsetType === "waiver" && <><strong>VA Waiver:</strong> Pension offset dollar-for-dollar by {fmt(vaComp)}/mo of VA comp. {s.vaRating < 50 ? "CRDP requires a 50%+ VA rating." : "If your disabilities are combat-related, you may qualify for CRSC instead."}</>}
+              </HintBox>
+            )}
+            {ret.offsetType === "waiver" && grossPension > 0 && vaComp > 0 && (
+              <HintBox>
+                <strong>How the waiver works</strong> — it shifts taxability, it doesn't lose money:
+                <div style={{ fontFamily: "var(--mono, monospace)", fontSize: 12, lineHeight: 1.7, marginTop: 6 }}>
+                  Gross pension:&nbsp;{fmt(grossPension)}<br />
+                  VA waiver:&nbsp;−{fmt(Math.min(vaComp, grossPension))}<br />
+                  Net pension (taxable):&nbsp;{fmt(ret.taxablePensionMonthly)}<br />
+                  + VA compensation (tax-free):&nbsp;{fmt(vaComp)}<br />
+                  <strong>= Total monthly:&nbsp;{fmt(ret.taxablePensionMonthly + vaComp)}</strong>
+                </div>
               </HintBox>
             )}
             {ret.lumpSum && (
