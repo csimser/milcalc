@@ -643,6 +643,12 @@ export default function TransitioningPage() {
   const crscMo = ret.crscAmount;
   const stateTaxMo = taxablePension > 0 ? calcStateTax(taxablePension * 12, stateInfo, currentAge) / 12 : 0;
   const netPension = taxablePension - stateTaxMo + crscMo;
+  // Retired pay actually received AS pension (net of VA offset + state tax),
+  // excluding the tax-free CRSC restoration — CRSC is shown as its own income
+  // row alongside VA so users can see it. netPension (= this + crscMo) remains
+  // the single value flowing into totalIncome, so the take-home total is
+  // unchanged: CRSC is counted exactly once.
+  const pensionRowValue = netPension - crscMo;
   // Points estimator + reserve pay-age math (for the conditional UI fields).
   const ptEstimate = Math.round((s.reservePtGoodYears || 0) * 63 + (s.reservePtAdDays || 0) + (s.reservePtOther || 0));
   const payAgeCalc = reservePayAge(s.reserveAdDays);
@@ -1132,8 +1138,13 @@ export default function TransitioningPage() {
       nl(12);
 
       section("PHASE 1 — RETIREMENT INCOME (AVAILABLE AT SEPARATION)");
-      if (grossPension > 0) row("Military Pension (gross)", fmt(grossPension) + "/mo", gold);
+      if (grossPension > 0) row(
+        (ret.offsetType === "waiver" || ret.offsetType === "crsc")
+          ? `Military Pension (net of VA waiver; gross ${fmt(grossPension)})`
+          : "Military Pension",
+        fmt(pensionRowValue) + "/mo", gold);
       if (vaComp > 0) row(`VA Disability (${s.vaRating}%) — tax-free`, fmt(vaComp) + "/mo", gold);
+      if (crscMo > 0) row("CRSC — tax-free", fmt(crscMo) + "/mo", gold);
       if (giMhaMo > 0) row(isMGIB ? `${giLabel} (gross — taxable)` : `${giLabel} (tax-free)`, fmt(giMhaMo) + "/mo", gold);
       if (otherMonthlyIncome > 0) row("Other Monthly Income", fmt(otherMonthlyIncome) + "/mo", gold);
       nl(12);
@@ -1637,14 +1648,16 @@ export default function TransitioningPage() {
               <IncomeRow
                 label="Military Pension"
                 sub={grossPension > 0
-                  ? stateTaxMo > 0
-                    ? `${s.retType} · ${pensionPct.toFixed(0)}% of High-3 · Gross ${fmt(grossPension)} · ${stateInfo.rate}% state tax`
-                    : `${s.retType} · ${pensionPct.toFixed(0)}% of High-3 (${s.grade} at ${s.yos} YOS) · ${s.selectedState}: tax-exempt`
+                  ? (ret.offsetType === "waiver" || ret.offsetType === "crsc")
+                    ? `${s.retType} · Gross ${fmt(grossPension)} · ${vaComp >= grossPension ? "fully" : "partly"} waived against VA comp`
+                    : stateTaxMo > 0
+                      ? `${s.retType} · ${pensionPct.toFixed(0)}% of High-3 · Gross ${fmt(grossPension)} · ${stateInfo.rate}% state tax`
+                      : `${s.retType} · ${pensionPct.toFixed(0)}% of High-3 (${s.grade} at ${s.yos} YOS) · ${s.selectedState}: tax-exempt`
                   : ret.isWaiting
                     ? "Not yet flowing — begins at retired pay age"
                     : "Below minimum YOS for pension"}
-                value={fmt(netPension)}
-                color={netPension > 0 ? "gold" : "muted"}
+                value={fmt(pensionRowValue)}
+                color={pensionRowValue > 0 ? "gold" : "muted"}
               />
             )}
             {ret.isWaiting && (
@@ -1699,6 +1712,14 @@ export default function TransitioningPage() {
                   <strong>VA Priority Group {getVAPriorityGroup(s.vaRating)}</strong>: {VA_PRIORITY_GROUPS[getVAPriorityGroup(s.vaRating) - 1].who}. Copays: {VA_PRIORITY_GROUPS[getVAPriorityGroup(s.vaRating) - 1].copay}.
                 </HintBox>
               </>
+            )}
+            {crscMo > 0 && (
+              <IncomeRow
+                label="CRSC"
+                sub={`Combat-Related Special Compensation · tax-free${ret.crscCapped ? ` · capped at LOS-based pay (${fmt(ret.losBasedPension)})` : ""}`}
+                value={fmt(crscMo)}
+                color="gold"
+              />
             )}
             <FieldRow label="GI Bill / Education">
               <div className="tr-sel">
@@ -2191,12 +2212,16 @@ export default function TransitioningPage() {
                 color="red"
               />
             )}
-            {fedTaxMo > 0 && (
+            {(fedTaxMo > 0 || grossPension > 0) && (
               <IncomeRow
                 label="Federal Income Tax (est.)"
-                sub={`${(fedTax.effectiveRate * 100).toFixed(1)}% effective rate · ${filingStatus === "mfj" ? "MFJ" : "Single"}`}
-                value={`−${fmt(fedTaxMo)}`}
-                color="red"
+                sub={fedTaxMo > 0
+                  ? `${(fedTax.effectiveRate * 100).toFixed(1)}% effective rate · ${filingStatus === "mfj" ? "MFJ" : "Single"}`
+                  : (s.v3TaxFree && isMedicalType(s.retireeType))
+                    ? `0% effective rate · V3 combat-related retired pay is federally tax-free (26 USC 104)`
+                    : `0% effective rate · no federally taxable retired pay`}
+                value={fedTaxMo > 0 ? `−${fmt(fedTaxMo)}` : "$0"}
+                color={fedTaxMo > 0 ? "red" : "muted"}
               />
             )}
             <TotalRow label="Monthly Take-Home at Retirement (Phase 1)" value={fmt(phase1TakeHome)} />
