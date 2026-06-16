@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import NavHeader, { NAV_H } from "../components/NavHeader.jsx";
+import UpdateCheck from "../components/UpdateCheck.jsx";
 import { PUBLIC_URL, PUBLIC_DOMAIN, SUPPORT_EMAIL, PARENT_BRAND_URL, PARENT_BRAND_DOMAIN } from "../config.js";
 import {
   DS_CSS, SummaryBar, SectionHeader, InfoCard, FieldRow, ToggleGroup,
@@ -2423,6 +2424,7 @@ export default function TransitioningPage() {
               Built by Chris Simser · Open source under MIT · <a href="https://github.com/csimser/milcalc" target="_blank" rel="noopener noreferrer" style={{ color:"#6b7280", textDecoration:"none" }}>github.com/csimser/milcalc</a>
             </div>
             <DiscordLink />
+            <UpdateCheck />
           </div>
 
           {/* ── FEEDBACK BUTTON ── */}

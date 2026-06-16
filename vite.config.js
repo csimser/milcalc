@@ -1,6 +1,12 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { viteSingleFile } from 'vite-plugin-singlefile'
+import { readFileSync } from 'node:fs'
+
+// Bundle the app version (from package.json) into the build so the
+// "Check for Updates" feature can compare the running build against the
+// latest GitHub release. Exposed as the global constant __APP_VERSION__.
+const pkg = JSON.parse(readFileSync(new URL('./package.json', import.meta.url)))
 
 // MilCalc builds to a single self-contained MilCalc.html that users download
 // and open from disk (file://). Everything — JS, CSS, fonts (base64) — is
@@ -13,6 +19,9 @@ import { viteSingleFile } from 'vite-plugin-singlefile'
 export default defineConfig({
   plugins: [react(), viteSingleFile()],
   base: './',
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   build: {
     outDir: 'dist',
     sourcemap: false,
