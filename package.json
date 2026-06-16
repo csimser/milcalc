@@ -1,6 +1,6 @@
 {
   "name": "milcalc",
-  "version": "1.1.2",
+  "version": "1.2.0",
   "description": "MilCalc — Military Pay & Retirement Calculator",
   "private": true,
   "license": "MIT",
@@ -10,6 +10,7 @@
     "build": "vite build && node scripts/rename-build.js",
     "preview": "vite preview",
     "fonts:embed": "node scripts/generate-fonts-embed.js",
+    "stats": "node scripts/stats.js",
     "cap:sync": "npx cap sync",
     "cap:android": "npx cap open android",
     "cap:ios": "npx cap open ios",

@@ -80,16 +80,21 @@ export const GRADE_GROUPS = [
 
 // ── 2026 VA DISABILITY COMPENSATION RATES ────────────────────────────
 // Source: va.gov/disability/compensation-rates/veteran-disability-rates/
+// Keys: s/sp/spc/c = base monthly rate by dependent status; ac = each additional
+// child under 18; scs = each additional child 18-23 in a qualifying school program;
+// aa = added amount when spouse receives Aid & Attendance; pr = added amount per
+// dependent parent (≥50% supported by the veteran, up to 2). 10%/20% have no
+// dependent amounts. Source: va.gov disability compensation rates, eff. Dec 1 2025.
 export const VA = {
   10:{s:180.42}, 20:{s:356.66},
-  30:{s:552.47,sp:617.47,spc:666.47,c:596.47,ac:32.00},
-  40:{s:795.84,sp:882.84,spc:947.84,c:853.84,ac:43.00},
-  50:{s:1132.90,sp:1241.90,spc:1322.90,c:1205.90,ac:54.00},
-  60:{s:1435.02,sp:1566.02,spc:1663.02,c:1523.02,ac:65.00},
-  70:{s:1808.45,sp:1961.45,spc:2073.98,c:1910.45,ac:76.00},
-  80:{s:2102.15,sp:2277.15,spc:2406.15,c:2219.15,ac:87.00},
-  90:{s:2362.30,sp:2559.30,spc:2704.30,c:2494.30,ac:98.00},
-  100:{s:3938.58,sp:4158.17,spc:4318.99,c:4085.43,ac:109.11},
+  30:{s:552.47,sp:617.47,spc:666.47,c:596.47,ac:32.00,scs:105.00,aa:61.00,pr:52.00},
+  40:{s:795.84,sp:882.84,spc:947.84,c:853.84,ac:43.00,scs:140.00,aa:81.00,pr:70.00},
+  50:{s:1132.90,sp:1241.90,spc:1322.90,c:1205.90,ac:54.00,scs:176.00,aa:101.00,pr:88.00},
+  60:{s:1435.02,sp:1566.02,spc:1663.02,c:1523.02,ac:65.00,scs:211.00,aa:121.00,pr:105.00},
+  70:{s:1808.45,sp:1961.45,spc:2073.98,c:1910.45,ac:76.00,scs:246.00,aa:141.00,pr:123.00},
+  80:{s:2102.15,sp:2277.15,spc:2406.15,c:2219.15,ac:87.00,scs:281.00,aa:161.00,pr:140.00},
+  90:{s:2362.30,sp:2559.30,spc:2704.30,c:2494.30,ac:98.00,scs:317.00,aa:181.00,pr:158.00},
+  100:{s:3938.58,sp:4158.17,spc:4318.99,c:4085.43,ac:109.11,scs:352.45,aa:201.41,pr:176.24},
 };
 
 // ── STATE MILITARY RETIREMENT TAX DATA ──────────────────────────────

@@ -11,7 +11,7 @@ import {
   SummaryBar, SectionHeader, InfoCard, ToggleGroup,
   SliderField, HintBox, CTAButton, DS_CSS, Stepper, DiscordLink,
 } from "../components/ui.jsx";
-import { lookupPay, pension, calcVAComp, calcStateTax, calcFederalTax, fmt, getVAPriorityGroup, mgibMonthly } from "../lib/calc.js";
+import { lookupPay, calcVAComp, calcStateTax, calcFederalTax, fmt, getVAPriorityGroup, mgibMonthly, calculateRetirement } from "../lib/calc.js";
 import { STATES, GRADE_LABELS, GRADE_GROUPS, VA_PRIORITY_GROUPS, TRICARE_PLANS, GI_BILL_ONLINE_MHA, MGIB_ENROLL_OPTS, MHA_CITIES } from "../lib/data.js";
 import { jsPDF } from "jspdf";
 import { track } from "../analytics.js";
@@ -29,6 +29,7 @@ const DEFAULTS = {
   svg_payGrade: "E-7", svg_retGrade: null, svg_cYos: 10, svg_cAge: 28, svg_retType: "High-3",
   svg_tspBal: 0, svg_tspTradBal: 0, svg_tspRothBal: 0, svg_tspType: "traditional", svg_tspPct: 5, svg_sepYos: 15, svg_tgtYos: 20,
   svg_vaRat: 0, svg_vaDep: "alone", svg_state: "Texas",
+  svg_schoolKids: 0, svg_depParents: 0, svg_spouseAA: false,
   svg_civSal: 60000, svg_civSalB: 0,
   svg_hysaBal: 0, svg_hysaMo: 0, svg_hysaApy: 4.5,
   svg_othBal: 0, svg_othMo: 0, svg_othRate: 7,
@@ -549,24 +550,54 @@ export default function ServingPage() {
   const fullMatch    = isBRS && tspPct >= 5;
 
   const { key: vaKey, ch: vaCh } = VA_DEP_MAP[vaDep] || VA_DEP_MAP.alone;
-  const va = calcVAComp(vaRating, vaKey, vaCh);
+  const vaHasSpouse = vaKey === "sp";
+  const schoolKids  = s.svg_schoolKids  || 0;
+  const depParents  = s.svg_depParents  || 0;
+  const spouseAA    = !!s.svg_spouseAA && vaHasSpouse;
+  const va = calcVAComp(vaRating, vaKey, vaCh, { parents: depParents, spouseAA, schoolChildren: schoolKids });
 
   const si = STATES[selState] || { ok: true };
   const tricarePlanB = s.svg_tricarePlan || "prime_a_fam";
   const tricarePremB = (SP_TRICARE_OPTS.find(t => t.v === tricarePlanB) || SP_TRICARE_OPTS[1]).amt();
   // Fix 2: use retirement pay grade for pension (falls back to current pay grade if not higher)
   const retPay    = lookupPay(retGrade, safeTgt) || lookupPay(payGrade, safeTgt) || basePay;
-  // Use shared pension() function to handle High-3, BRS, and REDUX uniformly
-  const pensGross = safeTgt >= 20 ? pension(retType, safeTgt, retPay) : 0;
+  // v1.2: route the "stay to 20+" pension through the v1.1 retirement engine so it
+  // honors BRS/REDUX multipliers AND the VA-disability offset (CRDP keeps full
+  // concurrent receipt at 50%+ rating; below 50% the VA waiver applies so we no
+  // longer double-count the pension and VA comp). Scenario B is an active-regular
+  // retirement at the target YOS.
+  const retB = safeTgt >= 20 ? calculateRetirement({
+    retireeType: "active-regular",
+    retType,
+    yos: safeTgt,
+    high3: retPay,
+    currentAge: retAge,
+    retireAge: retAge,
+    vaRating,
+    vaMonthly: va,
+  }) : null;
+  const pensGross = retB ? retB.grossPension : 0;
+  // Retired pay actually received after any VA waiver/CRSC offset (CRDP/none leave
+  // it equal to gross). crscMoB is the tax-free CRSC restoration, offsetTypeB drives
+  // the indicator shown in the results.
+  const taxablePensionB = retB ? retB.taxablePensionMonthly : 0;
+  const crscMoB         = retB ? retB.crscAmount : 0;
+  const offsetTypeB     = retB ? retB.offsetType : "none";
   // REDUX Career Status Bonus: $30,000 lump sum at 15 YOS (amortized for display)
   const reduxCSB  = isREDUX && safeTgt >= 20 ? 30000 : 0;
-  const pensNet   = pensGross - calcStateTax(pensGross * 12, si, currentAge) / 12;
 
-  // Federal tax on Scenario B pension
+  // Federal tax on Scenario B pension — only the taxable retired pay is taxed
+  // (CRSC and VA comp are tax-free and added back separately downstream).
   const svgFilingStatus = (vaDep === "spouse" || vaDep.startsWith("sp_")) ? "mfj" : "single";
-  const fedTaxB = calcFederalTax(pensNet * 12, svgFilingStatus, retAge >= 65, false);
+  const stateTaxMoB = taxablePensionB > 0 ? calcStateTax(taxablePensionB * 12, si, currentAge) / 12 : 0;
+  const taxablePensionNetStateB = taxablePensionB - stateTaxMoB;
+  const fedTaxB = calcFederalTax(taxablePensionNetStateB * 12, svgFilingStatus, retAge >= 65, false);
   const fedTaxMoB = fedTaxB.monthlyTax;
-  const pensNetFed = pensNet - fedTaxMoB;
+  // State-net pension incl. tax-free CRSC (pre-federal) — kept for display gates.
+  const pensNet = taxablePensionNetStateB + crscMoB;
+  // Pension take-home after federal + state tax, plus tax-free CRSC restoration.
+  // VA compensation is tax-free and added separately in the scenario totals.
+  const pensNetFed = taxablePensionNetStateB - fedTaxMoB + crscMoB;
 
   // TSP at 65 (scenario B — stay to retirement)
   const tspTradAt65B = pTspBalStepped(tspEffectiveBal, payGrade, currentYos, safeTgt, tspPct, isBRS, Math.max(0, 65 - retAge));
@@ -1404,6 +1435,52 @@ export default function ServingPage() {
               </div>
             )}
 
+            {/* Schoolchildren 18–23 — show if 30%+ */}
+            {vaRating >= 30 && (
+              <div className="sp-row">
+                <span className="sp-row-lbl">Schoolchildren 18–23</span>
+                <div className="sp-row-val">
+                  <div className="ds-sel">
+                    <select value={schoolKids} onChange={e => set("svg_schoolKids", Number(e.target.value))}>
+                      <option value={0}>None</option>
+                      {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Dependent parents — show if 30%+ */}
+            {vaRating >= 30 && (
+              <div className="sp-row">
+                <span className="sp-row-lbl">Dependent Parents</span>
+                <div className="sp-row-val">
+                  <div className="ds-sel">
+                    <select value={depParents} onChange={e => set("svg_depParents", Number(e.target.value))}>
+                      <option value={0}>None</option>
+                      <option value={1}>1 dependent parent</option>
+                      <option value={2}>2 dependent parents</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Spouse Aid & Attendance — show if 30%+ and spouse present */}
+            {vaRating >= 30 && vaHasSpouse && (
+              <div className="sp-row">
+                <span className="sp-row-lbl">Spouse receives Aid &amp; Attendance</span>
+                <div className="sp-row-val">
+                  <div className="ds-sel">
+                    <select value={s.svg_spouseAA ? "yes" : "no"} onChange={e => set("svg_spouseAA", e.target.value === "yes")}>
+                      <option value="no">No</option>
+                      <option value="yes">Yes</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* State — for pension net calc */}
             <div className="sp-row" style={{ borderBottom: "none" }}>
               <span className="sp-row-lbl">Home State</span>
@@ -2093,6 +2170,17 @@ export default function ServingPage() {
                           Priority Group {getVAPriorityGroup(vaRating)}: {VA_PRIORITY_GROUPS[getVAPriorityGroup(vaRating) - 1].copay}
                         </span>
                       </div>
+                      {pensNet > 0 && offsetTypeB !== "none" && (
+                        <div className="sp-cmp-row">
+                          <span className="sp-cmp-rl" style={{ fontSize: 10, color: offsetTypeB === "waiver" ? "#f87171" : "#34d399" }}>
+                            {offsetTypeB === "crdp" && "CRDP: full pension + VA, no offset"}
+                            {offsetTypeB === "crsc" && "CRSC: combat-related, tax-free restoration"}
+                            {offsetTypeB === "waiver" && (vaRating < 50
+                              ? "VA waiver: pension offset by VA (CRDP needs 50%+)"
+                              : "VA waiver: pension offset by VA comp")}
+                          </span>
+                        </div>
+                      )}
                     </>
                   )}
                   {/* Fix 9: TSP draw with 4% rule tooltip */}

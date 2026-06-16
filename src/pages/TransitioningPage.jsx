@@ -77,6 +77,9 @@ const DEFAULT_STATE = {
   reservePtAdDays: 0,
   reservePtOther: 0,
   deps: "sp0",
+  depParents: 0,      // dependent parents (≥50% supported), 0–2
+  spouseAA: false,    // spouse receives VA Aid & Attendance
+  schoolKids: 0,      // children 18–23 in an approved school program
   vaRating: 0,
   giUse: false,
   giType: "post911",
@@ -623,7 +626,12 @@ export default function TransitioningPage() {
   const stateInfo = STATES[s.selectedState] || { ok: true };
   const currentAge = s.vgliAge || 40;
   const filingStatus = (s.deps || "").startsWith("sp") ? "mfj" : "single";
-  const vaComp = s.vaRating > 0 ? calcVAComp(s.vaRating, depInfo.key, depInfo.ch) : 0;
+  const hasSpouse = depInfo.key === "sp";
+  const vaComp = s.vaRating > 0 ? calcVAComp(s.vaRating, depInfo.key, depInfo.ch, {
+    parents: s.depParents || 0,
+    spouseAA: !!s.spouseAA && hasSpouse,
+    schoolChildren: s.schoolKids || 0,
+  }) : 0;
   // ── v1.1 retirement engine ─ single source of truth for pension, CRDP/CRSC
   // offset, BRS lump sum, and reserve retired-pay timing. vaMonthly is passed
   // pre-computed so the engine stays free of dependent lookups.
@@ -1572,6 +1580,46 @@ export default function TransitioningPage() {
                 Each child beyond the first adds the VA "Each Additional Child Under 18" rate{s.vaRating >= 30 ? <> ({fmt(VA[s.vaRating].ac)}/mo at {s.vaRating}%)</> : s.vaRating > 0 ? " (applies once your rating reaches 30%)" : ""}. For families with more than 6 dependents, contact VA directly.
               </HintBox>
             )}
+            <FieldRow label="Schoolchildren 18–23">
+              <div className="tr-sel">
+                <select value={s.schoolKids || 0} onChange={e => set("schoolKids", Number(e.target.value))}>
+                  <option value={0}>None</option>
+                  {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </FieldRow>
+            {(s.schoolKids || 0) > 0 && (
+              <HintBox>
+                Schoolchildren must be enrolled full-time in an approved educational program (high school or post-secondary). Each adds the VA "Each Additional Child Over 18 in School" rate{s.vaRating >= 30 ? <> ({fmt(VA[s.vaRating].scs)}/mo at {s.vaRating}%)</> : s.vaRating > 0 ? " (applies once your rating reaches 30%)" : ""}.
+              </HintBox>
+            )}
+            <FieldRow label="Dependent Parents">
+              <div className="tr-sel">
+                <select value={s.depParents || 0} onChange={e => set("depParents", Number(e.target.value))}>
+                  <option value={0}>None</option>
+                  <option value={1}>1 dependent parent</option>
+                  <option value={2}>2 dependent parents</option>
+                </select>
+              </div>
+            </FieldRow>
+            {(s.depParents || 0) > 0 && (
+              <HintBox>
+                A dependent parent is one who receives at least 50% of their support from you. Each adds the VA dependent-parent amount{s.vaRating >= 30 ? <> ({fmt(VA[s.vaRating].pr)}/mo at {s.vaRating}%)</> : s.vaRating > 0 ? " (applies once your rating reaches 30%)" : ""}.
+              </HintBox>
+            )}
+            {hasSpouse && (
+              <ToggleGroup
+                label="Spouse receives Aid & Attendance"
+                options={[{ v: false, l: "No" }, { v: true, l: "Yes" }]}
+                value={!!s.spouseAA}
+                onChange={v => set("spouseAA", v)}
+              />
+            )}
+            {hasSpouse && s.spouseAA && (
+              <HintBox>
+                Aid & Attendance adds an amount when your spouse needs help with daily living{s.vaRating >= 30 ? <> ({fmt(VA[s.vaRating].aa)}/mo at {s.vaRating}%)</> : s.vaRating > 0 ? " (applies once your rating reaches 30%)" : ""}.
+              </HintBox>
+            )}
             <FieldRow label="State of Residence">
               <div className="tr-sel">
                 <select value={s.selectedState} onChange={e => { set("selectedState", e.target.value); track("State Selected", { state: e.target.value }); }}>
@@ -1640,7 +1688,10 @@ export default function TransitioningPage() {
               <>
                 <IncomeRow
                   label="VA Disability Compensation"
-                  sub={`${s.vaRating}% · ${depInfo.l}`}
+                  sub={`${s.vaRating}% · ${depInfo.l}`
+                    + ((s.schoolKids || 0) > 0 ? ` · ${s.schoolKids} schoolchild${s.schoolKids > 1 ? "ren" : ""} 18–23` : "")
+                    + ((s.depParents || 0) > 0 ? ` · ${s.depParents} parent${s.depParents > 1 ? "s" : ""}` : "")
+                    + (hasSpouse && s.spouseAA ? " · spouse A&A" : "")}
                   value={fmt(vaComp)}
                   color="gold"
                 />
