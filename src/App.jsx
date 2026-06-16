@@ -18,8 +18,10 @@ import {
 } from './lib/data.js';
 import {
   lookupPay, calcVAComp, pension, pct, medicalPension, reservePension,
-  pensionBySepType, reservePensionAmount, calcFederalTax, calcStateTax,
+  reservePensionAmount, calcFederalTax, calcStateTax,
   getVAPriorityGroup, vgliRate, vgliMonthly, mgibMonthly,
+  calculateRetirement, legacySepType, reservePayAge, teraReductionFactor,
+  isReserveType, isMedicalType, isActiveType,
   fmt, fmtYos, dk,
 } from './lib/calc.js';
 import { DiscordLink } from './components/ui.jsx';
@@ -818,7 +820,7 @@ function UnconfiguredBanner({go}){
 }
 
 function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
-  const {userName,separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
+  const {userName,retireeType,separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
          selectedState,desiredIncome,income,filingStatus,medDodPct,tdrl,reservePoints,currentAge,payStartAge,
          colFrom,colTo,monthlyIncome,
          giUsing,giType,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear,
@@ -832,17 +834,20 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
   const shareBlobRef=useRef(null);
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
   const key=dk(vaDeps);
-  const isReserveEligibleNow=separationType==="reserve"&&currentAge>=payStartAge;
-  const g=pensionBySepType(separationType,retType,yos,h3,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
+  const vaM=calcVAComp(vaRating,key,vaChildren||0);
+  // v1.1 retirement engine — single source of truth for pension + offset + lump sum.
+  const calc=calculateRetirement({...state,high3:h3,vaMonthly:vaM});
+  const isReserveEligibleNow=separationType==="reserve"&&!calc.isWaiting;
+  const g=calc.grossPension;
   const sbpC=sbp?g*(sbpCoverage/100)*0.065:0;
   const netP=g-sbpC;
-  const vaM=calcVAComp(vaRating,key,vaChildren||0);
   const si=STATES[selectedState]||{ok:true};
-  // VA offset for medical retirees with < 20 YOS (Ch. 61)
-  const medCalc=separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType):null;
-  const isVAOffset=separationType==="medical"&&yos<20&&vaM>0&&g>0&&medCalc&&!medCalc.isSeverance;
-  // With VA offset: DOD pay reduced dollar-for-dollar by VA comp; receive higher of the two
-  const offsetNetP=isVAOffset?Math.max(0,netP-vaM):netP;
+  const isVAOffset=calc.offsetType==="waiver";
+  const isCRSC=calc.offsetType==="crsc";
+  const crscMo=calc.crscAmount||0;             // tax-free, like VA comp
+  const medCalc={method:calc.method};          // for breakdown labels
+  // Pension after offset, less the pre-tax SBP premium.
+  const offsetNetP=Math.max(0,calc.netPensionAfterOffset-sbpC);
   const taxableAnnual=offsetNetP*12+(income||0);
   const {monthlyTax:fedTax,effectiveRate:fedEffRate,totalDeduction:fedDeduction}=calcFederalTax(taxableAnnual,filingStatus||"single",state.age65Plus,state.spouseAge65Plus);
   const stTax=calcStateTax(offsetNetP*12,si)/12;
@@ -854,7 +859,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
   const giLabel=isMGIB?(giType==="ch30"?"MGIB-AD (Ch. 30)":"MGIB-SR (Ch. 1606)"):"GI Bill MHA";
   const giTaxNote=isMGIB?"taxable":"tax-free";
   const otherMo=Math.round((income||0)/12);
-  const totalBase=atP+vaM+otherMo;
+  const totalBase=atP+vaM+crscMo+otherMo;
   const totalSchool=totalBase+mhaMo;
   const healthPrem=(()=>{
     if(separationType==="veteran") return 0;
@@ -874,12 +879,11 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
   const deductionsExceedIncome=totalAfterInsRaw<0&&(insuranceMo+sbpC)>0;
   const totalAfterIns=Math.max(0,totalAfterInsRaw);
   const gap=desiredIncome-totalAfterIns;
-  const isAnyRetiree=separationType==="active"||(separationType==="medical"&&yos>=20)||(separationType==="reserve"&&isReserveEligibleNow);
-  const elig=isAnyRetiree&&vaRating>=50;
-  const reserveCalc=separationType==="reserve"?reservePension(reservePoints||0,h3||0,retType):{pay:0,equivYOS:0,multPct:0};
-  const p=separationType==="active"?pct(retType,yos):separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType).mult:separationType==="reserve"?Math.min(reserveCalc.equivYOS*reserveCalc.multPct,100):0;
-  const pensionLabel=separationType==="active"?"Pension / mo":separationType==="medical"?"Medical Ret. Pay":separationType==="reserve"?(isReserveEligibleNow?"Reserve Pay / mo":`Reserve (Age ${payStartAge})`):"No Pension";
-  const reserveProjected=separationType==="reserve"&&!isReserveEligibleNow?reserveCalc.pay:0;
+  const elig=calc.offsetType==="crdp";
+  const reserveCalc={pay:calc.projectedGross,equivYOS:calc.equivYOS||0,multPct:0};
+  const p=calc.multiplierPct;
+  const pensionLabel=separationType==="active"?"Pension / mo":separationType==="medical"?"Medical Ret. Pay":separationType==="reserve"?(isReserveEligibleNow?"Reserve Pay / mo":`Reserve (Age ${calc.payStartAge})`):"No Pension";
+  const reserveProjected=calc.isWaiting?calc.projectedGross:0;
 
   const [showFullDisclaimer,setShowFullDisclaimer]=useState(false);
 
@@ -1123,7 +1127,10 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
 
       {/* Status badges */}
       <div className="dash-full" style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:14}}>
-        {elig&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gnb)",color:"var(--gn)",fontSize:12,fontWeight:600}}>CRDP Eligible</span>}
+        {elig&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gnb)",color:"var(--gn)",fontSize:12,fontWeight:600}}>CRDP — No Offset</span>}
+        {isCRSC&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gnb)",color:"var(--gn)",fontSize:12,fontWeight:600}}>CRSC — No Offset</span>}
+        {isVAOffset&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--rdb)",color:"var(--rd)",fontSize:12,fontWeight:600}}>VA Waiver Applied</span>}
+        {calc.isWaiting&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gdb)",color:"var(--gd)",fontSize:12,fontWeight:600}}>Pension at Age {calc.payStartAge}</span>}
         {separationType==="veteran"&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gdb)",color:"var(--gd)",fontSize:12,fontWeight:600}}>Veteran (no pension)</span>}
         <span style={{padding:"6px 12px",borderRadius:20,background:si.ok?"var(--gnb)":"var(--rdb)",color:si.ok?"var(--gn)":"var(--rd)",fontSize:12,fontWeight:600}}>{selectedState}: {si.ok?"Tax-Exempt":"Taxed"}</span>
         {mhaMo>0&&<span style={{padding:"6px 12px",borderRadius:20,background:"var(--gnb)",color:"var(--gn)",fontSize:12,fontWeight:600}}>GI Bill Active</span>}
@@ -1156,10 +1163,44 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
             {sbp&&<DR label="SBP Premium" value={`-${fmt(sbpC)}/mo`} color="red"/>}
             <DR label="Federal Tax (est.)" value={`-${fmt(fedTax)}/mo`} color="red" sub={`${(fedEffRate*100).toFixed(1)}% effective · ${FILING_STATUS_LABELS[filingStatus||"single"]||"Single"} · 2026 IRS figures`}/>
             <DR label={`State Tax — ${selectedState}`} value={si.ok?"Exempt":`-${fmt(stTax)}/mo`} color={si.ok?"green":"red"} sub={si.label||si.note}/>
+            {isCRSC&&crscMo>0&&<DR label="CRSC (tax-free)" value={fmt(crscMo)+"/mo"} color="green" sub="Combat-Related Special Compensation — replaces the VA waiver"/>}
             <DR label="Net After-Tax Pension" value={fmt(atP)+"/mo"} color="navy"/>
-            {separationType==="reserve"&&!isReserveEligibleNow&&(
-              <div className="ib ib-gd" style={{marginTop:10,fontSize:13}}>Reserve pay starts at age {payStartAge}. Currently age {currentAge}.</div>
+
+            {/* Offset / timing status */}
+            {elig&&(
+              <div className="ib ib-gn" style={{marginTop:10,fontSize:13}}>
+                <strong>Concurrent receipt (CRDP)</strong> — full pension + VA comp, no offset.
+              </div>
             )}
+            {isCRSC&&(
+              <div className="ib ib-gn" style={{marginTop:10,fontSize:13}}>
+                <strong>CRSC eliminates the offset</strong> — combat-related disability. The waived amount is restored as tax-free CRSC.
+              </div>
+            )}
+            {isVAOffset&&(
+              <div className="ib ib-gd" style={{marginTop:10,fontSize:13}}>
+                <strong>VA waiver applied</strong> — pension reduced by your VA comp amount ({fmt(Math.min(vaM,g))}/mo). You receive the higher of the two, plus tax-free VA.
+              </div>
+            )}
+            {calc.isWaiting&&(
+              <div className="ib ib-nv" style={{marginTop:10,fontSize:13}}>
+                <strong>Pension begins at age {calc.payStartAge}</strong> — VA disability {fmt(vaM)}/mo flows until then. Currently age {currentAge}.
+              </div>
+            )}
+
+            {/* BRS lump-sum election */}
+            {calc.lumpSum&&(
+              <div className="ib ib-nv" style={{marginTop:10,fontSize:13}}>
+                <DR label="Lump sum cash at retirement" value={fmt(calc.lumpSum.cash)}/>
+                <DR label="Reduced monthly until age 67" value={fmt(calc.lumpSum.reducedMonthly)+"/mo"}/>
+                <DR label="Full monthly after age 67" value={fmt(calc.lumpSum.fullMonthly)+"/mo"}/>
+              </div>
+            )}
+
+            {/* Engine notes (CRSC estimate caveat, lump-sum tax event) */}
+            {calc.notes.map((n,i)=>(
+              <div key={i} className="ib ib-gd" style={{marginTop:8,fontSize:11,lineHeight:1.5}}>{n}</div>
+            ))}
           </>
         )}
       </div>
@@ -1558,25 +1599,33 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
       // PENSION section
       if(exportSections.pension&&separationType!=="veteran"){
         sectionHead(separationType==="medical"?"MEDICAL RETIREMENT PAY":"PENSION BREAKDOWN");
+        dataRow("Retiree Type",{"active-regular":"Active Regular","active-tera":"Active TERA","active-medical":"Active Medical (Ch.61)","reserve-regular-drawing":"Reserve — Drawing","reserve-regular-waiting":"Reserve — Awaiting Pay Age","reserve-medical":"Reserve Medical (Ch.61)"}[retireeType]||retireeType);
         dataRow("Retirement System",retType);
-        if(separationType==="reserve"){
+        if(isReserveType(retireeType)){
           dataRow("Total Retirement Points",(reservePoints||0).toLocaleString());
           dataRow("Equivalent YOS",`${(reservePoints/360).toFixed(1)} years`);
         }else{
           dataRow("High-3 Base Pay",fmt(h3)+"/mo");
           dataRow("Years of Service",fmtYos(yos)+" years");
         }
-        if(separationType==="medical"){
-          const pdfMedCalc=medicalPension(yos,h3,medDodPct,tdrl,retType);
+        if(retireeType==="active-tera") dataRow("TERA Reduction Factor",`×${teraReductionFactor(yos).toFixed(3)}`);
+        if(isMedicalType(retireeType)){
           dataRow("DoD Disability Rating",medDodPct+"%");
-          dataRow("Status",pdfMedCalc.isPDRL?"PDRL (Permanent)":pdfMedCalc.isTDRL?"TDRL (Temporary)":"Severance Only");
-          dataRow("Calculation Method",pdfMedCalc.method==="disability"?"Disability % method":"YOS method");
-          if(isVAOffset) dataRow("VA Offset","DOD pay offset by VA comp (YOS < 20)",{valueColor:RED});
+          dataRow("Calculation Method",calc.method==="disability"?"Disability % method":"Length-of-service method");
         }
-        dataRow(separationType==="reserve"&&!isReserveEligibleNow?"Projected Monthly Gross":separationType==="medical"?"Monthly Medical Retirement":"Monthly Gross Pension",fmt(grossPension),{highlight:true,valueColor:GOLD_P});
+        dataRow("Pension Multiplier",`${p.toFixed(1)}%`);
+        dataRow(calc.isWaiting?"Projected Monthly Gross":separationType==="medical"?"Monthly Medical Retirement":"Monthly Gross Pension",fmt(grossPension),{highlight:true,valueColor:GOLD_P});
+        const pdfOffsetLabel=calc.offsetType==="crdp"?"CRDP — full pension + VA, no offset":calc.offsetType==="crsc"?"CRSC — combat-related, no offset (tax-free)":calc.offsetType==="waiver"?"VA waiver applied — pension reduced by VA comp":calc.isWaiting?"No offset — pension not yet flowing":"No offset";
+        dataRow("Concurrent Receipt",pdfOffsetLabel,{valueColor:(calc.offsetType==="crdp"||calc.offsetType==="crsc")?GRN:calc.offsetType==="waiver"?RED:MUT});
+        if(isCRSC&&crscMo>0) dataRow("CRSC (tax-free)",fmt(crscMo)+"/mo",{valueColor:GRN});
         dataRow("After-Tax Estimate",fmt(atP)+"/mo");
         dataRow("Annual Gross",fmt(grossPension*12));
-        dataRow("CRDP/CRSC Status",elig?"Eligible":"Not eligible",{valueColor:elig?GOLD_P:MUT});
+        if(calc.lumpSum){
+          y+=4;
+          dataRow("BRS Lump Sum Cash",fmt(calc.lumpSum.cash),{highlight:true,valueColor:GOLD_P});
+          dataRow("Reduced Monthly (until 67)",fmt(calc.lumpSum.reducedMonthly)+"/mo");
+          dataRow("Full Monthly (after 67)",fmt(calc.lumpSum.fullMonthly)+"/mo");
+        }
         if(sbp&&grossPension>0){
           const sbpBase=grossPension*(sbpCoverage/100);
           const sbpPrem=sbpBase*0.065;
@@ -1776,7 +1825,7 @@ function DashboardTab({state,set,isConfigured,go,onPdfExported,modalActive}){
 
 // ── TAB 2: BENEFITS (output-only detail views) ───────────────────────
 function BenefitsTab({state,isConfigured,go}){
-  const {separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
+  const {retireeType,separationType,retType,yos,high3,usePayGrade,payGrade,vaRating,vaDeps,vaChildren,sbp,sbpCoverage,
          selectedState,medDodPct,tdrl,reservePoints,currentAge,payStartAge,
          giUsing,giType,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear,
          mgibEnroll,mgibServiceYears}=state;
@@ -1784,19 +1833,23 @@ function BenefitsTab({state,isConfigured,go}){
   const derivedPay=usePayGrade?lookupPay(payGrade,yos):null;
   const key=dk(vaDeps);
   const nKids=vaChildren||0;
-  const isReserveEligibleNow=separationType==="reserve"&&currentAge>=payStartAge;
-  const g=pensionBySepType(separationType,retType,yos,h3,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
-  const p=separationType==="active"?pct(retType,yos):separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType).mult:separationType==="reserve"?reservePension(reservePoints,h3,retType).multPct*(reservePoints/360):0;
+  const vaM=calcVAComp(vaRating,key,nKids);
+  const calc=calculateRetirement({...state,high3:h3,vaMonthly:vaM});
+  const isReserveEligibleNow=separationType==="reserve"&&!calc.isWaiting;
+  const g=calc.grossPension;
+  const p=calc.multiplierPct;
   const sbpC=sbp?g*(sbpCoverage/100)*0.065:0;
   const net=g-sbpC;
-  const vaM=calcVAComp(vaRating,key,nKids);
   const vaBase=calcVAComp(vaRating,key,Math.min(nKids,1)); // base rate (includes first child)
   const vaExtra=nKids>1?(VA[vaRating]?.ac||0)*(nKids-1):0;
-  const medCalcB=separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType):null;
-  const isVAOffsetB=separationType==="medical"&&yos<20&&vaM>0&&g>0&&medCalcB&&!medCalcB.isSeverance;
-  const offsetNetB=isVAOffsetB?Math.max(0,net-vaM):net;
-  const isAnyRetiree=separationType==="active"||(separationType==="medical"&&yos>=20)||(separationType==="reserve"&&isReserveEligibleNow);
-  const elig=isAnyRetiree&&vaRating>=50;
+  const isVAOffsetB=calc.offsetType==="waiver";
+  const isCRSCb=calc.offsetType==="crsc";
+  const crscMoB=calc.crscAmount||0;
+  // Medical detail panel: use points-derived equivalent YOS for reserve-medical.
+  const medEffYos=retireeType==="reserve-medical"?(reservePoints||0)/360:yos;
+  const medCalcB=isMedicalType(retireeType)?medicalPension(medEffYos,h3,medDodPct,tdrl,retType):null;
+  const offsetNetB=Math.max(0,calc.netPensionAfterOffset-sbpC);
+  const elig=calc.offsetType==="crdp";
   const [crdpOpen,setCrdpOpen]=useState(false);
   const bTaxableAnn=offsetNetB*12+(state.income||0);
   const {effectiveRate:bEffRate}=calcFederalTax(bTaxableAnn,state.filingStatus||"single",state.age65Plus,state.spouseAge65Plus);
@@ -1864,19 +1917,27 @@ function BenefitsTab({state,isConfigured,go}){
                 </div>
                 <div style={{marginBottom:14}}>
                   <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
-                    <span>YOS leg: {fmtYos(yos)} yrs × {retType==="BRS"?"2.0":"2.5"}% = {medCalcB?.yosMult.toFixed(1)}%</span>
+                    <span>{retireeType==="reserve-medical"?"Equiv. YOS":"YOS"} leg: {fmtYos(Math.round(medEffYos*10)/10)} × {retType==="BRS"?"2.0":"2.5"}% = {medCalcB?.yosMult.toFixed(1)}%</span>
                     <span>DoD: {medCalcB?.disabMult}%{medCalcB?.method==="disability"?" ✓":""}</span>
                   </div>
-                  <PBar value={medCalcB?.mult||0} max={75} color="var(--nv)"/>
+                  <PBar value={medCalcB?.mult||0} max={retType==="BRS"?60:75} color="var(--nv)"/>
                 </div>
                 <div className="ib ib-nv" style={{fontSize:12,marginBottom:12}}>
-                  {medCalcB?.isPDRL
-                    ?`PDRL: max(DoD ${medDodPct}%, YOS ${fmtYos(yos)} × ${retType==="BRS"?"2.0":"2.5"}%) = ${medCalcB?.mult.toFixed(1)}% × High-36, capped at 75%.`
-                    :`TDRL: minimum 50% applied. Reassessed every 18 months, max 5 years.`}
+                  {`Multiplier = max(DoD ${medDodPct}%, ${retireeType==="reserve-medical"?"equiv. YOS":"YOS"} ${fmtYos(Math.round(medEffYos*10)/10)} × ${retType==="BRS"?"2.0":"2.5"}%) = ${medCalcB?.mult.toFixed(1)}% × High-36, capped at ${retType==="BRS"?"60":"75"}%.`}
                 </div>
+                {elig&&(
+                  <div className="ib ib-gn" style={{fontSize:12,marginBottom:12}}>
+                    <strong>Concurrent receipt (CRDP):</strong> full pension + VA comp, no offset.
+                  </div>
+                )}
+                {isCRSCb&&(
+                  <div className="ib ib-gn" style={{fontSize:12,marginBottom:12}}>
+                    <strong>CRSC eliminates the offset</strong> — combat-related disability. The waived amount is restored as tax-free CRSC ({fmt(crscMoB)}/mo).
+                  </div>
+                )}
                 {isVAOffsetB&&(
                   <div className="ib ib-gd" style={{fontSize:12,marginBottom:12}}>
-                    <strong>VA Offset (YOS &lt; 20):</strong> DOD retirement pay offset dollar-for-dollar by VA compensation. You receive the higher of the two, not both.
+                    <strong>VA waiver applied:</strong> DOD retirement pay offset dollar-for-dollar by VA compensation. You receive the higher of the two, not both.
                     {state.combatRelated&&<><br/><strong style={{color:"var(--gn)"}}>CRSC eligible:</strong> Combat-Related Special Compensation IS payable concurrently with VA comp.</>}
                   </div>
                 )}
@@ -1892,8 +1953,8 @@ function BenefitsTab({state,isConfigured,go}){
                   <MT label="Est. After-Tax /mo" value={fmt(bAfterTaxMo)} color="green" sub={`${(bEffRate*100).toFixed(1)}% effective rate`}/>
                   <MT label="Annual After-Tax" value={fmt(bAfterTaxMo*12)} color="green" sub="Not FICA-taxed"/>
                 </div>
-                {yos>=20&&<div className="ib ib-gn" style={{marginTop:10,fontSize:11}}>20+ YOS: eligible for CRDP — can receive both DOD retirement and VA compensation concurrently. No offset.</div>}
                 {sbp&&<div className="ib ib-gn" style={{marginTop:10,fontSize:11}}>SBP-DIC offset eliminated Jan 2023 — survivor receives both SBP and VA DIC in full.</div>}
+                {calc.notes.map((n,i)=>(<div key={i} className="ib ib-gd" style={{marginTop:8,fontSize:11,lineHeight:1.5}}>{n}</div>))}
               </>
             )}
           </div>
@@ -1926,9 +1987,9 @@ function BenefitsTab({state,isConfigured,go}){
             </div>
             <div style={{marginBottom:14}}>
               <div style={{display:"flex",justifyContent:"space-between",fontSize:12,color:"var(--mut)",marginBottom:5}}>
-                <span>Multiplier: {p.toFixed(1)}%</span><span>Max: {retType==="REDUX"?"75":"100"}%</span>
+                <span>Multiplier: {p.toFixed(1)}%</span><span>Cap: {retType==="BRS"?"60":"75"}%</span>
               </div>
-              <PBar value={p} max={retType==="REDUX"?75:100} color={p>=50?"var(--gn)":"var(--nv)"}/>
+              <PBar value={p} max={retType==="BRS"?60:75} color={p>=50?"var(--gn)":"var(--nv)"}/>
             </div>
             <hr/>
             <DR label="Gross Pension" value={fmt(g)}/>
@@ -2026,16 +2087,18 @@ function BenefitsTab({state,isConfigured,go}){
           For retirees with 50%+ VA rating. Active duty retirees need 20+ years. Medical (Chapter 61) retirees also need 20+ years. Reserve retirees must be actively receiving retirement pay.
         </div>
         <div style={{marginTop:8}}>
-          <div className={"ib "+(elig?"ib-gn":"ib-gd")} style={{fontSize:13}}>
+          <div className={"ib "+(elig||isCRSCb?"ib-gn":"ib-gd")} style={{fontSize:13}}>
             {elig
-              ?`✓ You qualify — ${separationType==="medical"?"medical retiree (20+ yrs)":separationType==="reserve"?"Reserve/Guard drawing pay":"active duty retiree"} with ${vaRating}% VA rating.`
-              :separationType==="veteran"
-                ?`Veterans without retirement pay are not eligible for CRDP. See CRSC below if you have combat-related injuries.`
-                :separationType==="medical"&&yos<20
-                  ?`Chapter 61 medical retirees with fewer than 20 years of service do not qualify for CRDP. Your DOD pay is offset dollar-for-dollar by VA comp.${state.combatRelated?" You may qualify for CRSC (combat-related) — apply through your branch.":" If your disability is combat-related, you may qualify for CRSC."} Current YOS: ${fmtYos(yos)}.`
-                  :separationType==="reserve"&&!isReserveEligibleNow
-                    ?`CRDP eligibility begins when Reserve retirement pay starts at age ${payStartAge}.`
-                    :`To qualify: must be a retiree with 50%+ VA rating. Current rating: ${vaRating}%.`}
+              ?`✓ CRDP — concurrent receipt. Full pension + VA comp, no offset (${vaRating}% VA rating).`
+              :isCRSCb
+                ?`✓ CRSC eliminates the offset — combat-related disability. The waived ${fmt(crscMoB)}/mo is restored as tax-free CRSC.`
+                :calc.isWaiting
+                  ?`CRDP eligibility begins when Reserve retirement pay starts at age ${calc.payStartAge}. No offset applies until then.`
+                  :calc.offsetType==="waiver"
+                    ?`VA waiver applied — DOD pay offset dollar-for-dollar by VA comp. ${state.combatRelated?"You indicated combat-related disabilities — CRSC should apply; verify your inputs.":"If your disability is combat-related, you may qualify for CRSC. "}${vaRating<50?`CRDP requires a 50%+ VA rating (current: ${vaRating}%).`:retireeType==="reserve-medical"?"CRDP requires 20+ qualifying reserve years.":(retireeType==="active-medical"||retireeType==="active-regular")&&yos<20?`CRDP requires 20+ YOS (current: ${fmtYos(yos)}).`:""}`
+                    :separationType==="veteran"
+                      ?`Veterans without retirement pay are not eligible for CRDP. See CRSC if you have combat-related injuries.`
+                      :`No offset — VA comp and pension received in full.`}
           </div>
         </div>
         {crdpOpen&&(
@@ -2237,16 +2300,16 @@ function PlanningTab({state,set,go}){
   const h3=(usePayGrade&&lookupPay(payGrade,yos))||high3;
   const key=dk(vaDeps);
   const nKids=vaChildren||0;
-  const g=pensionBySepType(separationType,retType,yos,h3,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
+  const vaM=calcVAComp(vaRating,key,nKids);
+  const calc=calculateRetirement({...state,high3:h3,vaMonthly:vaM});
+  const g=calc.grossPension;
   const sbpC=sbp?g*(sbpCoverage/100)*0.065:0;
   const netP=g-sbpC;
   const annP=netP*12;
-  const vaM=calcVAComp(vaRating,key,nKids);
   const annVA=vaM*12;
   const si=STATES[selectedState]||{ok:true,note:""};
-  const medCalcP=separationType==="medical"?medicalPension(yos,h3,medDodPct,tdrl,retType):null;
-  const isVAOffsetP=separationType==="medical"&&yos<20&&vaM>0&&g>0&&medCalcP&&!medCalcP.isSeverance;
-  const offsetAnnP=isVAOffsetP?Math.max(0,annP-annVA):annP;
+  const isVAOffsetP=calc.offsetType==="waiver";
+  const offsetAnnP=Math.max(0,calc.netPensionAfterOffset-sbpC)*12;
   const stTax=calcStateTax(offsetAnnP,si);
   const taxableAnnualP=offsetAnnP+(income||0);
   const {annualTax:fedTaxAnn,effectiveRate:pEffRate,totalDeduction:pDeduction}=calcFederalTax(taxableAnnualP,filingStatus||"single",state.age65Plus,state.spouseAge65Plus);
@@ -2601,17 +2664,27 @@ function PlanningTab({state,set,go}){
 
 // ── TAB 4: PROFILE (all inputs consolidated) ─────────────────────────
 function ProfileTab({state,set,isConfigured,go}){
-  const {userName,separationType,retType,yos,high3,usePayGrade,payGrade,sbp,sbpCoverage,
-         medDodPct,tdrl,reservePoints,currentAge,payStartAge,reserveHealthType,
+  const {userName,retireeType,separationType,retType,yos,high3,usePayGrade,payGrade,sbp,sbpCoverage,
+         medDodPct,tdrl,combatRelated,retireAge,brsLumpSum,reservePoints,currentAge,payStartAge,reserveHealthType,
+         reserve20GoodYears,reserveAdDays,reservePtGoodYears,reservePtAdDays,reservePtOther,
          vaRating,vaDeps,vaChildren,selectedState,income,desiredIncome,
          giUsing,giType,giEligPct,giSchoolCity,giEnroll,giOnline,giMonthsPerYear,
          mgibEnroll,mgibServiceYears,
          tricareplan,tricareFamSize,tricareGroup,useVgli,vgliCoverage,vgliAge,otherLifePremium}=state;
   const [nameWarn,setNameWarn]=useState("");
   const [confirmReset,setConfirmReset]=useState(false);
+  const [ptEstOpen,setPtEstOpen]=useState(false);
   const derivedPay=usePayGrade?lookupPay(payGrade,yos):null;
   const h3Prof=(usePayGrade&&derivedPay)?derivedPay:high3;
-  const pensionMo=pensionBySepType(separationType,retType,yos,h3Prof,medDodPct,tdrl,reservePoints,currentAge,payStartAge);
+  const vaMo=calcVAComp(vaRating,dk(vaDeps),vaChildren||0);
+  const calc=calculateRetirement({...state,high3:h3Prof,vaMonthly:vaMo});
+  const pensionMo=calc.grossPension;
+  // Setting the retiree type also re-derives the legacy separationType mirror,
+  // and coerces REDUX off types where it's invalid.
+  const setRetireeType=v=>{set("retireeType",v);set("separationType",legacySepType(v));if(retType==="REDUX"&&v!=="active-regular")set("retType","High-3");};
+  // Points estimator: (good years × 63) + active-duty days + other sources.
+  const ptEstimate=Math.round((reservePtGoodYears||0)*63+(reservePtAdDays||0)+(reservePtOther||0));
+  const payAgeCalc=reservePayAge(reserveAdDays);
 
   // ── Analytics ──
   const prevPension=useRef(null);
@@ -2696,38 +2769,54 @@ function ProfileTab({state,set,isConfigured,go}){
       <div className="card">
         <div className="cttl">Service Profile</div>
         <div className="field">
-          <label className="flbl">Separation Type</label>
-          <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:6}}>
-            {[{v:"active",l:"Active"},{v:"medical",l:"Medical"},{v:"reserve",l:"Reserve"},{v:"veteran",l:"Veteran"}].map(o=>(
-              <button key={o.v} className={"tb"+(separationType===o.v?" on":"")}
-                style={{width:"100%",fontSize:13,padding:"12px 8px"}}
-                onClick={()=>set("separationType",o.v)}>{o.l}</button>
-            ))}
-          </div>
+          <label className="flbl">Retiree Type</label>
+          {[
+            {grp:"Active Duty",opts:[
+              {v:"active-regular",l:"Active Regular (20+ yrs)",d:"Standard 20-year active retirement"},
+              {v:"active-tera",l:"Active TERA (under 20 yrs)",d:"Voluntary early retirement, 15–19 yrs"},
+              {v:"active-medical",l:"Active Medical (Ch. 61)",d:"Disability retirement"},
+            ]},
+            {grp:"Reserve / Guard",opts:[
+              {v:"reserve-regular-drawing",l:"Reserve — Drawing Pension",d:"At retired-pay age, pension flowing"},
+              {v:"reserve-regular-waiting",l:"Reserve — Awaiting Pay Age",d:"Retired, pension begins later"},
+              {v:"reserve-medical",l:"Reserve Medical (Ch. 61)",d:"Reserve disability retirement"},
+            ]},
+            {grp:"No Pension",opts:[
+              {v:"veteran",l:"Veteran (Separated)",d:"No military pension"},
+            ]},
+          ].map(grp=>(
+            <div key={grp.grp} style={{marginBottom:6}}>
+              <div style={{fontSize:10,fontWeight:700,textTransform:"uppercase",letterSpacing:".08em",color:"var(--mut)",margin:"8px 0 4px"}}>{grp.grp}</div>
+              <div style={{display:"grid",gap:6}}>
+                {grp.opts.map(o=>(
+                  <button key={o.v} className={"tb"+(retireeType===o.v?" on":"")}
+                    style={{width:"100%",fontSize:13,padding:"10px 12px",textAlign:"left",display:"flex",flexDirection:"column",alignItems:"flex-start",gap:1}}
+                    onClick={()=>setRetireeType(o.v)}>
+                    <span style={{fontWeight:700}}>{o.l}</span>
+                    <span style={{fontSize:11,opacity:.8,fontWeight:400}}>{o.d}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
 
-        {separationType==="veteran"&&(
+        {retireeType==="veteran"&&(
           <div>
             <div className="ib ib-gd" style={{fontSize:13,marginBottom:12}}>No DoD retirement pay. Veterans who separated before qualifying for retirement receive no pension.</div>
             <div className="ib ib-nv" style={{fontSize:13}}>Still eligible for: VA disability compensation, GI Bill benefits, VA Healthcare, and all planning tools in this app.</div>
           </div>
         )}
 
-        {separationType==="medical"&&(
+        {isMedicalType(retireeType)&&(
           <div className="ib ib-nv" style={{fontSize:13,marginBottom:12}}>
-            <strong>Chapter 61 Medical Retirement.</strong> PDRL (DoD ≥ 30% or YOS ≥ 20): pay = higher of (DoD disability %) or (YOS × {retType==="BRS"?"2.0":"2.5"}%) × High-36, capped at 75%. TDRL (DoD &lt; 30%, YOS &lt; 20): 50% × High-36 minimum. Below that: severance only.
+            <strong>Chapter 61 Medical Retirement.</strong> Multiplier = higher of your DoD disability rating or the {retType==="BRS"?"2.0":"2.5"}%/yr length-of-service figure{isReserveType(retireeType)?" (points ÷ 360)":""}, capped at {retType==="BRS"?"60":"75"}% of High-36.
           </div>
         )}
 
-        {separationType==="reserve"&&(
-          <div className="ib ib-nv" style={{fontSize:13,marginBottom:12}}>
-            Reserve/Guard retirement needs 20 qualifying years (50+ points/year). Pay = (Total Points ÷ 360) × {retType==="BRS"?"2.0":"2.5"}% × High-36 avg. Starts at age 60 (or earlier with qualifying active service).
-          </div>
-        )}
-
-        {separationType!=="veteran"&&(
+        {retireeType!=="veteran"&&(
           <TG label="Retirement System" value={retType} onChange={v=>set("retType",v)}
-            options={separationType==="medical"?[{v:"High-3",l:"High-3 (High-36)"},{v:"BRS",l:"BRS"}]:[{v:"High-3",l:"High-3 (High-36)"},{v:"BRS",l:"BRS"},{v:"REDUX",l:"REDUX"}]}
+            options={retireeType==="active-regular"?[{v:"High-3",l:"High-3"},{v:"BRS",l:"BRS"},{v:"REDUX",l:"REDUX"}]:[{v:"High-3",l:"High-3 (High-36)"},{v:"BRS",l:"BRS"}]}
             hint={{
               "High-3":"High-3 and High-36 are the same system \u2014 average of your highest 36 consecutive months of base pay. 2.5%/yr multiplier.",
               "BRS":"Blended Retirement \u2014 2.0%/yr + TSP matching up to 5%. Applies to those who opted in or entered after Jan 1, 2018.",
@@ -2735,59 +2824,106 @@ function ProfileTab({state,set,isConfigured,go}){
             }[retType]}/>
         )}
 
-        {(separationType==="active"||separationType==="medical")&&(
-          <NF label={separationType==="medical"?"Years of Service at Separation":"Years of Service"} value={yos} onChange={v=>set("yos",Math.round(v*2)/2)} min={0} max={40} step={0.5} suf="yrs"
-            hint={separationType==="medical"?"YOS at time of medical separation — any amount qualifies":"Minimum 20 years for retirement eligibility. Half-year increments supported (e.g. 20.5)."}/>
+        {retireeType!=="veteran"&&retType==="BRS"&&(
+          <div className="ib ib-nv" style={{fontSize:12,marginTop:-4,marginBottom:8}}>
+            <strong>BRS TSP:</strong> includes a 1% DoD automatic TSP contribution after 60 days, plus matching up to 5% of basic pay after 2 years. Use the TSP module to model balance growth.
+          </div>
         )}
 
-        {separationType==="medical"&&(
+        {isActiveType(retireeType)&&(
+          <NF label={retireeType==="active-medical"?"Years of Service at Separation":"Years of Service"} value={yos} onChange={v=>set("yos",Math.round(v*2)/2)} min={0} max={retireeType==="active-tera"?19.5:40} step={0.5} suf="yrs"
+            hint={retireeType==="active-medical"?"YOS at time of medical separation":retireeType==="active-tera"?"TERA early retirement: 15–19 years":"Minimum 20 years for retirement eligibility. Half-year increments supported (e.g. 20.5)."}
+            warn={retireeType==="active-regular"&&yos>0&&yos<20?"Active Regular retirement requires 20 years — use Active TERA for under 20":undefined}/>
+        )}
+
+        {retireeType==="active-tera"&&(
+          <div className="ib ib-nv" style={{fontSize:12,marginTop:-4,marginBottom:8}}>
+            Standard TERA (Title 10 §1293/1305). Does not model Voluntary Separation Pay (VSP) reductions or other special separations.
+            {yos>0&&yos<20&&<><br/><strong>Early-retirement reduction factor applied:</strong> ×{teraReductionFactor(yos).toFixed(3)} ({Math.round((1-teraReductionFactor(yos))*100)}% reduction for retiring {(20-yos).toFixed(1)} yr{(20-yos)===1?"":"s"} early).</>}
+          </div>
+        )}
+
+        {isMedicalType(retireeType)&&(
+          <div className="field">
+            <label className="flbl">DoD Disability Rating</label>
+            <select value={medDodPct} onChange={e=>set("medDodPct",Number(e.target.value))} style={{fontSize:16,minHeight:48}}>
+              {[30,40,50,60,70,80,90,100].map(r=><option key={r} value={r}>{r}%</option>)}
+            </select>
+            <div className="fhint">Rating from the Physical Evaluation Board (PEB) — separate from your VA rating.</div>
+          </div>
+        )}
+
+        {isReserveType(retireeType)&&(
           <>
-            <NF label="DoD Disability Rating %" value={medDodPct} onChange={v=>set("medDodPct",v)} min={0} max={100} step={10} suf="%"
-              hint="Rating from Physical Evaluation Board (PEB) — separate from your VA rating"/>
-            <TG label="Disability Status" value={tdrl?"tdrl":"pdrl"} onChange={v=>set("tdrl",v==="tdrl")}
-              options={[{v:"pdrl",l:"Permanent (PDRL)"},{v:"tdrl",l:"Temporary (TDRL)"}]}
-              hint={tdrl?"TDRL applies a minimum 50% multiplier while condition is re-evaluated":"Permanently retired — final disability rating applies"}/>
-            <TG label="Combat-Related Disability?" value={state.combatRelated?"y":"n"} onChange={v=>set("combatRelated",v==="y")}
-              options={[{v:"n",l:"No"},{v:"y",l:"Yes (CRSC eligible)"}]}
-              hint="Combat-Related Special Compensation (CRSC) is payable concurrently with VA compensation. Apply through your branch of service."/>
-            {(()=>{
-              const mp=medicalPension(yos,h3Prof,medDodPct,tdrl,retType);
-              if(mp.isTDRL) return(
-                <div className="ib ib-gd" style={{fontSize:12,marginTop:8}}>
-                  Placed on TDRL — minimum 50% rating applied. Reassessed every 18 months, max 5 years. May be moved to PDRL or separated with severance.
+            <NF label="Total Retirement Points" value={reservePoints} onChange={v=>set("reservePoints",Math.round(v))} min={0} max={14400} step={50} suf="pts"
+              hint="From your DFAS Reserve Component Retirement Points statement. Available in MyPay or via your unit S-1."
+              warn={reservePoints>0&&(reservePoints<1000||reservePoints>7300)?"Expected range 1,000–7,300 points":undefined}/>
+            <button type="button" onClick={()=>setPtEstOpen(o=>!o)}
+              style={{background:"none",border:"none",color:"var(--nvm)",fontSize:12,fontWeight:600,cursor:"pointer",padding:"2px 0",marginBottom:6,fontFamily:"Barlow,sans-serif"}}>
+              {ptEstOpen?"▾":"▸"} Don't know your exact points?
+            </button>
+            {ptEstOpen&&(
+              <div style={{background:"var(--sub)",borderRadius:10,padding:12,marginBottom:8}}>
+                <NF label="Good years served" value={reservePtGoodYears} onChange={v=>set("reservePtGoodYears",Math.round(v))} min={0} max={40} suf="yrs"
+                  hint="Each good year ≈ 63 points (48 drill + 15 membership)."/>
+                <NF label="Active-duty days (mobilizations, ADT, AT, deployments)" value={reservePtAdDays} onChange={v=>set("reservePtAdDays",Math.round(v))} min={0} max={8000} suf="days"/>
+                <NF label="Other point sources" value={reservePtOther} onChange={v=>set("reservePtOther",Math.round(v))} min={0} max={5000} suf="pts"/>
+                <div className="ib ib-nv" style={{fontSize:12,marginTop:6}}>
+                  Estimated total: <strong>{ptEstimate.toLocaleString()} pts</strong>. Estimated — enter exact points from MyPay for accuracy.
+                  <button type="button" onClick={()=>set("reservePoints",ptEstimate)}
+                    style={{display:"block",marginTop:8,background:"var(--nvm)",color:"#0b1120",border:"none",borderRadius:8,padding:"8px 12px",fontSize:12,fontWeight:700,cursor:"pointer"}}>Use this estimate</button>
                 </div>
-              );
-              if(mp.isSeverance) return(
-                <div className="ib ib-rd" style={{fontSize:12,marginTop:8}}>
-                  Not eligible for retirement pay — severance pay only. Severance = 2 × monthly base pay × YOS = <strong>{fmt(mp.severancePay)}</strong> (one-time).
-                </div>
-              );
-              return null;
-            })()}
-            {yos<20&&vaRating>0&&!medicalPension(yos,h3Prof,medDodPct,tdrl,retType).isSeverance&&(
-              <div className="ib ib-gd" style={{fontSize:12,marginTop:8}}>
-                <strong>VA Offset:</strong> With fewer than 20 YOS, your DoD retirement pay is offset dollar-for-dollar by VA compensation. You receive the higher of the two, not both.
-                {state.combatRelated&&<><br/><strong style={{color:"var(--gn)"}}>CRSC:</strong> You may be eligible for Combat-Related Special Compensation, which IS payable concurrently with VA compensation. Apply through your branch of service.</>}
+              </div>
+            )}
+            {reservePoints>0&&h3Prof>0&&retireeType!=="reserve-regular-waiting"&&(
+              <div className="ib ib-nv" style={{fontSize:12,marginTop:-2,marginBottom:8}}>
+                <strong>Equivalent YOS:</strong> {(reservePoints/360).toFixed(1)} years · <strong>Projected pension:</strong> {fmt(calc.projectedGross)}/mo
               </div>
             )}
           </>
         )}
 
-        {separationType==="reserve"&&(
+        {retireeType==="reserve-regular-waiting"&&(
           <>
-            <NF label="Total Career Retirement Points" value={reservePoints} onChange={v=>set("reservePoints",Math.round(v))} min={50} max={14400} step={50} suf="pts"
-              hint="Find your total points on your RPAS or NGB/ARPC statement. Typical: 48–96 drill pts/yr + 15 membership pts/yr + active duty days."
-              warn={reservePoints<4320?"Minimum 4,320 points typically required for reserve retirement (20 qualifying years)":undefined}/>
-            {reservePoints>0&&h3Prof>0&&(
-              <div className="ib ib-nv" style={{fontSize:12,marginTop:-4,marginBottom:8}}>
-                <strong>Equivalent YOS:</strong> {(reservePoints/360).toFixed(1)} years · <strong>Projected pension:</strong> {fmt(reservePensionAmount(reservePoints,h3Prof,retType))}/mo
+            <NF label="Current Age" value={currentAge} onChange={v=>set("currentAge",Math.round(v))} min={35} max={80} suf="yrs"/>
+            <NF label="Qualifying Active-Duty Days (post-28 Jan 2008)" value={reserveAdDays} onChange={v=>{const d=Math.max(0,Math.round(v));set("reserveAdDays",d);set("payStartAge",reservePayAge(d).age);}} min={0} max={5000} suf="days"
+              hint="Ready Reserve members may reduce age 60 by 3 months per 90 days of qualifying active duty service. Minimum 50."/>
+            <div className="ib ib-nv" style={{fontSize:12,marginTop:-2,marginBottom:8}}>
+              {reserveAdDays>0?(
+                <><strong>Pay-age reduction:</strong> {reserveAdDays.toLocaleString()} days ÷ 90 = {(reserveAdDays/90).toFixed(2)} → {payAgeCalc.periods} full period{payAgeCalc.periods===1?"":"s"} × 3 mo = {payAgeCalc.months} mo. <strong>Retired pay age = {payAgeCalc.age}</strong>.</>
+              ):(<>Retired pay age: <strong>60</strong> (no qualifying active duty entered).</>)}
+            </div>
+            <div className="ib ib-gd" style={{fontSize:12,marginBottom:8}}>
+              Pension = $0 currently. Begins at age {payAgeCalc.age}. VA disability flows immediately.
+            </div>
+          </>
+        )}
+
+        {retireeType==="reserve-medical"&&(
+          <TG label="Did you complete 20+ qualifying years of reserve service that would have entitled you to regular reserve retirement (absent the medical retirement)?"
+            value={reserve20GoodYears?"y":"n"} onChange={v=>set("reserve20GoodYears",v==="y")}
+            options={[{v:"n",l:"No"},{v:"y",l:"Yes"}]}
+            hint="Required for CRDP eligibility on Chapter 61 medical retirements. Most reservists medically retired before reaching this threshold do not qualify for CRDP."/>
+        )}
+
+        {retireeType!=="veteran"&&(
+          <TG label="Disabilities are combat-related (CRSC eligible)" value={combatRelated?"y":"n"} onChange={v=>set("combatRelated",v==="y")}
+            options={[{v:"n",l:"No"},{v:"y",l:"Yes"}]}
+            hint="Combat-related disabilities eliminate the VA offset via CRSC (separate from CRDP)."/>
+        )}
+
+        {retType==="BRS"&&(isActiveType(retireeType)||retireeType==="reserve-regular-drawing")&&(
+          <>
+            <NF label="Retirement Age (age at separation)" value={retireAge} onChange={v=>set("retireAge",Math.round(v))} min={37} max={66} suf="yrs"
+              hint="Used to compute the BRS lump-sum present value (years until age 67)."/>
+            <TG label="BRS Lump Sum Election" value={String(brsLumpSum)} onChange={v=>set("brsLumpSum",Number(v))}
+              options={[{v:"0",l:"None"},{v:"0.25",l:"25%"},{v:"0.5",l:"50%"}]}
+              hint="Take 25% or 50% of your pension's present value as cash at retirement, with reduced monthly pay until age 67, then full pension."/>
+            {calc.lumpSum&&(
+              <div className="ib ib-nv" style={{fontSize:12,marginTop:-2,marginBottom:8}}>
+                <strong>Lump sum cash:</strong> {fmt(calc.lumpSum.cash)} · <strong>Reduced /mo until 67:</strong> {fmt(calc.lumpSum.reducedMonthly)} · <strong>Full after 67:</strong> {fmt(calc.lumpSum.fullMonthly)}
               </div>
             )}
-            <NF label="Current Age" value={currentAge} onChange={v=>set("currentAge",Math.round(v))} min={35} max={80} suf="yrs"/>
-            <NF label="Pay Start Age" value={payStartAge} onChange={v=>set("payStartAge",Math.round(v))} min={50} max={60} suf="yrs"
-              hint="Default 60. Reduces by 3 months per 90 days of qualifying active duty after Jan 28, 2008. Cannot go below 50."/>
-            <NF label="Years of Service (for CRDP)" value={yos} onChange={v=>set("yos",Math.round(v*2)/2)} min={0} max={40} step={0.5} suf="yrs"
-              hint="Total creditable years — used for CRDP eligibility (20+ required). Half-year increments supported."/>
           </>
         )}
 
@@ -4118,8 +4254,33 @@ const NAV=[
 const STORAGE_KEY="milcalc_state";
 const TAB_KEY="milcalc_tab";
 
+// ── v1.1 STATE MIGRATION ─────────────────────────────────────────────
+// Pre-v1.1 saved blobs have `separationType` (active/medical/reserve/veteran)
+// but no `retireeType`. Map the old coarse type to the new 7-way type so
+// existing users keep their configuration. Also keep `separationType` in
+// sync as a derived mirror, and coerce REDUX off of types where it's invalid.
+function migrateState(saved){
+  if(!saved||typeof saved!=="object") return saved;
+  const s={...saved};
+  if(!s.retireeType){
+    const sep=s.separationType;
+    const yos=s.yos||0;
+    const age=s.currentAge||0, pa=s.payStartAge||60;
+    if(sep==="active") s.retireeType=yos>0&&yos<20?"active-tera":"active-regular";
+    else if(sep==="medical") s.retireeType="active-medical";
+    else if(sep==="reserve") s.retireeType=age>=pa?"reserve-regular-drawing":"reserve-regular-waiting";
+    else if(sep==="veteran") s.retireeType="veteran";
+    else s.retireeType="active-regular";
+  }
+  // REDUX only valid for Active Regular (20-yr High-3 retirees who took CSB).
+  if(s.retType==="REDUX"&&s.retireeType!=="active-regular") s.retType="High-3";
+  // Keep the legacy mirror consistent with the source of truth.
+  s.separationType=legacySepType(s.retireeType);
+  return s;
+}
+
 function loadSaved(){
-  try{const raw=localStorage.getItem(STORAGE_KEY);return raw?JSON.parse(raw):null;}
+  try{const raw=localStorage.getItem(STORAGE_KEY);return raw?migrateState(JSON.parse(raw)):null;}
   catch{return null;}
 }
 function loadTab(){
@@ -4181,10 +4342,14 @@ export default function App(){
 
   const defaults={
     userName:"",
-    separationType:"active",
+    retireeType:"active-regular",        // v1.1 source of truth (7-way)
+    separationType:"active",             // derived mirror of retireeType (legacy consumers)
     retType:"High-3",yos:0,high3:0,usePayGrade:true,payGrade:"E-7",sbp:false,sbpCoverage:55,sbpRetireAge:42,
     medDodPct:50,tdrl:false,combatRelated:false,
+    retireAge:42,brsLumpSum:0,           // BRS lump-sum election (0 | 0.25 | 0.5) + age at separation
     reservePoints:3600,currentAge:45,payStartAge:60,reserveHealthType:"trs",
+    reserve20GoodYears:true,reserveAdDays:0, // CRDP gate for reserve-medical + qualifying AD days for pay-age reducer
+    reservePtGoodYears:0,reservePtAdDays:0,reservePtOther:0, // collapsible points estimator inputs
     vaRating:0,vaDeps:"Single",vaChildren:0,
     selectedState:"Texas",income:0,filingStatus:"single",age65Plus:false,spouseAge65Plus:false,
     colFrom:"Fayetteville, NC",colTo:"Austin, TX",monthlyIncome:5000,
@@ -4239,15 +4404,16 @@ export default function App(){
   // Derived values for status bar
   const derivedAppPay=s.usePayGrade?lookupPay(s.payGrade,s.yos):null;
   const h3=(s.usePayGrade&&derivedAppPay)?derivedAppPay:s.high3;
-  const isReserveEligibleNowApp=s.separationType==="reserve"&&s.currentAge>=s.payStartAge;
-  const g=pensionBySepType(s.separationType,s.retType,s.yos,h3,s.medDodPct,s.tdrl,s.reservePoints,s.currentAge,s.payStartAge);
+  const vaM_app=calcVAComp(s.vaRating,dk(s.vaDeps),s.vaChildren||0);
+  const calcApp=calculateRetirement({...s,high3:h3,vaMonthly:vaM_app});
+  const isReserveEligibleNowApp=s.separationType==="reserve"&&!calcApp.isWaiting;
+  const g=calcApp.grossPension;
   const sbpC=s.sbp?g*(s.sbpCoverage/100)*0.065:0;
   const netP=g-sbpC;
   const si=STATES[s.selectedState]||{ok:true};
-  const vaM_app=calcVAComp(s.vaRating,dk(s.vaDeps),s.vaChildren||0);
-  const medCalcApp=s.separationType==="medical"?medicalPension(s.yos,h3,s.medDodPct,s.tdrl,s.retType):null;
-  const isVAOffsetApp=s.separationType==="medical"&&s.yos<20&&vaM_app>0&&g>0&&medCalcApp&&!medCalcApp.isSeverance;
-  const offsetNetPApp=isVAOffsetApp?Math.max(0,netP-vaM_app):netP;
+  const isVAOffsetApp=calcApp.offsetType==="waiver";
+  const crscMoApp=calcApp.crscAmount||0;
+  const offsetNetPApp=Math.max(0,calcApp.netPensionAfterOffset-sbpC);
   const appTaxableAnn=offsetNetPApp*12+(s.income||0);
   const {monthlyTax:appFedTax}=calcFederalTax(appTaxableAnn,s.filingStatus||"single",s.age65Plus,s.spouseAge65Plus);
   const stTax=calcStateTax(offsetNetPApp*12,si)/12;
@@ -4257,7 +4423,7 @@ export default function App(){
   const mhaBase=s.giOnline?GI_BILL_ONLINE_MHA:(MHA_CITIES[s.giSchoolCity]||0);
   const mhaMo=s.giUsing?(isMGIBapp?Math.round(mgibMonthly(s.giType,s.mgibEnroll,s.mgibServiceYears)):Math.round(mhaBase*(s.giEligPct/100)*s.giEnroll)):0;
   const otherMo=Math.round((s.income||0)/12);
-  const total=Math.max(0,atP+vaM+otherMo+mhaMo);
+  const total=Math.max(0,atP+vaM+crscMoApp+otherMo+mhaMo);
   const healthPrem2=(()=>{
     if(s.separationType==="veteran") return 0; // VA Healthcare
     if(s.separationType==="reserve"&&!isReserveEligibleNowApp){

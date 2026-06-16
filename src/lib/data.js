@@ -7,6 +7,23 @@
 // Columns = cumulative YOS breakpoints: ≤2, >2, >3, >4, >6, >8, >10, >12, >14, >16, >18, >20, >22, >24, >26, >28, >30, >32, >34, >36, >38, >40
 export const YOS_BREAKS = [0,2,3,4,6,8,10,12,14,16,18,20,22,24,26,28,30,32,34,36,38,40];
 
+// ── RETIREMENT SYSTEM CONSTANTS ───────────────────────────────────────
+// Per-year multipliers and statutory caps by retirement system.
+// Source: 10 USC § 1409 (High-3, 2.5%/yr, 75% cap) and the Blended
+// Retirement System (FY2016 NDAA, 2.0%/yr, 60% cap).
+export const RET_SYSTEMS = {
+  "High-3": { mult: 2.5, cap: 75 },
+  "BRS":    { mult: 2.0, cap: 60 },
+};
+
+// BRS Lump Sum Discount Rate (a.k.a. Personal Discount Rate) for the
+// present-value buyout election. Set annually by DoD Office of the Actuary.
+// Source: DASD(MPP) memo 2025-05-22 — CY2026 rate = 6.46% (CY2025 was 6.43%).
+export const PDR_2026 = 0.0646;
+
+// BRS lump sum payments are discounted to present value through age 67.
+export const LUMP_SUM_AGE = 67;
+
 export const PAY2026 = {
   // ENLISTED
   "E-1": [2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20,2407.20],
