@@ -18,8 +18,11 @@ export function lookupPay(grade, yos) {
   const row = PAY2026[grade];
   if (!row) return null;
   let idx = 0;
+  // "Over X" pay columns mean YOS >= X, so step up AT the boundary (>=), not
+  // past it (>). Using > left every exact-boundary YOS (20, 22, 24, 26, …) one
+  // column low (e.g. E-8 at 22 YOS returned the "Over 20" rate, not "Over 22").
   for (let i = 0; i < YOS_BREAKS.length; i++) {
-    if (yos > YOS_BREAKS[i]) idx = i;
+    if (yos >= YOS_BREAKS[i]) idx = i;
   }
   return row[idx] || null;
 }
@@ -90,6 +93,22 @@ export function reservePension(points, h3, rt) {
 // Helper: compute reserve pension amount regardless of age eligibility (for display/export)
 export function reservePensionAmount(reservePoints, h3, retType) {
   return Math.max(0, reservePension(reservePoints || 0, h3 || 0, retType).pay || 0);
+}
+
+// LOS-based ("length of service") retired pay — the CRSC cap per 10 USC 1413a.
+// CRSC may not exceed the dollar amount of retired pay the member would receive
+// computed purely on years of service (the disability % is ignored).
+//   - Chapter 61 medical: (reserve? equivYOS : yos) × mult, capped at the system
+//     cap. For a sub-20-year disability retiree this is LESS than the disability-
+//     based gross pension, so CRSC only partially restores the VA waiver.
+//   - Everyone else: their retired pay already IS the LOS computation, so the cap
+//     equals the gross pension and never binds (full restoration, e.g. 20-yr regular).
+export function losBasedPension(retireeType, retType, yos, equivYOS, h3, grossPension) {
+  if (!isMedicalType(retireeType)) return Math.max(0, grossPension || 0);
+  const sys = RET_SYSTEMS[retType] || RET_SYSTEMS["High-3"];
+  const years = isReserveType(retireeType) ? (equivYOS || 0) : (yos || 0);
+  const losPct = Math.min(years * sys.mult, sys.cap);
+  return Math.max(0, Math.round((h3 || 0) * (losPct / 100)));
 }
 
 // Legacy coarse-type pension helper. The main app now uses calculateRetirement()
@@ -164,7 +183,9 @@ export function crdpQualifies(retireeType, yos, vaRating, atPayAge, reserve20Goo
     case "active-medical":  return (yos || 0) >= 20;           // Ch.61 needs 20+ YOS
     case "reserve-regular-drawing": return !!atPayAge;         // drawing ⇒ 20 good yrs
     case "reserve-regular-waiting": return false;              // no pension flowing
-    case "reserve-medical": return !!reserve20GoodYears;
+    // Chapter 61 reserve: needs BOTH 20 good years AND to be at retired pay age.
+    // Under pay age the VA waiver still applies until CRDP kicks in.
+    case "reserve-medical": return !!reserve20GoodYears && !!atPayAge;
     default: return false;
   }
 }
@@ -179,7 +200,10 @@ export function crscQualifies(retireeType, combatRelated, reserve20GoodYears) {
     case "active-medical": return true;                        // any YOS
     case "reserve-regular-drawing": return true;               // 20+ qualifying yrs
     case "reserve-regular-waiting": return false;              // no pension flowing
-    case "reserve-medical": return !!reserve20GoodYears;       // reservists need 20+ yrs
+    // Chapter 61 disability retirees qualify for CRSC at ANY length of service
+    // (unlike CRDP, which needs 20 yrs). The CRSC payment is instead capped at
+    // LOS-based retired pay (see losBasedPension / 10 USC 1413a).
+    case "reserve-medical": return true;
     default: return false;
   }
 }
@@ -219,6 +243,7 @@ export function calculateRetirement(input) {
     reservePoints = 0, currentAge = 0, payStartAge = 60, retireAge = 0,
     brsLumpSum: electedLump = 0, combatRelated = false,
     vaRating = 0, vaMonthly = 0, reserve20GoodYears = false,
+    v3TaxFree = false,
   } = input || {};
 
   const sys = RET_SYSTEMS[retType] || RET_SYSTEMS["High-3"];
@@ -230,6 +255,7 @@ export function calculateRetirement(input) {
     return {
       retireeType, grossPension: 0, multiplierPct: 0, teraFactor: 1, equivYOS: null,
       offsetType: "none", netPensionAfterOffset: 0, taxablePensionMonthly: 0,
+      fedTaxablePensionMonthly: 0, losBasedPension: 0, crscCapped: false,
       crscAmount: 0, lumpSum: null, isWaiting: false, payStartAge,
       projectedGross: 0, method: "none", severancePay: 0, notes,
     };
@@ -282,9 +308,13 @@ export function calculateRetirement(input) {
   const projectedGross = grossFull;
 
   // 2) Offset resolution (mutually exclusive). CRSC elected over CRDP.
-  // "Drawing" / medical / active retirees are receiving pay by definition; only
-  // the explicit "awaiting pay age" reservist is not yet at pay age.
-  const atPayAge = retireeType !== "reserve-regular-waiting";
+  // Active/drawing retirees are receiving pay by definition. The "awaiting pay
+  // age" reservist is never at pay age here (pension is $0). A Chapter 61
+  // RESERVE medical retiree DOES draw retired pay immediately, but CRDP for them
+  // only begins at retired pay age — so gate atPayAge on currentAge >= payStartAge.
+  const atPayAge = retireeType === "reserve-regular-waiting" ? false
+    : retireeType === "reserve-medical" ? (currentAge >= payStartAge)
+    : true;
   let offsetType = "none";
   if (isWaiting || grossPension <= 0) {
     offsetType = "none";
@@ -297,19 +327,35 @@ export function calculateRetirement(input) {
   }
 
   // 3) Net pension after offset + CRSC amount + taxable base.
+  // LOS-based retired pay = the CRSC ceiling (10 USC 1413a). For non-medical
+  // retirees it equals the gross pension (never binds); for Chapter 61 medical
+  // retirees with < 20 yrs it is lower, so CRSC only partially restores the waiver.
+  const losBased = losBasedPension(retireeType, retType, yos, equivYOS, h3, grossPension);
   let netPensionAfterOffset = grossPension;
   let crscAmount = 0;
+  let crscCapped = false;
   if (offsetType === "waiver" || offsetType === "crsc") {
     netPensionAfterOffset = Math.max(0, grossPension - (vaMonthly || 0));
   }
   if (offsetType === "crsc") {
-    crscAmount = Math.min(vaMonthly || 0, grossPension); // non-taxable, branch-determined
-    notes.push("CRSC amount estimated as full VA compensation assuming all disabilities are combat-related. Actual CRSC payment is determined by your service branch and may be less if only some disabilities qualify combat-related.");
+    // CRSC = MIN(VA waiver, gross pension, LOS-based retired pay), tax-free.
+    crscAmount = Math.min(vaMonthly || 0, grossPension, losBased);
+    crscCapped = isMedicalType(retireeType) && losBased < Math.min(vaMonthly || 0, grossPension);
+    if (crscCapped) {
+      notes.push("CRSC is capped at your LOS-based retired pay (years-of-service computation, disability % ignored) per 10 USC 1413a, so it only partially restores the VA waiver. The VA waiver still applies to the remaining pension.");
+    } else {
+      notes.push("CRSC amount estimated as full VA compensation assuming all disabilities are combat-related. Actual CRSC payment is determined by your service branch and may be less if only some disabilities qualify combat-related.");
+    }
   }
   // Taxable retired pay equals the net pension actually received as retired pay
   // (CRDP restores the full taxable amount; CRSC/waiver leave only the reduced
   // pension taxable; the CRSC dollars are tax-free).
   const taxablePensionMonthly = netPensionAfterOffset;
+  // Federal taxability: a V3 (combat-related, 26 USC 104) disability retiree's
+  // retired pay is excluded from federal gross income. Only Chapter 61 medical
+  // retired pay qualifies. State treatment varies (handled/disclaimed in UI).
+  const fedTaxablePensionMonthly =
+    (v3TaxFree && isMedicalType(retireeType)) ? 0 : taxablePensionMonthly;
 
   // 4) BRS lump sum (active or reserve-drawing, BRS only).
   let lumpSum = null;
@@ -331,6 +377,9 @@ export function calculateRetirement(input) {
     offsetType,
     netPensionAfterOffset,
     taxablePensionMonthly,
+    fedTaxablePensionMonthly,
+    losBasedPension: losBased,
+    crscCapped,
     crscAmount,
     lumpSum,
     isWaiting,
