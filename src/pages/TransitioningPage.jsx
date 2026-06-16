@@ -720,7 +720,11 @@ export default function TransitioningPage() {
   const pensionPct = ret.multiplierPct;
 
   const chips = [
-    netPension > 0 && { label: "Pension", value: fmt(netPension) },
+    // Pension and CRSC are surfaced as separate chips (mirroring the Income
+    // Sources detail rows), so the summary doesn't fold tax-free CRSC into the
+    // taxable pension figure.
+    pensionRowValue > 0 && { label: "Pension", value: fmt(pensionRowValue) },
+    crscMo > 0       && { label: "CRSC",    value: fmt(crscMo) },
     vaComp > 0       && { label: "VA",      value: fmt(vaComp) },
     giMhaMo > 0      && { label: isMGIB ? "MGIB" : "GI Bill", value: fmt(giMhaMo) },
     s.targetIncome <= 0
