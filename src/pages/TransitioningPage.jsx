@@ -77,6 +77,9 @@ const DEFAULT_STATE = {
   reservePtAdDays: 0,
   reservePtOther: 0,
   deps: "sp0",
+  depParents: 0,      // dependent parents (≥50% supported), 0–2
+  spouseAA: false,    // spouse receives VA Aid & Attendance
+  schoolKids: 0,      // children 18–23 in an approved school program
   vaRating: 0,
   giUse: false,
   giType: "post911",
@@ -623,7 +626,12 @@ export default function TransitioningPage() {
   const stateInfo = STATES[s.selectedState] || { ok: true };
   const currentAge = s.vgliAge || 40;
   const filingStatus = (s.deps || "").startsWith("sp") ? "mfj" : "single";
-  const vaComp = s.vaRating > 0 ? calcVAComp(s.vaRating, depInfo.key, depInfo.ch) : 0;
+  const hasSpouse = depInfo.key === "sp";
+  const vaComp = s.vaRating > 0 ? calcVAComp(s.vaRating, depInfo.key, depInfo.ch, {
+    parents: s.depParents || 0,
+    spouseAA: !!s.spouseAA && hasSpouse,
+    schoolChildren: s.schoolKids || 0,
+  }) : 0;
   // ── v1.1 retirement engine ─ single source of truth for pension, CRDP/CRSC
   // offset, BRS lump sum, and reserve retired-pay timing. vaMonthly is passed
   // pre-computed so the engine stays free of dependent lookups.
@@ -635,6 +643,12 @@ export default function TransitioningPage() {
   const crscMo = ret.crscAmount;
   const stateTaxMo = taxablePension > 0 ? calcStateTax(taxablePension * 12, stateInfo, currentAge) / 12 : 0;
   const netPension = taxablePension - stateTaxMo + crscMo;
+  // Retired pay actually received AS pension (net of VA offset + state tax),
+  // excluding the tax-free CRSC restoration — CRSC is shown as its own income
+  // row alongside VA so users can see it. netPension (= this + crscMo) remains
+  // the single value flowing into totalIncome, so the take-home total is
+  // unchanged: CRSC is counted exactly once.
+  const pensionRowValue = netPension - crscMo;
   // Points estimator + reserve pay-age math (for the conditional UI fields).
   const ptEstimate = Math.round((s.reservePtGoodYears || 0) * 63 + (s.reservePtAdDays || 0) + (s.reservePtOther || 0));
   const payAgeCalc = reservePayAge(s.reserveAdDays);
@@ -706,7 +720,11 @@ export default function TransitioningPage() {
   const pensionPct = ret.multiplierPct;
 
   const chips = [
-    netPension > 0 && { label: "Pension", value: fmt(netPension) },
+    // Pension and CRSC are surfaced as separate chips (mirroring the Income
+    // Sources detail rows), so the summary doesn't fold tax-free CRSC into the
+    // taxable pension figure.
+    pensionRowValue > 0 && { label: "Pension", value: fmt(pensionRowValue) },
+    crscMo > 0       && { label: "CRSC",    value: fmt(crscMo) },
     vaComp > 0       && { label: "VA",      value: fmt(vaComp) },
     giMhaMo > 0      && { label: isMGIB ? "MGIB" : "GI Bill", value: fmt(giMhaMo) },
     s.targetIncome <= 0
@@ -1124,8 +1142,13 @@ export default function TransitioningPage() {
       nl(12);
 
       section("PHASE 1 — RETIREMENT INCOME (AVAILABLE AT SEPARATION)");
-      if (grossPension > 0) row("Military Pension (gross)", fmt(grossPension) + "/mo", gold);
+      if (grossPension > 0) row(
+        (ret.offsetType === "waiver" || ret.offsetType === "crsc")
+          ? `Military Pension (net of VA waiver; gross ${fmt(grossPension)})`
+          : "Military Pension",
+        fmt(pensionRowValue) + "/mo", gold);
       if (vaComp > 0) row(`VA Disability (${s.vaRating}%) — tax-free`, fmt(vaComp) + "/mo", gold);
+      if (crscMo > 0) row("CRSC — tax-free", fmt(crscMo) + "/mo", gold);
       if (giMhaMo > 0) row(isMGIB ? `${giLabel} (gross — taxable)` : `${giLabel} (tax-free)`, fmt(giMhaMo) + "/mo", gold);
       if (otherMonthlyIncome > 0) row("Other Monthly Income", fmt(otherMonthlyIncome) + "/mo", gold);
       nl(12);
@@ -1572,6 +1595,46 @@ export default function TransitioningPage() {
                 Each child beyond the first adds the VA "Each Additional Child Under 18" rate{s.vaRating >= 30 ? <> ({fmt(VA[s.vaRating].ac)}/mo at {s.vaRating}%)</> : s.vaRating > 0 ? " (applies once your rating reaches 30%)" : ""}. For families with more than 6 dependents, contact VA directly.
               </HintBox>
             )}
+            <FieldRow label="Schoolchildren 18–23">
+              <div className="tr-sel">
+                <select value={s.schoolKids || 0} onChange={e => set("schoolKids", Number(e.target.value))}>
+                  <option value={0}>None</option>
+                  {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
+                </select>
+              </div>
+            </FieldRow>
+            {(s.schoolKids || 0) > 0 && (
+              <HintBox>
+                Schoolchildren must be enrolled full-time in an approved educational program (high school or post-secondary). Each adds the VA "Each Additional Child Over 18 in School" rate{s.vaRating >= 30 ? <> ({fmt(VA[s.vaRating].scs)}/mo at {s.vaRating}%)</> : s.vaRating > 0 ? " (applies once your rating reaches 30%)" : ""}.
+              </HintBox>
+            )}
+            <FieldRow label="Dependent Parents">
+              <div className="tr-sel">
+                <select value={s.depParents || 0} onChange={e => set("depParents", Number(e.target.value))}>
+                  <option value={0}>None</option>
+                  <option value={1}>1 dependent parent</option>
+                  <option value={2}>2 dependent parents</option>
+                </select>
+              </div>
+            </FieldRow>
+            {(s.depParents || 0) > 0 && (
+              <HintBox>
+                A dependent parent is one who receives at least 50% of their support from you. Each adds the VA dependent-parent amount{s.vaRating >= 30 ? <> ({fmt(VA[s.vaRating].pr)}/mo at {s.vaRating}%)</> : s.vaRating > 0 ? " (applies once your rating reaches 30%)" : ""}.
+              </HintBox>
+            )}
+            {hasSpouse && (
+              <ToggleGroup
+                label="Spouse receives Aid & Attendance"
+                options={[{ v: false, l: "No" }, { v: true, l: "Yes" }]}
+                value={!!s.spouseAA}
+                onChange={v => set("spouseAA", v)}
+              />
+            )}
+            {hasSpouse && s.spouseAA && (
+              <HintBox>
+                Aid & Attendance adds an amount when your spouse needs help with daily living{s.vaRating >= 30 ? <> ({fmt(VA[s.vaRating].aa)}/mo at {s.vaRating}%)</> : s.vaRating > 0 ? " (applies once your rating reaches 30%)" : ""}.
+              </HintBox>
+            )}
             <FieldRow label="State of Residence">
               <div className="tr-sel">
                 <select value={s.selectedState} onChange={e => { set("selectedState", e.target.value); track("State Selected", { state: e.target.value }); }}>
@@ -1589,14 +1652,16 @@ export default function TransitioningPage() {
               <IncomeRow
                 label="Military Pension"
                 sub={grossPension > 0
-                  ? stateTaxMo > 0
-                    ? `${s.retType} · ${pensionPct.toFixed(0)}% of High-3 · Gross ${fmt(grossPension)} · ${stateInfo.rate}% state tax`
-                    : `${s.retType} · ${pensionPct.toFixed(0)}% of High-3 (${s.grade} at ${s.yos} YOS) · ${s.selectedState}: tax-exempt`
+                  ? (ret.offsetType === "waiver" || ret.offsetType === "crsc")
+                    ? `${s.retType} · Gross ${fmt(grossPension)} · ${vaComp >= grossPension ? "fully" : "partly"} waived against VA comp`
+                    : stateTaxMo > 0
+                      ? `${s.retType} · ${pensionPct.toFixed(0)}% of High-3 · Gross ${fmt(grossPension)} · ${stateInfo.rate}% state tax`
+                      : `${s.retType} · ${pensionPct.toFixed(0)}% of High-3 (${s.grade} at ${s.yos} YOS) · ${s.selectedState}: tax-exempt`
                   : ret.isWaiting
                     ? "Not yet flowing — begins at retired pay age"
                     : "Below minimum YOS for pension"}
-                value={fmt(netPension)}
-                color={netPension > 0 ? "gold" : "muted"}
+                value={fmt(pensionRowValue)}
+                color={pensionRowValue > 0 ? "gold" : "muted"}
               />
             )}
             {ret.isWaiting && (
@@ -1640,7 +1705,10 @@ export default function TransitioningPage() {
               <>
                 <IncomeRow
                   label="VA Disability Compensation"
-                  sub={`${s.vaRating}% · ${depInfo.l}`}
+                  sub={`${s.vaRating}% · ${depInfo.l}`
+                    + ((s.schoolKids || 0) > 0 ? ` · ${s.schoolKids} schoolchild${s.schoolKids > 1 ? "ren" : ""} 18–23` : "")
+                    + ((s.depParents || 0) > 0 ? ` · ${s.depParents} parent${s.depParents > 1 ? "s" : ""}` : "")
+                    + (hasSpouse && s.spouseAA ? " · spouse A&A" : "")}
                   value={fmt(vaComp)}
                   color="gold"
                 />
@@ -1648,6 +1716,14 @@ export default function TransitioningPage() {
                   <strong>VA Priority Group {getVAPriorityGroup(s.vaRating)}</strong>: {VA_PRIORITY_GROUPS[getVAPriorityGroup(s.vaRating) - 1].who}. Copays: {VA_PRIORITY_GROUPS[getVAPriorityGroup(s.vaRating) - 1].copay}.
                 </HintBox>
               </>
+            )}
+            {crscMo > 0 && (
+              <IncomeRow
+                label="CRSC"
+                sub={`Combat-Related Special Compensation · tax-free${ret.crscCapped ? ` · capped at LOS-based pay (${fmt(ret.losBasedPension)})` : ""}`}
+                value={fmt(crscMo)}
+                color="gold"
+              />
             )}
             <FieldRow label="GI Bill / Education">
               <div className="tr-sel">
@@ -2140,12 +2216,16 @@ export default function TransitioningPage() {
                 color="red"
               />
             )}
-            {fedTaxMo > 0 && (
+            {(fedTaxMo > 0 || grossPension > 0) && (
               <IncomeRow
                 label="Federal Income Tax (est.)"
-                sub={`${(fedTax.effectiveRate * 100).toFixed(1)}% effective rate · ${filingStatus === "mfj" ? "MFJ" : "Single"}`}
-                value={`−${fmt(fedTaxMo)}`}
-                color="red"
+                sub={fedTaxMo > 0
+                  ? `${(fedTax.effectiveRate * 100).toFixed(1)}% effective rate · ${filingStatus === "mfj" ? "MFJ" : "Single"}`
+                  : (s.v3TaxFree && isMedicalType(s.retireeType))
+                    ? `0% effective rate · V3 combat-related retired pay is federally tax-free (26 USC 104)`
+                    : `0% effective rate · no federally taxable retired pay`}
+                value={fedTaxMo > 0 ? `−${fmt(fedTaxMo)}` : "$0"}
+                color={fedTaxMo > 0 ? "red" : "muted"}
               />
             )}
             <TotalRow label="Monthly Take-Home at Retirement (Phase 1)" value={fmt(phase1TakeHome)} />

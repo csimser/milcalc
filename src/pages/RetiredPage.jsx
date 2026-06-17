@@ -46,6 +46,9 @@ const DEFAULT_STATE = {
   autoRetSystem: "High-3",
   autoVaRating: 0,
   autoDeps: "s0",
+  autoSchoolKids: 0,   // children 18–23 in an approved school program
+  autoDepParents: 0,   // dependent parents (≥50% supported), 0–2
+  autoSpouseAA: false, // spouse receives VA Aid & Attendance
 };
 
 function loadState() {
@@ -242,8 +245,13 @@ export default function RetiredPage() {
   const autoH3 = isAutoCalc ? (lookupPay(s.autoGrade || "O-5", s.autoYos || 20) || 0) : 0;
   const autoGrossPension = isAutoCalc ? pension(s.autoRetSystem || "High-3", s.autoYos || 20, autoH3) : 0;
   const autoDepInfo = RET_DEP_MAP[s.autoDeps || "s0"] || RET_DEP_MAP.s0;
+  const autoHasSpouse = autoDepInfo.key === "sp";
   const autoVaAmt = isAutoCalc && (s.autoVaRating || 0) > 0
-    ? calcVAComp(s.autoVaRating, autoDepInfo.key, autoDepInfo.ch)
+    ? calcVAComp(s.autoVaRating, autoDepInfo.key, autoDepInfo.ch, {
+        parents: s.autoDepParents || 0,
+        spouseAA: !!s.autoSpouseAA && autoHasSpouse,
+        schoolChildren: s.autoSchoolKids || 0,
+      })
     : 0;
 
   // Effective pension and VA (auto or manual)
@@ -848,6 +856,56 @@ export default function RetiredPage() {
                     </select>
                   </div>
                 </div>
+
+                {/* Schoolchildren 18–23 */}
+                <div className="ds-income-row">
+                  <div>
+                    <div className="ds-income-lbl">Schoolchildren 18–23</div>
+                    <div className="ds-income-lbl-sub">Full-time, approved school program</div>
+                  </div>
+                  <div className="ds-sel">
+                    <select value={s.autoSchoolKids || 0} onChange={e => set("autoSchoolKids", Number(e.target.value))}>
+                      <option value={0}>None</option>
+                      {[1,2,3,4,5,6].map(n => <option key={n} value={n}>{n}</option>)}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Dependent parents */}
+                <div className="ds-income-row">
+                  <div>
+                    <div className="ds-income-lbl">Dependent Parents</div>
+                    <div className="ds-income-lbl-sub">≥50% supported by you</div>
+                  </div>
+                  <div className="ds-sel">
+                    <select value={s.autoDepParents || 0} onChange={e => set("autoDepParents", Number(e.target.value))}>
+                      <option value={0}>None</option>
+                      <option value={1}>1 dependent parent</option>
+                      <option value={2}>2 dependent parents</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Spouse Aid & Attendance */}
+                {autoHasSpouse && (
+                  <div className="ds-income-row">
+                    <div><div className="ds-income-lbl">Spouse receives Aid & Attendance</div></div>
+                    <div style={{ display:"flex", gap:5 }}>
+                      {[["No", false],["Yes", true]].map(([l, v]) => (
+                        <button key={l} type="button"
+                          onClick={() => set("autoSpouseAA", v)}
+                          style={{
+                            fontSize:11, fontWeight:600, padding:"3px 8px", borderRadius:6, cursor:"pointer",
+                            background: !!s.autoSpouseAA === v ? "rgba(212,160,23,0.2)" : "rgba(255,255,255,0.05)",
+                            border:`1px solid ${!!s.autoSpouseAA === v ? "#d4a017" : "rgba(255,255,255,0.1)"}`,
+                            color: !!s.autoSpouseAA === v ? "#f0c14b" : "#9ca3af",
+                            fontFamily:"inherit",
+                          }}
+                        >{l}</button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Computed values display */}
                 {autoGrossPension > 0 && (

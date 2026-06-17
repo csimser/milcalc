@@ -28,20 +28,49 @@ export function lookupPay(grade, yos) {
 }
 
 // ── VA COMPENSATION ──────────────────────────────────────────────────
-// Calculate total VA compensation including additional children under 18
-// children = total number of children under 18 (0 = none, 1 = included in base spc/c rate, 2+ = adds per-child amount)
-export function calcVAComp(rating, depsKey, children) {
+// Calculate total VA compensation including additional children and the
+// optional extra-dependent amounts (parents, spouse Aid & Attendance,
+// school-age children 18-23).
+//
+//   rating   — VA combined rating (10..100)
+//   depsKey  — base dependent status: "s" | "sp" | "spc" | "c"
+//   children — number of children UNDER 18 (legacy positional arg; first child
+//              of any kind is folded into the spc/c base rate, each additional
+//              under-18 child adds `ac`)
+//   opts     — { parents, spouseAA, schoolChildren }
+//     parents        — dependent parents (≥50% supported), 0..2; each adds `pr`
+//     spouseAA       — spouse receives Aid & Attendance (adds `aa`, spouse only)
+//     schoolChildren — children 18-23 in an approved school program; each is
+//                      valued at the `scs` rate. The first child of ANY kind is
+//                      already in the base rate (valued at the under-18 rate), so
+//                      a schoolchild is the under-18 value plus the (scs − ac)
+//                      upgrade — this makes an *additional* schoolchild worth the
+//                      full `scs`, and a sole schoolchild worth base + (scs − ac).
+export function calcVAComp(rating, depsKey, children, opts = {}) {
   const entry = VA[rating];
   if (!entry) return 0;
   // 10% and 20% ratings: veteran-alone rate only (no dependent compensation)
   if (rating <= 20) return entry.s || 0;
+  const { parents = 0, spouseAA = false, schoolChildren = 0 } = opts || {};
+  const u18 = Math.max(0, children || 0);
+  const school = Math.max(0, schoolChildren || 0);
+  const totalChildren = u18 + school;
   let baseKey = depsKey;
-  if (children > 0 && baseKey === "s") baseKey = "c";
-  if (children > 0 && baseKey === "sp") baseKey = "spc";
+  if (totalChildren > 0 && baseKey === "s") baseKey = "c";
+  if (totalChildren > 0 && baseKey === "sp") baseKey = "spc";
   const base = entry[baseKey] || entry.s || 0;
-  const extraChildren = Math.max(0, children - 1);
   const perChild = entry.ac || 0;
-  return base + extraChildren * perChild;
+  const perSchool = entry.scs || 0;
+  // All children start valued at the under-18 rate (base covers the first one)…
+  const extraChildren = Math.max(0, totalChildren - 1);
+  let total = base + extraChildren * perChild;
+  // …then upgrade each schoolchild from the under-18 rate to the school rate.
+  total += school * Math.max(0, perSchool - perChild);
+  // Dependent parents (≥50% supported), capped at 2.
+  total += Math.max(0, Math.min(2, parents)) * (entry.pr || 0);
+  // Spouse Aid & Attendance — only when a spouse is present.
+  if (spouseAA && (baseKey === "sp" || baseKey === "spc")) total += entry.aa || 0;
+  return total;
 }
 
 // ── PENSION CALCULATIONS ─────────────────────────────────────────────
